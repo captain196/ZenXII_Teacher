@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_primary">#0E1822</color>
+    <color name="bg_secondary">#1A2838</color>
+    <color name="ds_primary">#3D4F5F</color>
+    <color name="ds_glass">#801E2A3A</color>
+    <color name="text_primary">#E4ECF4</color>
+    <color name="text_secondary">#8AA0B8</color>
+    <color name="accent">#14B8A6</color>
+</resources>

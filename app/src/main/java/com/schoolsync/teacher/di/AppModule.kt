@@ -1,0 +1,370 @@
+package com.schoolsync.teacher.di
+
+import android.content.Context
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
+import com.google.gson.Gson
+import com.schoolsync.teacher.BuildConfig
+import com.google.firebase.firestore.FirebaseFirestore
+import com.schoolsync.teacher.data.firebase.FirebaseAuthManager
+import com.schoolsync.teacher.data.firebase.FirebaseService
+import com.schoolsync.teacher.data.firebase.FirestoreService
+import com.schoolsync.teacher.data.local.TokenManager
+import com.schoolsync.teacher.data.remote.ApiService
+import com.schoolsync.teacher.data.remote.AuthInterceptor
+import com.schoolsync.teacher.data.repository.AuthRepository
+import com.schoolsync.teacher.data.repository.FeeRepository
+import com.schoolsync.teacher.data.repository.GalleryRepository
+import com.schoolsync.teacher.data.repository.HomeworkTeacherRepository
+import com.schoolsync.teacher.data.repository.LeaveRepository
+import com.schoolsync.teacher.data.repository.MessagesRepository
+import com.schoolsync.teacher.data.repository.RedFlagRepository
+import com.schoolsync.teacher.data.repository.StoryRepository
+import com.schoolsync.teacher.data.repository.StudentRepository
+import com.schoolsync.teacher.data.repository.TeacherRepository
+import com.schoolsync.teacher.data.repository.firestore.AttendanceFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.ChatRtdbRepository
+import com.schoolsync.teacher.data.repository.firestore.CommunicationFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.ExamFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.FeeFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.HomeworkFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.LeaveFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.SchoolFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.StudentFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.SectionFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.StaffFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.TimetableFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.TransportFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.CampusLifeFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.LibraryFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.HRFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.AdmissionFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.InventoryFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.AnalyticsFirestoreRepository
+import com.schoolsync.teacher.data.local.OfflineQueueManager
+import com.schoolsync.teacher.util.NetworkMonitor
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
+
+    @Provides
+    @Singleton
+    fun provideFirebaseDatabase(): FirebaseDatabase = FirebaseDatabase.getInstance()
+
+    @Provides
+    @Singleton
+    fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
+
+    @Provides
+    @Singleton
+    fun provideTokenManager(@ApplicationContext context: Context): TokenManager =
+        TokenManager(context)
+
+    @Provides
+    @Singleton
+    fun provideFirebaseService(database: FirebaseDatabase): FirebaseService =
+        FirebaseService(database)
+
+    @Provides
+    @Singleton
+    fun provideFirebaseAuthManager(firebaseAuth: FirebaseAuth): FirebaseAuthManager =
+        FirebaseAuthManager(firebaseAuth)
+
+    @Provides
+    @Singleton
+    fun provideFirebaseFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance("schoolsync")
+
+    @Provides
+    @Singleton
+    fun provideFirestoreService(firestore: FirebaseFirestore): FirestoreService =
+        FirestoreService(firestore)
+
+    @Provides
+    @Singleton
+    fun provideAuthInterceptor(tokenManager: TokenManager, gson: Gson): AuthInterceptor =
+        AuthInterceptor(tokenManager, gson)
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+
+        if (BuildConfig.DEBUG) {
+            builder.addInterceptor(
+                HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BODY
+                }
+            )
+        }
+
+        return builder.build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(BuildConfig.BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideApiService(retrofit: Retrofit): ApiService =
+        retrofit.create(ApiService::class.java)
+
+    @Provides
+    @Singleton
+    fun provideAuthRepository(
+        apiService: ApiService,
+        tokenManager: TokenManager,
+        firebaseAuthManager: FirebaseAuthManager,
+        firebaseService: FirebaseService
+    ): AuthRepository = AuthRepository(apiService, tokenManager, firebaseAuthManager, firebaseService)
+
+    @Provides
+    @Singleton
+    fun provideStudentRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): StudentRepository = StudentRepository(firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideTeacherRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): TeacherRepository = TeacherRepository(firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideMessagesRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): MessagesRepository = MessagesRepository(firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideLeaveRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): LeaveRepository = LeaveRepository(firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideRedFlagRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): RedFlagRepository = RedFlagRepository(firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideStoryRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): StoryRepository = StoryRepository(firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideGalleryRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): GalleryRepository = GalleryRepository(firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideFeeRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): FeeRepository = FeeRepository(firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideHomeworkTeacherRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): HomeworkTeacherRepository = HomeworkTeacherRepository(firebaseService, tokenManager)
+
+    // ── Firestore Repositories ─────────────────────────────────────────
+
+    @Provides
+    @Singleton
+    fun provideSchoolFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): SchoolFirestoreRepository = SchoolFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideStudentFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): StudentFirestoreRepository = StudentFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideSectionFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): SectionFirestoreRepository = SectionFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideStaffFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): StaffFirestoreRepository = StaffFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideAttendanceFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): AttendanceFirestoreRepository = AttendanceFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideHomeworkFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): HomeworkFirestoreRepository = HomeworkFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideLeaveFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): LeaveFirestoreRepository = LeaveFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideExamFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): ExamFirestoreRepository = ExamFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideTimetableFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): TimetableFirestoreRepository = TimetableFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideFeeFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): FeeFirestoreRepository = FeeFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideCommunicationFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): CommunicationFirestoreRepository =
+        CommunicationFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideChatRtdbRepository(
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): ChatRtdbRepository = ChatRtdbRepository(firebaseService, tokenManager)
+
+    // ── Phase 7–12 Firestore Repositories ────────────────────────────────
+
+    @Provides
+    @Singleton
+    fun provideTransportFirestoreRepository(
+        firestoreService: FirestoreService,
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): TransportFirestoreRepository =
+        TransportFirestoreRepository(firestoreService, firebaseService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideCampusLifeFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): CampusLifeFirestoreRepository =
+        CampusLifeFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideLibraryFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): LibraryFirestoreRepository =
+        LibraryFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideHRFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): HRFirestoreRepository =
+        HRFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideAdmissionFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): AdmissionFirestoreRepository =
+        AdmissionFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideInventoryFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): InventoryFirestoreRepository =
+        InventoryFirestoreRepository(firestoreService, tokenManager)
+
+    @Provides
+    @Singleton
+    fun provideAnalyticsFirestoreRepository(
+        firestoreService: FirestoreService,
+        tokenManager: TokenManager
+    ): AnalyticsFirestoreRepository =
+        AnalyticsFirestoreRepository(firestoreService, tokenManager)
+
+    // ── Utility ─────────────────────────────────────────────────────────
+
+    @Provides
+    @Singleton
+    fun provideNetworkMonitor(
+        @ApplicationContext context: Context
+    ): NetworkMonitor = NetworkMonitor(context)
+
+    @Provides
+    @Singleton
+    fun provideOfflineQueueManager(
+        @ApplicationContext context: Context,
+        firebaseService: FirebaseService,
+        gson: Gson
+    ): OfflineQueueManager = OfflineQueueManager(context, firebaseService, gson)
+}
