@@ -19,13 +19,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -44,6 +47,8 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Campaign
@@ -70,12 +75,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -93,18 +103,26 @@ import com.schoolsync.teacher.ui.messages.MessagesScreen
 import com.schoolsync.teacher.ui.notices.NoticesScreen
 import com.schoolsync.teacher.ui.homework.HomeworkTeacherScreen
 import com.schoolsync.teacher.ui.fees.FeesTeacherScreen
+import com.schoolsync.teacher.ui.payslips.PayslipsScreen
 import com.schoolsync.teacher.ui.gallery.GalleryTeacherScreen
 import com.schoolsync.teacher.ui.library.LibraryTeacherScreen
 import com.schoolsync.teacher.ui.redflags.RedFlagTeacherScreen
 import com.schoolsync.teacher.ui.stories.StoriesTeacherScreen
+import com.schoolsync.teacher.ui.profile.MyProfileScreen
 import com.schoolsync.teacher.ui.students.StudentsScreen
 import com.schoolsync.teacher.ui.theme.Divider as DividerColor
 import com.schoolsync.teacher.ui.theme.ErrorRed
+import com.schoolsync.teacher.ui.theme.Glass
+import com.schoolsync.teacher.ui.theme.GlassBorder
+import com.schoolsync.teacher.ui.theme.LocalAppColors
 import com.schoolsync.teacher.ui.theme.NavRailBg
 import com.schoolsync.teacher.ui.theme.NavSelected
 import com.schoolsync.teacher.ui.theme.NavUnselected
 import com.schoolsync.teacher.ui.theme.TextPrimary
+import com.schoolsync.teacher.ui.theme.TextSecondary
+import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.Teal
+import com.schoolsync.teacher.ui.theme.TealSurface
 import com.schoolsync.teacher.ui.timetable.TimetableScreen
 import kotlinx.coroutines.flow.collectLatest
 
@@ -130,7 +148,9 @@ sealed class Route(val route: String) {
     data object Fees : Route("fees")
     data object Gallery : Route("gallery")
     data object Library : Route("library")
+    data object Payslips : Route("payslips")
     data object More : Route("more")
+    data object Profile : Route("profile")
 }
 
 data class NavRailItem(
@@ -160,6 +180,7 @@ val moreSubItems = listOf(
     NavRailItem(Route.Leave, "Leave", Icons.Filled.EventNote, Icons.Outlined.EventNote),
     NavRailItem(Route.Gallery, "Gallery", Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
     NavRailItem(Route.Library, "Library", Icons.Filled.LocalLibrary, Icons.Outlined.LocalLibrary),
+    NavRailItem(Route.Payslips, "Pay", Icons.Filled.Payments, Icons.Outlined.Payments),
 )
 
 /** Routes that belong to the "More" group (for highlight logic). */
@@ -249,6 +270,11 @@ fun MainScaffold(navController: NavHostController) {
     val innerBackStackEntry by innerNavController.currentBackStackEntryAsState()
     val currentRoute = innerBackStackEntry?.destination?.route ?: Route.Dashboard.route
 
+    // Sidebar profile data
+    val teacherName by mainViewModel.teacherName.collectAsStateWithLifecycle()
+    val schoolName by mainViewModel.schoolName.collectAsStateWithLifecycle()
+    val position by mainViewModel.position.collectAsStateWithLifecycle()
+
     var moreExpanded by remember { mutableStateOf(false) }
     // Auto-expand More section if a sub-route is active
     LaunchedEffect(currentRoute) {
@@ -260,20 +286,35 @@ fun MainScaffold(navController: NavHostController) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .width(72.dp)
+                .width(76.dp)
                 .background(NavRailBg)
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
+                .padding(vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
         ) {
-            // App logo
-            Text(
-                text = "SS",
-                style = MaterialTheme.typography.headlineMedium,
-                color = Teal,
-                modifier = Modifier.padding(vertical = 12.dp)
+            // ── School branding + teacher profile ──
+            SidebarProfileHeader(
+                teacherName = teacherName,
+                schoolName = schoolName,
+                position = position,
+                onProfileClick = {
+                    if (currentRoute != Route.Profile.route) {
+                        innerNavController.navigate(Route.Profile.route) {
+                            popUpTo(Route.Dashboard.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                }
             )
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Divider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                color = DividerColor
+            )
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Primary items
             mainNavItems.forEach { item ->
@@ -304,7 +345,7 @@ fun MainScaffold(navController: NavHostController) {
                     .padding(vertical = 4.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null
+                        indication = rememberRipple(bounded = false, radius = 24.dp)
                     ) { moreExpanded = !moreExpanded }
                     .padding(horizontal = 4.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -363,13 +404,19 @@ fun MainScaffold(navController: NavHostController) {
 
             Spacer(modifier = Modifier.weight(1f))
 
+            Divider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                color = DividerColor
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
             // ── Logout ──
             Column(
                 modifier = Modifier
                     .padding(vertical = 4.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null
+                        indication = rememberRipple(bounded = false, radius = 24.dp)
                     ) { mainViewModel.logout() }
                     .padding(horizontal = 4.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -408,7 +455,17 @@ fun MainScaffold(navController: NavHostController) {
             popEnterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(200)) { -it / 8 } },
             popExitTransition = { fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { it / 8 } }
         ) {
-            composable(Route.Dashboard.route) { DashboardScreen() }
+            composable(Route.Dashboard.route) {
+                DashboardScreen(
+                    onNotificationsClick = {
+                        innerNavController.navigate(Route.Notices.route) {
+                            popUpTo(Route.Dashboard.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
             composable(Route.Attendance.route) { AttendanceScreen() }
             composable(Route.Marks.route) { MarksScreen() }
             composable(Route.Timetable.route) { TimetableScreen() }
@@ -422,11 +479,13 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.Fees.route) { FeesTeacherScreen() }
             composable(Route.Gallery.route) { GalleryTeacherScreen() }
             composable(Route.Library.route) { LibraryTeacherScreen() }
+            composable(Route.Payslips.route) { PayslipsScreen() }
+            composable(Route.Profile.route) { MyProfileScreen() }
         }
     }
 }
 
-/** Reusable nav rail entry (icon + label). */
+/** Reusable nav rail entry (icon + label) with ripple feedback. */
 @Composable
 private fun NavRailEntry(
     item: NavRailItem,
@@ -438,10 +497,10 @@ private fun NavRailEntry(
 
     Column(
         modifier = Modifier
-            .padding(vertical = 4.dp)
+            .padding(vertical = 2.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null,
+                indication = rememberRipple(bounded = false, radius = 28.dp),
                 onClick = onClick
             )
             .padding(horizontal = 4.dp, vertical = 6.dp),
@@ -471,5 +530,105 @@ private fun NavRailEntry(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+/** Profile + school branding at the top of the sidebar rail. */
+@Composable
+private fun SidebarProfileHeader(
+    teacherName: String,
+    schoolName: String,
+    position: String,
+    onProfileClick: () -> Unit = {}
+) {
+    val c = LocalAppColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = rememberRipple(bounded = true)
+            ) { onProfileClick() }
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Avatar circle with initials
+        val initials = teacherName
+            .split(" ")
+            .take(2)
+            .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+            .joinToString("")
+            .ifEmpty { "T" }
+
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(c.accent, c.accentSecondary)
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = initials,
+                color = c.textOnAccent,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Teacher name
+        if (teacherName.isNotEmpty()) {
+            Text(
+                text = teacherName.split(" ").first(),
+                style = MaterialTheme.typography.labelMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        // Position badge
+        if (position.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = position,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 8.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        // School name badge
+        if (schoolName.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(TealSurface)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = schoolName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Teal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 7.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }

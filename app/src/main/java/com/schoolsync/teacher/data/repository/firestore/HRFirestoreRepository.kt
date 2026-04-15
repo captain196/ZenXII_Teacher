@@ -48,7 +48,8 @@ class HRFirestoreRepository @Inject constructor(
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("staffId", teacherId)
-                    .orderBy("month", Query.Direction.DESCENDING)
+                    .whereEqualTo("type", "payslip")
+                    .orderBy("monthKey", Query.Direction.DESCENDING)
             }
             Result.success(slips)
         } catch (e: Exception) {
@@ -203,7 +204,7 @@ class HRFirestoreRepository @Inject constructor(
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getSession(): String? {

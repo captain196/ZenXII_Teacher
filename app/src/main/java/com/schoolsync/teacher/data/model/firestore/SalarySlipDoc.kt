@@ -1,14 +1,15 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class SalarySlipDoc(
     @DocumentId
     val id: String = "",
     val schoolId: String = "",
-    val month: String = "",
+    val month: String = "",                // display label e.g. "April"
+    val monthKey: String = "",             // sortable ISO "2026-04"
+    val year: String = "",
+    val runId: String = "",
     val staffId: String = "",
     val staffName: String = "",
     val empId: String = "",
@@ -20,14 +21,14 @@ data class SalarySlipDoc(
     val netPayable: Double = 0.0,
     val workingDays: Int = 0,
     val presentDays: Int = 0,
+    val daysAbsent: Int = 0,
     val lwpDays: Int = 0,
+    val paidLeaveDays: Int = 0,
     val overtimeHours: Double = 0.0,
     val overtimePay: Double = 0.0,
     val arrears: Double = 0.0,
-    val status: String = "draft",          // draft, generated, disbursed
+    val status: String = "Draft",          // Draft, Finalized, Paid (admin casing)
     val bankRefNo: String = "",
-    @ServerTimestamp
-    val disbursedAt: Timestamp? = null,
-    @ServerTimestamp
-    val generatedAt: Timestamp? = null
+    val disbursedAt: Any? = null,
+    val generatedAt: Any? = null
 )
