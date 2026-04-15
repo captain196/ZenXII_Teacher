@@ -5,7 +5,6 @@ import com.google.firebase.firestore.Query
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.AppraisalDoc
-import com.schoolsync.teacher.data.model.firestore.KraDoc
 import com.schoolsync.teacher.data.model.firestore.RecruitmentDoc
 import com.schoolsync.teacher.data.model.firestore.SalarySlipDoc
 import com.schoolsync.teacher.data.model.firestore.TrainingDoc
@@ -60,63 +59,27 @@ class HRFirestoreRepository @Inject constructor(
     // ── Appraisals ──────────────────────────────────────────────────────────
 
     /**
-     * Fetch the current appraisal document for the teacher.
-     * Document ID pattern: {schoolId}_{session}_{staffId}
+     * Fetch all appraisals visible to the current teacher (Submitted or Reviewed).
+     * Drafts are filtered out — teachers shouldn't see in-progress reviews.
+     * Sorted most recent first.
      */
-    suspend fun getMyAppraisal(): Result<AppraisalDoc?> {
+    suspend fun getMyAppraisals(): Result<List<AppraisalDoc>> {
         val schoolCode = getSchoolCode()
             ?: return Result.failure(Exception("School code not available"))
-        val session = getSession()
-            ?: return Result.failure(Exception("Session not available"))
         val teacherId = getTeacherId()
             ?: return Result.failure(Exception("Teacher ID not available"))
 
         return try {
-            val docId = "${schoolCode}_${session}_${teacherId}"
-            val doc = firestoreService.getDocumentAs<AppraisalDoc>(
-                Constants.Firestore.APPRAISALS,
-                docId
-            )
-            Result.success(doc)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Submit a self-review for an existing appraisal cycle.
-     * Updates the appraisal document with the teacher's KRA self-assessments.
-     */
-    suspend fun submitSelfReview(
-        appraisalId: String,
-        kras: List<KraDoc>
-    ): Result<Unit> {
-        val teacherId = getTeacherId()
-            ?: return Result.failure(Exception("Teacher ID not available"))
-
-        val krasMaps = kras.map { kra ->
-            mapOf(
-                "id" to kra.id,
-                "area" to kra.area,
-                "weight" to kra.weight,
-                "target" to kra.target,
-                "selfScore" to kra.selfScore,
-                "managerScore" to kra.managerScore
-            )
-        }
-
-        return try {
-            firestoreService.updateDocument(
-                Constants.Firestore.APPRAISALS,
-                appraisalId,
-                mapOf(
-                    "selfReview" to krasMaps,
-                    "selfReviewSubmittedBy" to teacherId,
-                    "selfReviewSubmittedAt" to FieldValue.serverTimestamp(),
-                    "status" to "self_review_submitted"
-                )
-            )
-            Result.success(Unit)
+            val all = firestoreService.queryDocumentsAs<AppraisalDoc>(
+                Constants.Firestore.APPRAISALS
+            ) { ref ->
+                ref.whereEqualTo("schoolId", schoolCode)
+                    .whereEqualTo("staffId", teacherId)
+                    .orderBy("updatedAt", Query.Direction.DESCENDING)
+            }
+            // Filter Drafts client-side (small N, avoids one more index field)
+            val visible = all.filter { it.status != "Draft" }
+            Result.success(visible)
         } catch (e: Exception) {
             Result.failure(e)
         }

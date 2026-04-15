@@ -10,8 +10,8 @@ import com.schoolsync.teacher.data.firebase.FirebaseAuthManager
 import com.schoolsync.teacher.data.firebase.FirebaseService
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
-import com.schoolsync.teacher.data.remote.ApiService
 import com.schoolsync.teacher.data.remote.AuthInterceptor
+import com.schoolsync.teacher.data.remote.ApiService
 import com.schoolsync.teacher.data.repository.AuthRepository
 import com.schoolsync.teacher.data.repository.FeeRepository
 import com.schoolsync.teacher.data.repository.GalleryRepository
@@ -20,6 +20,7 @@ import com.schoolsync.teacher.data.repository.LeaveRepository
 import com.schoolsync.teacher.data.repository.MessagesRepository
 import com.schoolsync.teacher.data.repository.RedFlagRepository
 import com.schoolsync.teacher.data.repository.StoryRepository
+import com.schoolsync.teacher.data.repository.DataRepository
 import com.schoolsync.teacher.data.repository.StudentRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.AttendanceFirestoreRepository
@@ -88,7 +89,7 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideFirebaseFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance("schoolsync")
+    fun provideFirebaseFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
 
     @Provides
     @Singleton
@@ -97,8 +98,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideAuthInterceptor(tokenManager: TokenManager, gson: Gson): AuthInterceptor =
-        AuthInterceptor(tokenManager, gson)
+    fun provideAuthInterceptor(): AuthInterceptor =
+        AuthInterceptor()
 
     @Provides
     @Singleton
@@ -137,32 +138,43 @@ object AppModule {
     @Provides
     @Singleton
     fun provideAuthRepository(
-        apiService: ApiService,
         tokenManager: TokenManager,
         firebaseAuthManager: FirebaseAuthManager,
-        firebaseService: FirebaseService
-    ): AuthRepository = AuthRepository(apiService, tokenManager, firebaseAuthManager, firebaseService)
+        firebaseService: FirebaseService,
+        firestoreService: FirestoreService
+    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firebaseService, firestoreService)
+
+    @Provides
+    @Singleton
+    fun provideDataRepository(
+        firestoreService: FirestoreService,
+        firebaseService: FirebaseService,
+        tokenManager: TokenManager
+    ): DataRepository = DataRepository(firestoreService, firebaseService, tokenManager)
 
     @Provides
     @Singleton
     fun provideStudentRepository(
         firebaseService: FirebaseService,
+        firestoreService: FirestoreService,
         tokenManager: TokenManager
-    ): StudentRepository = StudentRepository(firebaseService, tokenManager)
+    ): StudentRepository = StudentRepository(firebaseService, firestoreService, tokenManager)
 
     @Provides
     @Singleton
     fun provideTeacherRepository(
         firebaseService: FirebaseService,
+        firestoreService: FirestoreService,
         tokenManager: TokenManager
-    ): TeacherRepository = TeacherRepository(firebaseService, tokenManager)
+    ): TeacherRepository = TeacherRepository(firebaseService, firestoreService, tokenManager)
 
     @Provides
     @Singleton
     fun provideMessagesRepository(
         firebaseService: FirebaseService,
+        firestoreService: FirestoreService,
         tokenManager: TokenManager
-    ): MessagesRepository = MessagesRepository(firebaseService, tokenManager)
+    ): MessagesRepository = MessagesRepository(firebaseService, firestoreService, tokenManager)
 
     @Provides
     @Singleton
@@ -195,9 +207,9 @@ object AppModule {
     @Provides
     @Singleton
     fun provideFeeRepository(
-        firebaseService: FirebaseService,
-        tokenManager: TokenManager
-    ): FeeRepository = FeeRepository(firebaseService, tokenManager)
+        feeFirestoreRepository: FeeFirestoreRepository,
+        studentRepository: StudentRepository
+    ): FeeRepository = FeeRepository(feeFirestoreRepository, studentRepository)
 
     @Provides
     @Singleton
@@ -240,8 +252,9 @@ object AppModule {
     @Singleton
     fun provideAttendanceFirestoreRepository(
         firestoreService: FirestoreService,
-        tokenManager: TokenManager
-    ): AttendanceFirestoreRepository = AttendanceFirestoreRepository(firestoreService, tokenManager)
+        tokenManager: TokenManager,
+        apiService: ApiService
+    ): AttendanceFirestoreRepository = AttendanceFirestoreRepository(firestoreService, tokenManager, apiService)
 
     @Provides
     @Singleton

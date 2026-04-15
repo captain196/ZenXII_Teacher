@@ -1,9 +1,12 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
+/**
+ * Mirrors the admin Hr.php save_appraisal canonical camelCase shape.
+ * Status: "Draft" | "Submitted" | "Reviewed" (admin casing).
+ * Teachers only see Submitted/Reviewed appraisals; Drafts are filtered out.
+ */
 data class AppraisalDoc(
     @DocumentId
     val id: String = "",
@@ -12,22 +15,21 @@ data class AppraisalDoc(
     val staffId: String = "",
     val staffName: String = "",
     val department: String = "",
-    val kras: List<KraDoc> = emptyList(),
-    val overallSelfRating: Double = 0.0,
-    val overallManagerRating: Double = 0.0,
+    val appraisalType: String = "",        // Annual / Probation / Promotion / Mid-Year / Special
+    val period: String = "",
+    val reviewerId: String = "",
+    val reviewerName: String = "",
+    val teachingQuality: Double = 0.0,
+    val punctuality: Double = 0.0,
+    val studentFeedback: Double = 0.0,
+    val initiative: Double = 0.0,
+    val teamwork: Double = 0.0,
     val overallRating: Double = 0.0,
-    val status: String = "draft",          // draft, self_submitted, finalized
-    @ServerTimestamp
-    val selfSubmittedAt: Timestamp? = null,
-    @ServerTimestamp
-    val finalizedAt: Timestamp? = null
-)
-
-data class KraDoc(
-    val id: String = "",
-    val area: String = "",
-    val weight: Double = 0.0,
-    val target: String = "",
-    val selfScore: Double = 0.0,
-    val managerScore: Double = 0.0
+    val strengths: String = "",
+    val areasOfImprovement: String = "",
+    val recommendation: String = "none",   // none / promotion / increment / training / pip
+    val comments: String = "",
+    val goals: String = "",
+    val status: String = "Draft",
+    val updatedAt: Any? = null
 )
