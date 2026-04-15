@@ -145,6 +145,9 @@ class HRFirestoreRepository @Inject constructor(
 
     /**
      * Fetch open recruitment positions at the school.
+     * Reads from canonical 'hrJobs' collection. Filters on `statusLower`
+     * because admin keeps its UI status as 'Open' (capital) but emits a
+     * lowercase mirror for cross-system queries.
      */
     suspend fun getRecruitmentOpenings(): Result<List<RecruitmentDoc>> {
         val schoolCode = getSchoolCode()
@@ -155,7 +158,7 @@ class HRFirestoreRepository @Inject constructor(
                 Constants.Firestore.RECRUITMENTS
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
-                    .whereEqualTo("status", "open")
+                    .whereEqualTo("statusLower", "open")
                     .orderBy("postedAt", Query.Direction.DESCENDING)
             }
             Result.success(openings)

@@ -84,6 +84,7 @@ object Constants {
         const val PTM_CONFIG = "ptmConfig"
         const val PTM_BOOKINGS = "ptmBookings"
         const val MESSAGE_TEMPLATES = "messageTemplates"
+        const val SUBJECT_ASSIGNMENTS = "subjectAssignments"
 
         // ── Phase 7: Transport ─────────────────────────────────────────
         const val ROUTES = "routes"
@@ -110,7 +111,7 @@ object Constants {
         const val APPRAISALS = "appraisals"
         const val TRAININGS = "trainings"
         const val TRAINING_REGISTRATIONS = "trainingRegistrations"
-        const val RECRUITMENTS = "recruitments"
+        const val RECRUITMENTS = "hrJobs"  // canonical: admin Hr.php writes here, dual-emits camelCase mirror
 
         // ── Phase 10: Admissions ───────────────────────────────────────
         const val ADMISSION_CONFIG = "admissionConfig"
@@ -143,11 +144,49 @@ object Constants {
     // prefix is always present regardless of what format the backend
     // returns (raw "8th"/"A" or already-prefixed "Class 8th"/"Section A").
 
-    /** Ensure className has "Class " prefix: "8th" → "Class 8th" */
-    fun classKey(className: String): String =
-        if (className.startsWith("Class ", ignoreCase = true)) className else "Class $className"
+    /**
+     * Ensure className is in canonical form: "8" → "Class 8th",
+     * "8th" → "Class 8th", "Class 8th" → "Class 8th",
+     * "LKG" → "Class LKG" (non-numeric stays as-is, just gets the prefix).
+     *
+     * Empty input returns empty (callers expect that for class-wide assignments).
+     */
+    fun classKey(className: String): String {
+        val trimmed = className.trim()
+        if (trimmed.isEmpty()) return ""
+        if (trimmed.startsWith("Class ", ignoreCase = true)) return trimmed
+        // Add ordinal suffix for pure numeric keys (the Config/Classes catalog
+        // stores key="8" but label="Class 8th" — and the Teacher app needs the
+        // label form to match Firestore docs written by the admin panel).
+        val withOrdinal = appendOrdinalSuffixIfNeeded(trimmed)
+        return "Class $withOrdinal"
+    }
 
-    /** Ensure section has "Section " prefix: "A" → "Section A" */
-    fun sectionKey(section: String): String =
-        if (section.startsWith("Section ", ignoreCase = true)) section else "Section $section"
+    /**
+     * Ensure section is in canonical form: "A" → "Section A",
+     * "Section A" → "Section A". Empty input returns empty (so class-wide
+     * assignments don't end up with the literal string "Section ").
+     */
+    fun sectionKey(section: String): String {
+        val trimmed = section.trim()
+        if (trimmed.isEmpty()) return ""
+        if (trimmed.startsWith("Section ", ignoreCase = true)) return trimmed
+        return "Section $trimmed"
+    }
+
+    /**
+     * "1" → "1st", "2" → "2nd", "3" → "3rd", "4" → "4th", … "21" → "21st".
+     * Anything non-numeric (LKG, Nursery, 12th, etc.) is returned unchanged.
+     */
+    private fun appendOrdinalSuffixIfNeeded(s: String): String {
+        val n = s.toIntOrNull() ?: return s
+        val mod100 = n % 100
+        if (mod100 in 11..13) return "${n}th"
+        return when (n % 10) {
+            1 -> "${n}st"
+            2 -> "${n}nd"
+            3 -> "${n}rd"
+            else -> "${n}th"
+        }
+    }
 }

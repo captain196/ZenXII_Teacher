@@ -51,6 +51,8 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.material.icons.filled.WorkOutline
+import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Campaign
@@ -107,6 +109,7 @@ import com.schoolsync.teacher.ui.homework.HomeworkTeacherScreen
 import com.schoolsync.teacher.ui.fees.FeesTeacherScreen
 import com.schoolsync.teacher.ui.payslips.PayslipsScreen
 import com.schoolsync.teacher.ui.appraisals.AppraisalsScreen
+import com.schoolsync.teacher.ui.recruitment.RecruitmentScreen
 import com.schoolsync.teacher.ui.gallery.GalleryTeacherScreen
 import com.schoolsync.teacher.ui.library.LibraryTeacherScreen
 import com.schoolsync.teacher.ui.redflags.RedFlagTeacherScreen
@@ -153,6 +156,7 @@ sealed class Route(val route: String) {
     data object Library : Route("library")
     data object Payslips : Route("payslips")
     data object Appraisals : Route("appraisals")
+    data object Recruitment : Route("recruitment")
     data object More : Route("more")
     data object Profile : Route("profile")
 }
@@ -186,6 +190,7 @@ val moreSubItems = listOf(
     NavRailItem(Route.Library, "Library", Icons.Filled.LocalLibrary, Icons.Outlined.LocalLibrary),
     NavRailItem(Route.Payslips, "Pay", Icons.Filled.Payments, Icons.Outlined.Payments),
     NavRailItem(Route.Appraisals, "Review", Icons.Filled.WorkspacePremium, Icons.Outlined.WorkspacePremium),
+    NavRailItem(Route.Recruitment, "Jobs", Icons.Filled.WorkOutline, Icons.Outlined.WorkOutline),
 )
 
 /** Routes that belong to the "More" group (for highlight logic). */
@@ -486,6 +491,7 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.Library.route) { LibraryTeacherScreen() }
             composable(Route.Payslips.route) { PayslipsScreen() }
             composable(Route.Appraisals.route) { AppraisalsScreen() }
+            composable(Route.Recruitment.route) { RecruitmentScreen() }
             composable(Route.Profile.route) { MyProfileScreen() }
         }
     }
