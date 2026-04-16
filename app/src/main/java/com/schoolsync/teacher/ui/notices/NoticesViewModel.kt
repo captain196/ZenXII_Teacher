@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.repository.firestore.CommunicationFirestoreRepository
+import com.schoolsync.teacher.util.toDateOrNull
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +19,9 @@ data class NoticeItem(
     val noticeId: String,
     val title: String,
     val body: String,
+    val bodyHtml: String = "",      // Rich HTML description when present; rendered in WebView on detail
     val author: String = "",
+    val authorRole: String = "",    // e.g. "Admin", "HR Manager" — shown next to author name
     val date: String = "",
     val category: String = "General",
     val isRead: Boolean = false,
@@ -63,8 +66,14 @@ class NoticesViewModel @Inject constructor(
                                 noticeId = c.id,
                                 title = c.title,
                                 body = c.body,
+                                // Only carry HTML if the description actually has markup AND
+                                // differs from the plain-text body (avoids WebView for plain notices)
+                                bodyHtml = c.description
+                                    .takeIf { it.contains('<') && it != c.body }
+                                    .orEmpty(),
                                 author = c.author,
-                                date = c.sentAt?.toDate()?.let { dateFormat.format(it) } ?: "",
+                                authorRole = c.authorRole,
+                                date = c.sentAt.toDateOrNull()?.let { dateFormat.format(it) } ?: "",
                                 category = c.category.ifBlank { "General" },
                                 attachmentUrl = c.attachmentUrl
                             )

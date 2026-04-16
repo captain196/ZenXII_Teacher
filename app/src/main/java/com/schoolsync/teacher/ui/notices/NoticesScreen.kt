@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -25,12 +24,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.Policy
+import androidx.compose.material.icons.filled.WorkOutline
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
@@ -47,25 +53,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.schoolsync.teacher.ui.theme.Divider as DividerColor
-import com.schoolsync.teacher.ui.theme.Glass
-import com.schoolsync.teacher.ui.theme.GlassBorder
+import com.schoolsync.teacher.R
 import com.schoolsync.teacher.ui.theme.GradientBackground
-import com.schoolsync.teacher.ui.theme.InfoBlue
-import com.schoolsync.teacher.ui.theme.SuccessGreen
-import com.schoolsync.teacher.ui.theme.SurfaceDark
-import com.schoolsync.teacher.ui.theme.Teal
-import com.schoolsync.teacher.ui.theme.TealSurface
-import com.schoolsync.teacher.ui.theme.TextPrimary
-import com.schoolsync.teacher.ui.theme.TextSecondary
-import com.schoolsync.teacher.ui.theme.TextTertiary
-import com.schoolsync.teacher.ui.theme.WarningAmber
+import com.schoolsync.teacher.ui.theme.LocalAppColors
+import com.schoolsync.teacher.ui.theme.LocalSpacing
 import com.schoolsync.teacher.ui.theme.glassCard
 
 @Composable
@@ -73,6 +71,8 @@ fun NoticesScreen(
     viewModel: NoticesViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val c = LocalAppColors.current
+    val sp = LocalSpacing.current
 
     GradientBackground {
         Row(modifier = Modifier.fillMaxSize()) {
@@ -81,7 +81,7 @@ fun NoticesScreen(
                 modifier = Modifier
                     .weight(if (state.selectedNotice != null) 0.5f else 1f)
                     .fillMaxHeight()
-                    .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp)
+                    .padding(start = sp.lg, top = sp.sm, bottom = sp.sm, end = sp.sm)
             ) {
                 // Header
                 Row(
@@ -93,23 +93,30 @@ fun NoticesScreen(
                         Icon(
                             Icons.Filled.Campaign,
                             contentDescription = null,
-                            tint = Teal,
-                            modifier = Modifier.size(24.dp)
+                            tint = c.accent,
+                            modifier = Modifier.size(sp.iconLg.minus(4.dp))
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Notices",
+                            text = stringResource(R.string.notices_title),
                             style = MaterialTheme.typography.headlineMedium,
-                            color = TextPrimary,
+                            color = c.textPrimary,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    IconButton(onClick = viewModel::refresh) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                    IconButton(
+                        onClick = viewModel::refresh,
+                        modifier = Modifier.size(sp.touchTarget)
+                    ) {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = stringResource(R.string.action_refresh),
+                            tint = c.textSecondary
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(sp.sm))
 
                 // Category filter chips
                 Row(
@@ -130,14 +137,14 @@ fun NoticesScreen(
                                 )
                             },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Teal.copy(alpha = 0.15f),
-                                selectedLabelColor = Teal,
-                                containerColor = Glass,
-                                labelColor = TextSecondary
+                                selectedContainerColor = c.accent.copy(alpha = 0.15f),
+                                selectedLabelColor = c.accent,
+                                containerColor = c.glass,
+                                labelColor = c.textSecondary
                             ),
                             border = FilterChipDefaults.filterChipBorder(
-                                borderColor = GlassBorder,
-                                selectedBorderColor = Teal.copy(alpha = 0.3f),
+                                borderColor = c.glassBorder,
+                                selectedBorderColor = c.accent.copy(alpha = 0.3f),
                                 enabled = true,
                                 selected = state.selectedCategory == category
                             ),
@@ -146,7 +153,7 @@ fun NoticesScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(sp.sm))
 
                 // Notices list
                 if (state.isLoading) {
@@ -154,7 +161,7 @@ fun NoticesScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Teal)
+                        CircularProgressIndicator(color = c.accent)
                     }
                 } else if (state.filteredNotices.isEmpty()) {
                     Box(
@@ -165,21 +172,21 @@ fun NoticesScreen(
                             Icon(
                                 Icons.Filled.Notifications,
                                 contentDescription = null,
-                                tint = TextTertiary,
+                                tint = c.textTertiary,
                                 modifier = Modifier.size(48.dp)
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(sp.sm))
                             Text(
-                                text = "No notices",
+                                text = stringResource(R.string.notices_empty),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = TextTertiary
+                                color = c.textTertiary
                             )
                         }
                     }
                 } else {
                     LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(vertical = 4.dp)
+                        verticalArrangement = Arrangement.spacedBy(sp.sm),
+                        contentPadding = PaddingValues(vertical = sp.xs)
                     ) {
                         items(state.filteredNotices, key = { it.noticeId }) { notice ->
                             NoticeCard(
@@ -205,7 +212,7 @@ fun NoticesScreen(
                         modifier = Modifier
                             .weight(0.5f)
                             .fillMaxHeight()
-                            .padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 16.dp)
+                            .padding(start = sp.sm, top = sp.sm, bottom = sp.sm, end = sp.lg)
                     )
                 }
             }
@@ -219,99 +226,150 @@ private fun NoticeCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val c = LocalAppColors.current
+
+    val categoryColor = when (notice.category.lowercase()) {
+        "academic" -> c.info
+        "event" -> c.warning
+        "holiday" -> c.success
+        "exam" -> c.accent
+        "recruitment" -> c.accent
+        "fee" -> c.warning
+        "policy" -> c.info
+        else -> c.textSecondary
+    }
+
+    val categoryIcon: ImageVector = when (notice.category.lowercase()) {
+        "academic" -> Icons.Filled.MenuBook
+        "event" -> Icons.Filled.Celebration
+        "holiday" -> Icons.Filled.EventAvailable
+        "exam" -> Icons.Filled.Assignment
+        "recruitment" -> Icons.Filled.WorkOutline
+        "fee" -> Icons.Filled.MonetizationOn
+        "policy" -> Icons.Filled.Policy
+        else -> Icons.Filled.Campaign
+    }
+
+    // Outer card with left color-strip accent
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .glassCard(
-                cornerRadius = 12.dp,
-                borderColor = if (isSelected) Teal.copy(alpha = 0.5f) else GlassBorder,
-                backgroundColor = if (isSelected) TealSurface else Glass
+                cornerRadius = 14.dp,
+                borderColor = if (isSelected) c.accent.copy(alpha = 0.5f) else c.glassBorder,
+                backgroundColor = if (isSelected) c.accentSurface else c.glass
             )
             .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.Top
     ) {
-        // Category indicator
-        val categoryColor = when (notice.category.lowercase()) {
-            "academic" -> InfoBlue
-            "event" -> WarningAmber
-            "holiday" -> SuccessGreen
-            "exam" -> Teal
-            else -> TextSecondary
-        }
-
+        // 4dp left color strip — subtle ERP-style priority/category cue
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(categoryColor.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(categoryColor)
+        )
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            Icon(
-                Icons.Filled.Campaign,
-                contentDescription = null,
-                tint = categoryColor,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
+            // Top row: category pill + unread dot
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = notice.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(categoryColor.copy(alpha = 0.12f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Icon(
+                        categoryIcon,
+                        contentDescription = null,
+                        tint = categoryColor,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = notice.category.uppercase(),
+                        color = categoryColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.6.sp
+                    )
+                }
                 if (!notice.isRead) {
                     Icon(
                         Icons.Filled.Circle,
-                        contentDescription = "Unread",
-                        tint = Teal,
-                        modifier = Modifier
-                            .size(8.dp)
-                            .padding(start = 4.dp)
+                        contentDescription = stringResource(R.string.notices_unread),
+                        tint = c.accent,
+                        modifier = Modifier.size(8.dp)
                     )
                 }
             }
 
+            Spacer(Modifier.height(6.dp))
+
             Text(
-                text = notice.body,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
+                text = notice.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = c.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp)
+                lineHeight = 19.sp
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            if (notice.body.isNotBlank()) {
+                Spacer(Modifier.height(3.dp))
                 Text(
-                    text = notice.category,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = categoryColor,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 10.sp
+                    text = notice.body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp
                 )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Bottom meta row: author (role) · date
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (notice.author.isNotBlank()) {
+                    Text(
+                        text = notice.author,
+                        color = c.textTertiary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (notice.authorRole.isNotBlank()) {
+                        Text(
+                            text = " · ${notice.authorRole}",
+                            color = c.textTertiary,
+                            fontSize = 11.sp,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(" · ", color = c.textTertiary, fontSize = 11.sp)
+                }
                 Text(
                     text = notice.date,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
-                    fontSize = 10.sp
+                    color = c.textTertiary,
+                    fontSize = 11.sp
                 )
             }
         }
@@ -324,63 +382,186 @@ private fun NoticeDetailPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val c = LocalAppColors.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+
+    val categoryColor = when (notice.category.lowercase()) {
+        "academic" -> c.info
+        "event" -> c.warning
+        "holiday" -> c.success
+        "exam" -> c.accent
+        "recruitment" -> c.accent
+        "fee" -> c.warning
+        "policy" -> c.info
+        else -> c.accent
+    }
+    val categoryIcon: ImageVector = when (notice.category.lowercase()) {
+        "academic" -> Icons.Filled.MenuBook
+        "event" -> Icons.Filled.Celebration
+        "holiday" -> Icons.Filled.EventAvailable
+        "exam" -> Icons.Filled.Assignment
+        "recruitment" -> Icons.Filled.WorkOutline
+        "fee" -> Icons.Filled.MonetizationOn
+        "policy" -> Icons.Filled.Policy
+        else -> Icons.Filled.Campaign
+    }
+
     Column(
         modifier = modifier
             .glassCard()
-            .padding(20.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // Colored header band
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(categoryColor.copy(alpha = 0.12f))
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Close", tint = TextSecondary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.action_close),
+                        tint = categoryColor
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        categoryIcon,
+                        contentDescription = null,
+                        tint = categoryColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = notice.category.uppercase(),
+                        color = categoryColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    )
+                }
             }
-            Text(
-                text = notice.category,
-                style = MaterialTheme.typography.labelMedium,
-                color = Teal,
-                fontWeight = FontWeight.SemiBold
-            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = notice.title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = c.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+                lineHeight = 26.sp
+            )
 
-        Text(
-            text = notice.title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = TextPrimary,
-            fontWeight = FontWeight.Bold
-        )
+            Spacer(modifier = Modifier.height(6.dp))
 
-        Row(
-            modifier = Modifier.padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (notice.author.isNotEmpty()) {
+            // Author (role) · date
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (notice.author.isNotBlank()) {
+                    Text(
+                        text = notice.author,
+                        color = c.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (notice.authorRole.isNotBlank()) {
+                        Text(
+                            text = " · ${notice.authorRole}",
+                            color = c.textSecondary,
+                            fontSize = 12.sp,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                        )
+                    }
+                    Text(" · ", color = c.textTertiary, fontSize = 12.sp)
+                }
                 Text(
-                    text = "By ${notice.author}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+                    text = notice.date,
+                    color = c.textTertiary,
+                    fontSize = 12.sp
                 )
             }
-            Text(
-                text = notice.date,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary
-            )
+
+            // Attachment chip
+            if (notice.attachmentUrl.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(c.accentSurface)
+                        .clickable {
+                            runCatching {
+                                ctx.startActivity(
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse(notice.attachmentUrl)
+                                    )
+                                )
+                            }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Assignment,
+                        contentDescription = null,
+                        tint = c.accent,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Open attachment",
+                        color = c.accent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            Divider(color = c.divider, thickness = 0.5.dp)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            if (notice.bodyHtml.isNotBlank()) {
+                // Rich HTML render via WebView (HR-styled posters etc.)
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { context ->
+                        android.webkit.WebView(context).apply {
+                            settings.javaScriptEnabled = false
+                            settings.loadWithOverviewMode = true
+                            settings.useWideViewPort = false
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        }
+                    },
+                    update = { webView ->
+                        // Wrap with a font-size + color defaults so posters match app theme
+                        val html = """
+                            <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+                            <style>
+                              body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:0;
+                                   font-size:14px;line-height:1.5;color:#1e293b;}
+                              img{max-width:100%;height:auto;}
+                            </style></head>
+                            <body>${notice.bodyHtml}</body></html>
+                        """.trimIndent()
+                        webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Text(
+                    text = notice.body,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = c.textPrimary,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+            }
         }
-
-        Divider(color = DividerColor, thickness = 0.5.dp)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = notice.body,
-            style = MaterialTheme.typography.bodyLarge,
-            color = TextPrimary,
-            lineHeight = 22.sp
-        )
     }
 }

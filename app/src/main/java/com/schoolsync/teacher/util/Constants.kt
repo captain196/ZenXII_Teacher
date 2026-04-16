@@ -75,6 +75,7 @@ object Constants {
         const val FEE_RECEIPTS = "feeReceipts"
         const val PAYMENT_INTENTS = "paymentIntents"
         const val CIRCULARS = "circulars"
+        const val NOTICES_FS = "notices"  // Admin Notice Board writes here (type=notice)
         const val CIRCULAR_READS = "circularReads"
         const val NOTIFICATIONS = "notifications"
         const val EVENTS = "events"

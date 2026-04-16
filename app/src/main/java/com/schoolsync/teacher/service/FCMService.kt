@@ -48,11 +48,12 @@ class FCMService : FirebaseMessagingService() {
         serviceScope.launch {
             try {
                 val deviceId = tokenManager.deviceId.firstOrNull() ?: ""
-                if (deviceId.isNotBlank()) {
-                    authRepository.registerFcmToken(token, deviceId)
+                val userId = tokenManager.userId.firstOrNull() ?: ""
+                if (deviceId.isNotBlank() && userId.isNotBlank()) {
+                    authRepository.registerFcmToken(token, userId, deviceId)
                     Log.d(TAG, "FCM token registered successfully")
                 } else {
-                    Log.w(TAG, "No device ID available, skipping FCM registration")
+                    Log.w(TAG, "No device ID or user ID available, skipping FCM registration")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to register FCM token", e)
@@ -82,9 +83,14 @@ class FCMService : FirebaseMessagingService() {
         val type = data["type"] ?: return
 
         when (type) {
-            "notice" -> {
+            "notice", "notice_created" -> {
                 val title = data["title"] ?: "New Notice"
-                val body = data["body"] ?: ""
+                val body = data["body"] ?: "A new notice has been posted"
+                showNotification(title, body, data)
+            }
+            "circular", "circular_created" -> {
+                val title = data["title"] ?: "New Circular"
+                val body = data["body"] ?: "A new circular has been posted"
                 showNotification(title, body, data)
             }
             "message" -> {
