@@ -1,46 +1,29 @@
 package com.schoolsync.teacher.ui.splash
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.schoolsync.teacher.ui.theme.BgEnd
 import com.schoolsync.teacher.ui.theme.BgStart
-import com.schoolsync.teacher.ui.theme.Teal
-import com.schoolsync.teacher.ui.theme.TealDark
-import com.schoolsync.teacher.ui.theme.TextOnAccent
 import com.schoolsync.teacher.ui.theme.TextPrimary
+import com.schoolsync.teacher.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+
+private val ZenzGreen = Color(0xFF2DB87A)
+private val ZenzDark = Color(0xFF1E2D3D)
 
 @Composable
 fun SplashScreen(
@@ -50,54 +33,71 @@ fun SplashScreen(
     isLoggedIn: Boolean,
     hasSeenOnboarding: Boolean
 ) {
-    // Animations
-    var startAnimation by remember { mutableStateOf(false) }
+    var phase by remember { mutableIntStateOf(0) }
 
+    // ── Logo animations ──
     val logoScale by animateFloatAsState(
-        targetValue = if (startAnimation) 1f else 0.3f,
-        animationSpec = tween(800, easing = FastOutSlowInEasing),
+        targetValue = when (phase) { 0 -> 0.2f; 1 -> 1.1f; else -> 1f },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "logoScale"
     )
     val logoAlpha by animateFloatAsState(
-        targetValue = if (startAnimation) 1f else 0f,
-        animationSpec = tween(600),
-        label = "logoAlpha"
+        targetValue = if (phase >= 1) 1f else 0f,
+        animationSpec = tween(400), label = "logoAlpha"
     )
-    val titleAlpha by animateFloatAsState(
-        targetValue = if (startAnimation) 1f else 0f,
-        animationSpec = tween(600, delayMillis = 400),
-        label = "titleAlpha"
+    val greenReveal by animateFloatAsState(
+        targetValue = if (phase >= 1) 1f else 0f,
+        animationSpec = tween(700, easing = FastOutSlowInEasing), label = "greenReveal"
     )
-    val subtitleAlpha by animateFloatAsState(
-        targetValue = if (startAnimation) 1f else 0f,
-        animationSpec = tween(600, delayMillis = 700),
-        label = "subtitleAlpha"
+    val darkReveal by animateFloatAsState(
+        targetValue = if (phase >= 1) 1f else 0f,
+        animationSpec = tween(700, delayMillis = 250, easing = FastOutSlowInEasing), label = "darkReveal"
     )
 
-    // Pulse glow
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val glowScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowScale"
+    val titleAlpha by animateFloatAsState(
+        targetValue = if (phase >= 2) 1f else 0f,
+        animationSpec = tween(500), label = "titleAlpha"
     )
+    val titleOffsetY by animateFloatAsState(
+        targetValue = if (phase >= 2) 0f else 20f,
+        animationSpec = tween(500, easing = FastOutSlowInEasing), label = "titleOffset"
+    )
+    val subtitleAlpha by animateFloatAsState(
+        targetValue = if (phase >= 3) 1f else 0f,
+        animationSpec = tween(400), label = "subAlpha"
+    )
+    val taglineAlpha by animateFloatAsState(
+        targetValue = if (phase >= 3) 1f else 0f,
+        animationSpec = tween(400, delayMillis = 150), label = "tagAlpha"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.1f,
+        initialValue = 0.25f, targetValue = 0.08f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
+            animation = tween(1400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowAlpha"
+        ), label = "glowAlpha"
+    )
+    val glowRadius by infiniteTransition.animateFloat(
+        initialValue = 0.9f, targetValue = 1.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ), label = "glowRadius"
     )
 
     LaunchedEffect(Unit) {
-        startAnimation = true
-        delay(2500)
+        delay(300)
+        phase = 1
+        delay(800)
+        phase = 2
+        delay(500)
+        phase = 3
+        delay(1000)
         when {
             isLoggedIn -> onNavigateToMain()
             !hasSeenOnboarding -> onNavigateToWalkthrough()
@@ -117,70 +117,93 @@ fun SplashScreen(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 40.dp)
         ) {
-            // Glow behind logo
             Box(contentAlignment = Alignment.Center) {
-                // Outer glow
-                Box(
+                // Glow
+                Canvas(
                     modifier = Modifier
-                        .size(120.dp)
-                        .scale(glowScale)
-                        .alpha(glowAlpha)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Teal.copy(alpha = 0.4f),
-                                    Teal.copy(alpha = 0f)
-                                )
+                        .size(160.dp)
+                        .alpha(if (phase >= 1) glowAlpha else 0f)
+                ) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                ZenzGreen.copy(alpha = 0.5f),
+                                ZenzGreen.copy(alpha = 0f)
                             ),
-                            shape = CircleShape
+                            center = center,
+                            radius = size.minDimension / 2f * glowRadius
                         )
-                )
+                    )
+                }
 
-                // Logo circle
-                Box(
+                // Z Logo
+                Canvas(
                     modifier = Modifier
-                        .size(88.dp)
+                        .size(100.dp)
                         .scale(logoScale)
                         .alpha(logoAlpha)
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(Teal, TealDark)
-                            ),
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.School,
-                        contentDescription = "SchoolSync",
-                        tint = TextOnAccent,
-                        modifier = Modifier.size(44.dp)
-                    )
+                    val w = size.width
+                    val h = size.height
+                    // Green: top bar + diagonal stroke
+                    val greenPath = Path().apply {
+                        moveTo(w * 0.07f, h * 0.03f)
+                        lineTo(w * 0.93f, h * 0.03f)
+                        lineTo(w * 0.93f, h * 0.27f)
+                        lineTo(w * 0.67f, h * 0.27f)
+                        lineTo(w * 0.27f, h * 0.73f)
+                        lineTo(w * 0.07f, h * 0.73f)
+                        close()
+                    }
+                    // Dark: bottom bar
+                    val darkPath = Path().apply {
+                        moveTo(w * 0.07f, h * 0.73f)
+                        lineTo(w * 0.93f, h * 0.73f)
+                        lineTo(w * 0.93f, h * 0.97f)
+                        lineTo(w * 0.07f, h * 0.97f)
+                        close()
+                    }
+
+                    drawPath(greenPath, color = ZenzGreen, alpha = greenReveal)
+                    drawPath(darkPath, color = Color(0xFF8AA0B8), alpha = darkReveal)
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(36.dp))
 
-            // Title
             Text(
-                text = "SchoolSync",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
+                text = "ZENZ",
+                fontSize = 42.sp,
+                fontWeight = FontWeight.Black,
                 color = TextPrimary,
-                modifier = Modifier.alpha(titleAlpha)
+                letterSpacing = 8.sp,
+                modifier = Modifier
+                    .alpha(titleAlpha)
+                    .offset(y = titleOffsetY.dp)
             )
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Subtitle
             Text(
-                text = "Teacher",
+                text = "SCHOOL MANAGEMENT",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextSecondary,
+                letterSpacing = 4.sp,
+                modifier = Modifier.alpha(subtitleAlpha)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Teacher Portal",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = Teal,
-                modifier = Modifier.alpha(subtitleAlpha)
+                color = ZenzGreen,
+                modifier = Modifier.alpha(taglineAlpha)
             )
         }
     }

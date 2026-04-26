@@ -20,7 +20,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
-        buildConfigField("String", "BASE_URL", "\"https://project2-2-80nu.onrender.com/\"")
+        // PHP backend URL — used for any future REST API endpoints
+        // Emulator: 10.0.2.2 | Physical device on same WiFi: use your PC's local IP
+        // Physical device on same WiFi: use PC's local IP.
+        // Emulator: change to "http://10.0.2.2/Grader/school/"
+        buildConfigField("String", "BASE_URL", "\"http://10.31.184.210/Grader/school/\"")
     }
 
     buildTypes {
@@ -83,6 +87,12 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
+    // Storage — used by Stories upload (image/video → Cloud Storage URL)
+    implementation("com.google.firebase:firebase-storage-ktx")
+
+    // AndroidX activity-result for the modern PickVisualMedia photo
+    // picker (no runtime permission needed, works back to API 19).
+    implementation("androidx.activity:activity-ktx:1.8.2")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

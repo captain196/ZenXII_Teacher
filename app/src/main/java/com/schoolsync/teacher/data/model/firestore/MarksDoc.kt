@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 /**
  * Represents a single student's marks for one subject in one exam.
@@ -27,7 +25,6 @@ data class MarksDoc(
     val total: Double = 0.0,
     val absent: Boolean = false,
     val savedBy: String = "",
-    @ServerTimestamp
-    val savedAt: Timestamp? = null,
+    val savedAt: Any? = null,
     val status: String = "draft"         // "draft", "submitted", "verified", "locked"
 )

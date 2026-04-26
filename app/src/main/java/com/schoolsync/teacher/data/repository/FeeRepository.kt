@@ -1,77 +1,78 @@
 package com.schoolsync.teacher.data.repository
 
-import com.schoolsync.teacher.data.firebase.FirebaseService
-import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.ClassFeeOverview
 import com.schoolsync.teacher.data.model.FeeDefaulter
 import com.schoolsync.teacher.data.model.StudentFeeStatus
-import com.schoolsync.teacher.util.Constants
-import kotlinx.coroutines.flow.firstOrNull
+import com.schoolsync.teacher.data.repository.firestore.FeeFirestoreRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * RTDB-backed Fee repository used by [FeesTeacherViewModel].
- * Teachers can view fee overview, student statuses, and defaulter lists
- * for their assigned classes (read-only).
+ * Fee repository used by [FeesTeacherViewModel].
+ *
+ * Firestore-only (per project policy — zero RTDB). Delegates to
+ * [FeeFirestoreRepository] for raw doc reads and [StudentRepository] to enrich
+ * rows with roster fields (rollNo, fatherName, phone) that live on the
+ * `students` collection rather than `feeDefaulters`.
+ *
+ * Teachers see a read-only view of fee status for their assigned classes.
+ * Admin writes to `feeDefaulters` for every student after each payment /
+ * discount / scholarship event, so this collection is authoritative.
  */
 @Singleton
 class FeeRepository @Inject constructor(
-    private val firebaseService: FirebaseService,
-    private val tokenManager: TokenManager
+    private val feeFirestoreRepository: FeeFirestoreRepository,
+    private val studentRepository: StudentRepository
 ) {
 
     /**
-     * Get an aggregated fee overview for a class/section.
+     * Aggregated fee overview for one class/section.
      */
     suspend fun getClassFeeOverview(
         className: String,
         section: String
     ): Result<ClassFeeOverview> {
         return try {
-            val schoolCode = tokenManager.schoolCode.firstOrNull()
-                ?: return Result.failure(Exception("School code not available"))
-            val session = tokenManager.session.firstOrNull()
-                ?: return Result.failure(Exception("Session not available"))
+            val defaulters = feeFirestoreRepository
+                .getClassDefaulters(className, section)
+                .getOrElse { return Result.failure(it) }
 
-            val cls = Constants.classKey(className)
-            val sec = Constants.sectionKey(section)
+            // Total roster size (from students collection) is a stronger
+            // denominator than counting defaulter docs, because paid students
+            // may or may not have a feeDefaulters entry depending on sync history.
+            val roster = studentRepository.getStudentsForClass(className, section)
+                .getOrElse { emptyList() }
+            val totalStudents = maxOf(roster.size, defaulters.size)
 
-            // Read pending fees for the class/section
-            val pendingPath = "${Constants.Firebase.SCHOOLS}/$schoolCode/$session/$cls/$sec/${Constants.Firebase.PENDING_FEES}"
-            val snapshot = firebaseService.readSnapshot(pendingPath)
-
-            var totalStudents = 0
-            var paidCount = 0
             var defaulterCount = 0
-            var totalCollected = 0.0
             var totalPending = 0.0
             var examBlockedCount = 0
             var resultWithheldCount = 0
 
-            for (child in snapshot.children) {
-                totalStudents++
-                @Suppress("UNCHECKED_CAST")
-                val data = child.value as? Map<String, Any?> ?: continue
-                val pending = (data["pending"] as? Number)?.toDouble()
-                    ?: (data["totalPending"] as? Number)?.toDouble() ?: 0.0
-                val paid = (data["paid"] as? Number)?.toDouble()
-                    ?: (data["totalPaid"] as? Number)?.toDouble() ?: 0.0
-                val examBlocked = data["examBlocked"] as? Boolean ?: false
-                val resultWithheld = data["resultWithheld"] as? Boolean ?: false
-
-                totalCollected += paid
-                totalPending += pending
-                if (pending <= 0) paidCount++
-                if (pending > 0) defaulterCount++
-                if (examBlocked) examBlockedCount++
-                if (resultWithheld) resultWithheldCount++
+            for (d in defaulters) {
+                if (d.totalDues > 0) {
+                    defaulterCount++
+                    totalPending += d.totalDues
+                }
+                if (d.examBlocked) examBlockedCount++
+                if (d.resultWithheld) resultWithheldCount++
             }
+
+            val paidCount = (totalStudents - defaulterCount).coerceAtLeast(0)
+
+            // Sum collected from receipts for the class/section in this session.
+            // Non-fatal: if the receipts query fails, fall back to 0 rather
+            // than failing the whole overview.
+            val totalCollected = feeFirestoreRepository
+                .getClassReceipts(className, section)
+                .getOrNull()
+                ?.sumOf { it.amount }
+                ?: 0.0
 
             Result.success(
                 ClassFeeOverview(
-                    className = cls,
-                    section = sec,
+                    className = className,
+                    section = section,
                     totalStudents = totalStudents,
                     paidCount = paidCount,
                     defaulterCount = defaulterCount,
@@ -87,104 +88,108 @@ class FeeRepository @Inject constructor(
     }
 
     /**
-     * Get fee status for each student in a class/section.
+     * Per-student fee status for the given class/section.
+     * Merges the full roster (so paid students appear too) with defaulter
+     * doc fields (dues, flags, lastPaymentDate).
      */
     suspend fun getStudentFeeStatuses(
         className: String,
         section: String
     ): Result<List<StudentFeeStatus>> {
         return try {
-            val schoolCode = tokenManager.schoolCode.firstOrNull()
-                ?: return Result.failure(Exception("School code not available"))
-            val session = tokenManager.session.firstOrNull()
-                ?: return Result.failure(Exception("Session not available"))
+            val defaultersList = feeFirestoreRepository
+                .getClassDefaulters(className, section)
+                .getOrElse { return Result.failure(it) }
+            val defaultersById = defaultersList.associateBy { it.studentId }
 
-            val cls = Constants.classKey(className)
-            val sec = Constants.sectionKey(section)
+            val roster = studentRepository.getStudentsForClass(className, section)
+                .getOrElse { emptyList() }
 
-            val pendingPath = "${Constants.Firebase.SCHOOLS}/$schoolCode/$session/$cls/$sec/${Constants.Firebase.PENDING_FEES}"
-            val snapshot = firebaseService.readSnapshot(pendingPath)
+            // Primary source = roster (so paid students with no feeDefaulters
+            // doc still show up). For each, look up the defaulter row to
+            // enrich fee fields. Students with no defaulter doc are treated
+            // as paid (totalPending=0, no flags).
+            val statuses = roster.map { student ->
+                val d = defaultersById[student.studentId]
+                StudentFeeStatus(
+                    studentId       = student.studentId,
+                    studentName     = student.name.ifBlank { d?.studentName ?: "" },
+                    rollNo          = student.rollNo,
+                    totalPending    = d?.totalDues ?: 0.0,
+                    isDefaulter     = (d?.totalDues ?: 0.0) > 0,
+                    examBlocked     = d?.examBlocked ?: false,
+                    resultWithheld  = d?.resultWithheld ?: false,
+                    lastPaymentDate = d?.lastPaymentDate ?: "",
+                    fatherName      = student.fatherName,
+                    phone           = student.phone
+                )
+            }.toMutableList()
 
-            val statuses = mutableListOf<StudentFeeStatus>()
-            for (child in snapshot.children) {
-                val studentId = child.key ?: continue
-                @Suppress("UNCHECKED_CAST")
-                val data = child.value as? Map<String, Any?> ?: continue
-
+            // Fold in any defaulter doc whose student is missing from the roster
+            // (e.g. a withdrawn student still owing dues — the UI may still
+            // want to see them). Fetched without enrichment.
+            val rosterIds = roster.map { it.studentId }.toSet()
+            for (d in defaultersList) {
+                if (d.studentId in rosterIds) continue
                 statuses.add(
                     StudentFeeStatus(
-                        studentId = studentId,
-                        studentName = data["studentName"]?.toString()
-                            ?: data["name"]?.toString() ?: "",
-                        rollNo = data["rollNo"]?.toString()
-                            ?: data["roll_no"]?.toString() ?: "",
-                        totalPending = (data["pending"] as? Number)?.toDouble()
-                            ?: (data["totalPending"] as? Number)?.toDouble() ?: 0.0,
-                        isDefaulter = (data["isDefaulter"] as? Boolean) ?: false,
-                        examBlocked = (data["examBlocked"] as? Boolean) ?: false,
-                        resultWithheld = (data["resultWithheld"] as? Boolean) ?: false,
-                        lastPaymentDate = data["lastPaymentDate"]?.toString() ?: "",
-                        fatherName = data["fatherName"]?.toString()
-                            ?: data["father_name"]?.toString() ?: "",
-                        phone = data["phone"]?.toString() ?: ""
+                        studentId       = d.studentId,
+                        studentName     = d.studentName,
+                        rollNo          = "",
+                        totalPending    = d.totalDues,
+                        isDefaulter     = d.totalDues > 0,
+                        examBlocked     = d.examBlocked,
+                        resultWithheld  = d.resultWithheld,
+                        lastPaymentDate = d.lastPaymentDate,
+                        fatherName      = "",
+                        phone           = ""
                     )
                 )
             }
 
-            Result.success(statuses.sortedBy { it.rollNo.toIntOrNull() ?: Int.MAX_VALUE })
+            Result.success(
+                statuses.sortedBy { it.rollNo.toIntOrNull() ?: Int.MAX_VALUE }
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
     /**
-     * Get the list of fee defaulters for a class/section.
+     * Defaulters-only list (students with totalDues > 0), sorted by dues desc.
      */
     suspend fun getDefaulterList(
         className: String,
         section: String
     ): Result<List<FeeDefaulter>> {
         return try {
-            val schoolCode = tokenManager.schoolCode.firstOrNull()
-                ?: return Result.failure(Exception("School code not available"))
-            val session = tokenManager.session.firstOrNull()
-                ?: return Result.failure(Exception("Session not available"))
+            val defaulters = feeFirestoreRepository
+                .getClassDefaulters(className, section)
+                .getOrElse { return Result.failure(it) }
 
-            val cls = Constants.classKey(className)
-            val sec = Constants.sectionKey(section)
+            val roster = studentRepository.getStudentsForClass(className, section)
+                .getOrElse { emptyList() }
+            val rosterById = roster.associateBy { it.studentId }
 
-            val defaulterPath = "${Constants.Firebase.SCHOOLS}/$schoolCode/$session/$cls/$sec/${Constants.Firebase.FEE_DEFAULTERS}"
-            val snapshot = firebaseService.readSnapshot(defaulterPath)
-
-            val defaulters = mutableListOf<FeeDefaulter>()
-            for (child in snapshot.children) {
-                val studentId = child.key ?: continue
-                @Suppress("UNCHECKED_CAST")
-                val data = child.value as? Map<String, Any?> ?: continue
-
-                @Suppress("UNCHECKED_CAST")
-                val unpaidMonths = (data["unpaidMonths"] as? List<String>) ?: emptyList()
-
-                defaulters.add(
+            val result = defaulters
+                .filter { it.totalDues > 0 }
+                .map { d ->
+                    val student = rosterById[d.studentId]
                     FeeDefaulter(
-                        studentId = studentId,
-                        studentName = data["studentName"]?.toString()
-                            ?: data["name"]?.toString() ?: "",
-                        rollNo = data["rollNo"]?.toString()
-                            ?: data["roll_no"]?.toString() ?: "",
-                        totalDues = (data["totalDues"] as? Number)?.toDouble()
-                            ?: (data["pending"] as? Number)?.toDouble() ?: 0.0,
-                        unpaidMonths = unpaidMonths,
-                        examBlocked = (data["examBlocked"] as? Boolean) ?: false,
-                        resultWithheld = (data["resultWithheld"] as? Boolean) ?: false,
-                        fatherName = data["fatherName"]?.toString()
-                            ?: data["father_name"]?.toString() ?: "",
-                        phone = data["phone"]?.toString() ?: ""
+                        studentId      = d.studentId,
+                        studentName    = (student?.name ?: "").ifBlank { d.studentName },
+                        rollNo         = student?.rollNo ?: "",
+                        totalDues      = d.totalDues,
+                        unpaidMonths   = d.unpaidMonths,
+                        examBlocked    = d.examBlocked,
+                        resultWithheld = d.resultWithheld,
+                        fatherName     = student?.fatherName ?: "",
+                        phone          = student?.phone ?: ""
                     )
-                )
-            }
+                }
+                .sortedByDescending { it.totalDues }
 
-            Result.success(defaulters.sortedByDescending { it.totalDues })
+            Result.success(result)
         } catch (e: Exception) {
             Result.failure(e)
         }

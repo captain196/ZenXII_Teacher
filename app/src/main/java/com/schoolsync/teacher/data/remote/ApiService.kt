@@ -1,32 +1,35 @@
 package com.schoolsync.teacher.data.remote
 
-import com.schoolsync.teacher.data.model.FcmRegisterRequest
-import com.schoolsync.teacher.data.model.LoginRequest
-import com.schoolsync.teacher.data.model.LoginResponse
-import com.schoolsync.teacher.data.model.RefreshRequest
-import com.schoolsync.teacher.data.model.RefreshResponse
 import retrofit2.Response
-import retrofit2.http.Body
-import retrofit2.http.GET
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.POST
 
+/**
+ * Retrofit API service for admin panel endpoints.
+ *
+ * Phase 8b (2026-04-09): added `teacherNotify` so the teacher app
+ * can trigger parent push notifications after marking A/T via the
+ * admin's `_fire_single_student_event` pipeline.
+ */
 interface ApiService {
 
-    @POST("api/auth/login")
-    suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
-
-    @POST("api/auth/refresh")
-    suspend fun refreshToken(@Body request: RefreshRequest): Response<RefreshResponse>
-
-    @POST("api/auth/logout")
-    suspend fun logout(): Response<Map<String, Any>>
-
-    @POST("api/auth/change-password")
-    suspend fun changePassword(@Body body: Map<String, String>): Response<Map<String, Any>>
-
-    @POST("api/auth/register-fcm")
-    suspend fun registerFcmToken(@Body request: FcmRegisterRequest): Response<Map<String, Any>>
-
-    @GET("api/users/me")
-    suspend fun getProfile(): Response<Map<String, Any>>
+    /**
+     * Notify the admin panel that a student was marked Absent or
+     * Tardy so it fires the FCM push to the parent's device.
+     *
+     * The teacher app writes attendance directly to Firestore
+     * (canonical), but the push pipeline lives in PHP — this
+     * endpoint bridges the gap.
+     */
+    @FormUrlEncoded
+    @POST("attendance/teacher_notify")
+    suspend fun teacherNotify(
+        @Field("student_id") studentId: String,
+        @Field("mark") mark: String,
+        @Field("class") className: String,
+        @Field("section") section: String,
+        @Field("day") day: Int,
+        @Field("month") month: String = ""
+    ): Response<Map<String, Any>>
 }

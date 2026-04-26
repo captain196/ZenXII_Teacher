@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.MessageThread
 import com.schoolsync.teacher.data.model.ChatMessage as ModelChatMessage
+import com.schoolsync.teacher.data.model.firestore.StudentDoc
 import com.schoolsync.teacher.data.repository.MessagesRepository
+import com.schoolsync.teacher.data.repository.firestore.StudentFirestoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +44,16 @@ data class ChatMessage(
     val isRead: Boolean = false
 )
 
+data class StudentPick(
+    val studentId: String,
+    val name: String,
+    val fatherName: String,
+    val className: String,
+    val section: String,
+    val parentDbKey: String,
+    val rollNo: String = ""
+)
+
 data class MessagesUiState(
     val conversations: List<Conversation> = emptyList(),
     val selectedConversation: Conversation? = null,
@@ -50,7 +62,15 @@ data class MessagesUiState(
     val isLoadingConversations: Boolean = true,
     val isLoadingChat: Boolean = false,
     val isSending: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    // New conversation flow
+    val showNewConversationSheet: Boolean = false,
+    val students: List<StudentPick> = emptyList(),
+    val isLoadingStudents: Boolean = false,
+    val studentSearchQuery: String = "",
+    val selectedStudent: StudentPick? = null,
+    val newMessageInput: String = "",
+    val isCreatingConversation: Boolean = false
 )
 
 sealed class MessagesEvent {
@@ -61,6 +81,7 @@ sealed class MessagesEvent {
 @HiltViewModel
 class MessagesViewModel @Inject constructor(
     private val messagesRepository: MessagesRepository,
+    private val studentFirestoreRepository: StudentFirestoreRepository,
     private val tokenManager: TokenManager
 ) : ViewModel() {
 
@@ -98,7 +119,7 @@ class MessagesViewModel @Inject constructor(
                                 studentName = "", // will be populated if available
                                 studentClass = "${thread.className}-${thread.section}",
                                 lastMessage = thread.lastMessage,
-                                lastMessageTime = formatTimestamp(thread.lastTimestamp),
+                                lastMessageTime = formatTimestamp(thread.resolvedTimestamp),
                                 unreadCount = thread.unreadCount
                             )
                         }
@@ -119,11 +140,43 @@ class MessagesViewModel @Inject constructor(
         }
     }
 
+    /**
+     * "Delete chat for me" — drops only this teacher's inbox stub. Other
+     * participants still see the conversation. If the deleted thread is
+     * currently open, also closes the chat panel.
+     */
+    fun deleteConversation(conversationId: String) {
+        viewModelScope.launch {
+            val result = messagesRepository.deleteConversationForMe(conversationId)
+            result.onSuccess {
+                _uiState.update { st ->
+                    val isOpen = st.selectedConversation?.conversationId == conversationId
+                    st.copy(
+                        conversations = st.conversations.filterNot { it.conversationId == conversationId },
+                        selectedConversation = if (isOpen) null else st.selectedConversation,
+                        chatMessages = if (isOpen) emptyList() else st.chatMessages
+                    )
+                }
+            }.onFailure { e ->
+                _uiState.update { it.copy(error = e.message ?: "Failed to delete conversation") }
+            }
+        }
+    }
+
     fun selectConversation(conversation: Conversation) {
         _uiState.update {
-            it.copy(selectedConversation = conversation, chatMessages = emptyList())
+            it.copy(
+                selectedConversation = conversation,
+                chatMessages = emptyList(),
+                // Optimistically clear the unread badge in the list — the
+                // server-side reset happens via markConversationRead below.
+                conversations = it.conversations.map { c ->
+                    if (c.conversationId == conversation.conversationId) c.copy(unreadCount = 0) else c
+                }
+            )
         }
         loadChatMessages(conversation.conversationId)
+        viewModelScope.launch { messagesRepository.markConversationRead(conversation.conversationId) }
     }
 
     private fun loadChatMessages(conversationId: String) {
@@ -135,12 +188,12 @@ class MessagesViewModel @Inject constructor(
                         val messages = modelMessages.map { msg ->
                             ChatMessage(
                                 messageId = msg.messageId,
-                                senderId = msg.senderId,
-                                senderName = msg.senderName,
-                                message = msg.text,
+                                senderId = msg.resolvedSenderId,
+                                senderName = msg.resolvedSenderName,
+                                message = msg.resolvedText,
                                 timestamp = formatTimestamp(msg.timestamp),
-                                isFromTeacher = msg.senderId == currentTeacherId ||
-                                        msg.senderRole.equals("teacher", ignoreCase = true),
+                                isFromTeacher = msg.resolvedSenderId == currentTeacherId ||
+                                        msg.senderRole.ifBlank { msg.sender_role }.equals("teacher", ignoreCase = true),
                                 isRead = msg.readBy.containsKey(currentTeacherId)
                             )
                         }
@@ -219,6 +272,120 @@ class MessagesViewModel @Inject constructor(
         loadConversations()
         _uiState.value.selectedConversation?.let {
             loadChatMessages(it.conversationId)
+        }
+    }
+
+    // ── New Conversation Flow ─────────────────────────────────────────
+
+    fun openNewConversation() {
+        _uiState.update { it.copy(showNewConversationSheet = true, students = emptyList()) }
+        loadStudents()
+    }
+
+    fun closeNewConversation() {
+        _uiState.update {
+            it.copy(
+                showNewConversationSheet = false,
+                selectedStudent = null,
+                newMessageInput = "",
+                studentSearchQuery = ""
+            )
+        }
+    }
+
+    fun onStudentSearchChange(query: String) {
+        _uiState.update { it.copy(studentSearchQuery = query) }
+    }
+
+    fun selectStudent(student: StudentPick) {
+        _uiState.update { it.copy(selectedStudent = student) }
+    }
+
+    fun clearSelectedStudent() {
+        _uiState.update { it.copy(selectedStudent = null, newMessageInput = "") }
+    }
+
+    fun onNewMessageInputChange(text: String) {
+        _uiState.update { it.copy(newMessageInput = text) }
+    }
+
+    private fun loadStudents() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingStudents = true) }
+            try {
+                studentFirestoreRepository.getStudentsBySchool().fold(
+                    onSuccess = { docs ->
+                        val students = docs
+                            .filter { it.status.equals("Active", ignoreCase = true) || it.status.isBlank() }
+                            .map { d ->
+                                StudentPick(
+                                    studentId = d.id.ifBlank { d.userId },
+                                    name = d.name,
+                                    fatherName = d.fatherName,
+                                    className = d.className,
+                                    section = d.section,
+                                    parentDbKey = d.parentDbKey,
+                                    rollNo = d.rollNo
+                                )
+                            }
+                            .sortedWith(compareBy({ it.className }, { it.section }, { it.name }))
+                        _uiState.update { it.copy(students = students, isLoadingStudents = false) }
+                    },
+                    onFailure = { e ->
+                        Log.e(TAG, "Failed to load students", e)
+                        _uiState.update { it.copy(isLoadingStudents = false, error = e.message) }
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception loading students", e)
+                _uiState.update { it.copy(isLoadingStudents = false, error = e.message) }
+            }
+        }
+    }
+
+    fun createNewConversation() {
+        val state = _uiState.value
+        val student = state.selectedStudent ?: return
+        val message = state.newMessageInput.trim()
+        if (message.isEmpty()) {
+            viewModelScope.launch { _events.emit(MessagesEvent.Error("Please enter a message")) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCreatingConversation = true) }
+            try {
+                messagesRepository.createConversation(
+                    studentId = student.studentId,
+                    studentName = student.name,
+                    parentName = student.fatherName,
+                    className = student.className,
+                    section = student.section,
+                    parentDbKey = student.parentDbKey,
+                    initialMessage = message
+                ).fold(
+                    onSuccess = {
+                        _uiState.update {
+                            it.copy(
+                                isCreatingConversation = false,
+                                showNewConversationSheet = false,
+                                selectedStudent = null,
+                                newMessageInput = "",
+                                studentSearchQuery = ""
+                            )
+                        }
+                        _events.emit(MessagesEvent.MessageSent)
+                        loadConversations() // refresh list
+                    },
+                    onFailure = { e ->
+                        _uiState.update { it.copy(isCreatingConversation = false) }
+                        _events.emit(MessagesEvent.Error(e.message ?: "Failed to create conversation"))
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isCreatingConversation = false) }
+                _events.emit(MessagesEvent.Error(e.message ?: "Failed to create conversation"))
+            }
         }
     }
 }

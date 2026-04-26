@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class BehaviorSummaryDoc(
     @DocumentId
@@ -20,6 +18,5 @@ data class BehaviorSummaryDoc(
     val trend: String = "stable",          // improving, stable, declining
     val detentionCount: Int = 0,
     val counselorReferrals: Int = 0,
-    @ServerTimestamp
-    val updatedAt: Timestamp? = null
+    val updatedAt: Any? = null
 )

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -38,6 +39,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -96,12 +100,19 @@ fun RedFlagTeacherScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var lastEventWasError by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
-                is RedFlagEvent.Success -> snackbarHostState.showSnackbar(event.message)
-                is RedFlagEvent.Error -> snackbarHostState.showSnackbar("Error: ${event.message}")
+                is RedFlagEvent.Success -> {
+                    lastEventWasError = false
+                    snackbarHostState.showSnackbar(event.message)
+                }
+                is RedFlagEvent.Error -> {
+                    lastEventWasError = true
+                    snackbarHostState.showSnackbar(event.message)
+                }
             }
         }
     }
@@ -111,12 +122,41 @@ fun RedFlagTeacherScreen(
             containerColor = Color.Transparent,
             snackbarHost = {
                 SnackbarHost(snackbarHostState) { data ->
-                    Snackbar(
-                        snackbarData = data,
-                        containerColor = Glass,
-                        contentColor = TextPrimary,
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    val isError = lastEventWasError
+                    val accent = if (isError) ErrorRed else SuccessGreen
+                    val accentBg = if (isError) ErrorRedSurface else SuccessGreenSurface
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(SurfaceDark)
+                            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(accentBg),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isError) Icons.Filled.Warning else Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = data.visuals.message,
+                            color = TextPrimary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             },
             floatingActionButton = {
@@ -179,7 +219,9 @@ fun RedFlagTeacherScreen(
                             selectedStudentId = state.selectedStudentId,
                             students = state.students,
                             flagsByStudent = state.flagsByStudent,
+                            currentTeacherUid = state.currentTeacherUid,
                             onResolve = viewModel::resolveFlag,
+                            onDelete = viewModel::deleteFlag,
                             modifier = Modifier
                                 .weight(0.65f)
                                 .fillMaxHeight()
@@ -511,7 +553,9 @@ private fun FlagDetailPanel(
     selectedStudentId: String?,
     students: List<StudentInfo>,
     flagsByStudent: Map<String, List<StudentFlag>>,
+    currentTeacherUid: String,
     onResolve: (studentId: String, flagId: String) -> Unit,
+    onDelete: (flagId: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val displayFlags: List<Pair<String, StudentFlag>> = if (selectedStudentId != null) {
@@ -522,7 +566,7 @@ private fun FlagDetailPanel(
         // Show all flags across all students, sorted by timestamp
         flagsByStudent.flatMap { (studentId, flags) ->
             flags.map { studentId to it }
-        }.sortedByDescending { it.second.timestamp }
+        }.sortedByDescending { it.second.createdAtMs }
     }
 
     val selectedStudent = students.find { it.studentId == selectedStudentId }
@@ -599,10 +643,15 @@ private fun FlagDetailPanel(
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
                 items(displayFlags, key = { "${it.first}_${it.second.flagId}" }) { (studentId, flag) ->
+                    val canDelete = flag.createdByRole == "teacher"
+                        && flag.teacherId.isNotBlank()
+                        && flag.teacherId == currentTeacherUid
                     FlagCard(
                         flag = flag,
                         showStudentName = selectedStudentId == null,
-                        onResolve = { onResolve(studentId, flag.flagId) }
+                        onResolve = { onResolve(studentId, flag.flagId) },
+                        canDelete = canDelete,
+                        onDelete = { onDelete(flag.flagId) }
                     )
                 }
             }
@@ -627,8 +676,41 @@ private fun MiniChip(text: String, color: Color, bgColor: Color) {
 private fun FlagCard(
     flag: StudentFlag,
     showStudentName: Boolean,
-    onResolve: () -> Unit
+    onResolve: () -> Unit,
+    canDelete: Boolean = false,
+    onDelete: () -> Unit = {}
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete this flag?", color = TextPrimary) },
+            text = {
+                Text(
+                    "The flag will be hidden from your list and the parent's app. " +
+                    "Only an admin can bring it back.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDelete()
+                    }
+                ) {
+                    Text("Delete", color = ErrorRed, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = SurfaceDark,
+            shape = RoundedCornerShape(14.dp)
+        )
+    }
     val (severityColor, severityBg) = when (flag.severity) {
         "high" -> ErrorRed to ErrorRedSurface
         "medium" -> WarningAmber to WarningAmberSurface
@@ -762,9 +844,9 @@ private fun FlagCard(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (flag.timestamp > 0) {
+                if (flag.createdAtMs > 0) {
                     Text(
-                        text = flag.timestamp.toRelativeTime(),
+                        text = flag.createdAtMs.toRelativeTime(),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         fontSize = 9.sp
@@ -781,27 +863,52 @@ private fun FlagCard(
             }
         }
 
-        // Resolve button
-        if (!isResolved) {
+        // Action column — Resolve (if not resolved) + Delete (own teacher
+        // flags only). Stacked so the row layout doesn't get crowded on
+        // narrow tablets.
+        if (!isResolved || canDelete) {
             Spacer(modifier = Modifier.width(8.dp))
-            OutlinedButton(
-                onClick = onResolve,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = SuccessGreen),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = SolidColor(SuccessGreen.copy(alpha = 0.4f))
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = Alignment.End
             ) {
-                Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Resolve", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                if (!isResolved) {
+                    OutlinedButton(
+                        onClick = onResolve,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SuccessGreen),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            brush = SolidColor(SuccessGreen.copy(alpha = 0.4f))
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Resolve", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (canDelete) {
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            brush = SolidColor(ErrorRed.copy(alpha = 0.4f))
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Delete", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun CreateFlagDialog(
     formState: FlagFormState,
     students: List<StudentInfo>,
@@ -815,8 +922,6 @@ private fun CreateFlagDialog(
     onDismiss: () -> Unit
 ) {
     var studentDropdownExpanded by remember { mutableStateOf(false) }
-    var typeDropdownExpanded by remember { mutableStateOf(false) }
-    var severityDropdownExpanded by remember { mutableStateOf(false) }
     var subjectDropdownExpanded by remember { mutableStateOf(false) }
 
     val textFieldColors = OutlinedTextFieldDefaults.colors(
@@ -846,8 +951,14 @@ private fun CreateFlagDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Student selector
-                Box {
+                // Student selector — ExposedDropdownMenuBox is the only
+                // pattern that reliably opens a dropdown anchored to a
+                // readOnly OutlinedTextField. The previous Box+clickable
+                // pattern was swallowed by the text field's pointer handler.
+                ExposedDropdownMenuBox(
+                    expanded = studentDropdownExpanded,
+                    onExpandedChange = { studentDropdownExpanded = it }
+                ) {
                     OutlinedTextField(
                         value = formState.studentName.ifBlank { "Select Student *" },
                         onValueChange = {},
@@ -855,9 +966,9 @@ private fun CreateFlagDialog(
                         readOnly = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { studentDropdownExpanded = true },
+                            .menuAnchor(),
                         trailingIcon = {
-                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = TextSecondary)
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = studentDropdownExpanded)
                         },
                         colors = textFieldColors
                     )
@@ -946,8 +1057,11 @@ private fun CreateFlagDialog(
                     }
                 }
 
-                // Subject
-                Box {
+                // Subject — same ExposedDropdownMenuBox pattern as Student.
+                ExposedDropdownMenuBox(
+                    expanded = subjectDropdownExpanded,
+                    onExpandedChange = { subjectDropdownExpanded = it }
+                ) {
                     OutlinedTextField(
                         value = formState.subject,
                         onValueChange = {},
@@ -955,9 +1069,9 @@ private fun CreateFlagDialog(
                         readOnly = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { subjectDropdownExpanded = true },
+                            .menuAnchor(),
                         trailingIcon = {
-                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = TextSecondary)
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = subjectDropdownExpanded)
                         },
                         colors = textFieldColors
                     )

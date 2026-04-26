@@ -74,6 +74,9 @@ object Constants {
         const val FEE_DEFAULTERS = "feeDefaulters"
         const val FEE_RECEIPTS = "feeReceipts"
         const val PAYMENT_INTENTS = "paymentIntents"
+        const val FEE_CARRY_FORWARD = "feeCarryForward"
+        const val FEE_REMINDER_LOG = "feeReminderLog"
+        const val SCHOLARSHIP_AWARDS = "scholarshipAwards"
         const val CIRCULARS = "circulars"
         const val NOTICES_FS = "notices"  // Admin Notice Board writes here (type=notice)
         const val CIRCULAR_READS = "circularReads"
@@ -134,6 +137,9 @@ object Constants {
         const val DASHBOARDS = "dashboards"
         const val AUDIT_LOGS = "auditLogs"
         const val RBAC_ROLES = "rbacRoles"
+
+        // ── Phase B (RTDB elimination): Student Red Flags ──────────────
+        const val STUDENT_FLAGS = "studentFlags"
     }
 
     /** RTDB URL */

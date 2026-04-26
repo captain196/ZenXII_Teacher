@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class CircularReadDoc(
     @DocumentId
@@ -12,7 +10,6 @@ data class CircularReadDoc(
     val userId: String = "",
     val userName: String = "",
     val role: String = "",
-    @ServerTimestamp
-    val readAt: Timestamp? = null,
+    val readAt: Any? = null,
     val acknowledged: Boolean = false
 )

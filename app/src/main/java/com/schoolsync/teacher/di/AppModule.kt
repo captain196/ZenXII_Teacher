@@ -14,12 +14,10 @@ import com.schoolsync.teacher.data.remote.AuthInterceptor
 import com.schoolsync.teacher.data.remote.ApiService
 import com.schoolsync.teacher.data.repository.AuthRepository
 import com.schoolsync.teacher.data.repository.FeeRepository
-import com.schoolsync.teacher.data.repository.GalleryRepository
 import com.schoolsync.teacher.data.repository.HomeworkTeacherRepository
 import com.schoolsync.teacher.data.repository.LeaveRepository
 import com.schoolsync.teacher.data.repository.MessagesRepository
 import com.schoolsync.teacher.data.repository.RedFlagRepository
-import com.schoolsync.teacher.data.repository.StoryRepository
 import com.schoolsync.teacher.data.repository.DataRepository
 import com.schoolsync.teacher.data.repository.StudentRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
@@ -186,23 +184,17 @@ object AppModule {
     @Provides
     @Singleton
     fun provideRedFlagRepository(
-        firebaseService: FirebaseService,
+        firestoreService: FirestoreService,
+        firebaseAuth: FirebaseAuth,
         tokenManager: TokenManager
-    ): RedFlagRepository = RedFlagRepository(firebaseService, tokenManager)
+    ): RedFlagRepository = RedFlagRepository(firestoreService, firebaseAuth, tokenManager)
 
-    @Provides
-    @Singleton
-    fun provideStoryRepository(
-        firebaseService: FirebaseService,
-        tokenManager: TokenManager
-    ): StoryRepository = StoryRepository(firebaseService, tokenManager)
+    // Legacy StoryRepository (RTDB Social/Stories) removed — see
+    // StoryFirestoreRepository for the canonical, real-time replacement.
 
-    @Provides
-    @Singleton
-    fun provideGalleryRepository(
-        firebaseService: FirebaseService,
-        tokenManager: TokenManager
-    ): GalleryRepository = GalleryRepository(firebaseService, tokenManager)
+    // GalleryRepository (RTDB) removed in Phase C-2 (2026-04-26).
+    // GalleryFirestoreRepository is now the canonical reader/writer; Hilt
+    // resolves it via its @Inject constructor — no explicit @Provides needed.
 
     @Provides
     @Singleton
@@ -302,9 +294,12 @@ object AppModule {
     @Provides
     @Singleton
     fun provideChatRtdbRepository(
-        firebaseService: FirebaseService,
+        firestoreService: FirestoreService,
         tokenManager: TokenManager
-    ): ChatRtdbRepository = ChatRtdbRepository(firebaseService, tokenManager)
+    ): ChatRtdbRepository =
+        // Phase 5 — name retained for DI back-compat; backing store
+        // moved to Firestore (notifBadges / presence collections).
+        ChatRtdbRepository(firestoreService, tokenManager)
 
     // ── Phase 7–12 Firestore Repositories ────────────────────────────────
 

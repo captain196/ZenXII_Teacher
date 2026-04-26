@@ -1,17 +1,22 @@
 package com.schoolsync.teacher.ui.gallery
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.GalleryAlbum
 import com.schoolsync.teacher.data.model.GalleryMedia
-import com.schoolsync.teacher.data.repository.GalleryRepository
+import com.schoolsync.teacher.data.repository.firestore.GalleryFirestoreRepository
+import com.schoolsync.teacher.util.GalleryMediaUploader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -36,7 +41,8 @@ sealed class GalleryEvent {
 
 @HiltViewModel
 class GalleryTeacherViewModel @Inject constructor(
-    private val galleryRepository: GalleryRepository
+    private val galleryRepository: GalleryFirestoreRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     companion object {
@@ -184,6 +190,62 @@ class GalleryTeacherViewModel @Inject constructor(
                 Log.e(TAG, "Failed to upload media", e)
                 _uiState.update { it.copy(isUploading = false) }
                 _events.emit(GalleryEvent.Error(e.message ?: "Failed to upload media"))
+            }
+        }
+    }
+
+    /**
+     * Upload a picked file (Uri) to Firebase Storage, then write the
+     * resulting download URL into the gallery via [uploadMedia]. Validates
+     * size + MIME before kicking off the network upload.
+     */
+    fun uploadMediaFile(context: Context, uri: Uri, declaredType: String, caption: String) {
+        val album = _uiState.value.selectedAlbum ?: run {
+            viewModelScope.launch { _events.emit(GalleryEvent.Error("No album selected")) }
+            return
+        }
+
+        val validationError = GalleryMediaUploader.validate(context, uri, declaredType)
+        if (validationError != null) {
+            viewModelScope.launch { _events.emit(GalleryEvent.Error(validationError)) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUploading = true) }
+            try {
+                val schoolId = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+                    ?: tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
+                    ?: throw Exception("School ID not available")
+
+                Log.d(TAG, "uploadMediaFile: starting upload uri=$uri type=$declaredType")
+                val downloadUrl = GalleryMediaUploader.uploadSuspending(
+                    context     = context,
+                    uri         = uri,
+                    schoolId    = schoolId,
+                    albumId     = album.albumId,
+                    declaredType= declaredType
+                )
+                Log.d(TAG, "uploadMediaFile: storage upload OK, url=$downloadUrl")
+
+                galleryRepository.uploadMedia(album.albumId, downloadUrl, declaredType, caption).fold(
+                    onSuccess = { mediaId ->
+                        Log.d(TAG, "uploadMediaFile: firestore write OK mediaId=$mediaId")
+                        _uiState.update { it.copy(isUploading = false, showUploadMediaDialog = false) }
+                        _events.emit(GalleryEvent.Success("Media uploaded successfully"))
+                        loadMedia(album.albumId)
+                        loadAlbums() // refresh count
+                    },
+                    onFailure = { e ->
+                        Log.e(TAG, "uploadMediaFile: firestore write failed: ${e.message}", e)
+                        _uiState.update { it.copy(isUploading = false) }
+                        _events.emit(GalleryEvent.Error(e.message ?: "Failed to save media"))
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "uploadMediaFile failed", e)
+                _uiState.update { it.copy(isUploading = false) }
+                _events.emit(GalleryEvent.Error(e.message ?: "Upload failed"))
             }
         }
     }

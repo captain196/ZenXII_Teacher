@@ -82,7 +82,7 @@ class SectionFirestoreRepository @Inject constructor(
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("session", session)
-                    .whereEqualTo("className", className)
+                    .whereEqualTo("className", Constants.classKey(className))
             }
             Result.success(sections)
         } catch (e: Exception) {
@@ -100,7 +100,7 @@ class SectionFirestoreRepository @Inject constructor(
             .map { schoolCode ->
                 if (schoolCode == null) return@map null
                 val session = getSession() ?: return@map null
-                val docId = "${schoolCode}_${session}_${className}_${section}"
+                val docId = "${schoolCode}_${session}_${Constants.classKey(className)}_${Constants.sectionKey(section)}"
                 try {
                     firestoreService.getDocumentAs<SectionDoc>(
                         Constants.Firestore.SECTIONS,
@@ -118,11 +118,11 @@ class SectionFirestoreRepository @Inject constructor(
     private suspend fun buildSectionDocId(className: String, section: String): String? {
         val schoolCode = getSchoolCode() ?: return null
         val session = getSession() ?: return null
-        return "${schoolCode}_${session}_${className}_${section}"
+        return "${schoolCode}_${session}_${Constants.classKey(className)}_${Constants.sectionKey(section)}"
     }
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getSession(): String? {

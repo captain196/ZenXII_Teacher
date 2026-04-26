@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 /**
  * Represents an exam definition in Firestore.
@@ -27,6 +25,5 @@ data class ExamDoc(
     val status: String = "",             // "Draft", "Published", "Completed"
     val weight: Double = 0.0,
     val applicableClasses: List<String> = emptyList(),
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )

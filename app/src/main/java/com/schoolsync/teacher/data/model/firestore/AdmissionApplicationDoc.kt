@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class AdmissionApplicationDoc(
     @DocumentId
@@ -25,10 +23,8 @@ data class AdmissionApplicationDoc(
     val ageValid: Boolean = false,
     val source: String = "",
     val status: String = "pending",        // pending, approved, rejected, waitlisted
-    @ServerTimestamp
-    val createdAt: Timestamp? = null,
-    @ServerTimestamp
-    val updatedAt: Timestamp? = null
+    val createdAt: Any? = null,
+    val updatedAt: Any? = null
 )
 
 data class DocumentInfoDoc(

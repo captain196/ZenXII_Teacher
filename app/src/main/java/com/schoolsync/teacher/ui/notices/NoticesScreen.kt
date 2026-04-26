@@ -1,6 +1,8 @@
 package com.schoolsync.teacher.ui.notices
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -61,6 +63,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.schoolsync.teacher.R
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.schoolsync.teacher.ui.components.bouncyClickable
+import com.schoolsync.teacher.ui.components.staggerIn
 import com.schoolsync.teacher.ui.theme.GradientBackground
 import com.schoolsync.teacher.ui.theme.LocalAppColors
 import com.schoolsync.teacher.ui.theme.LocalSpacing
@@ -156,7 +161,12 @@ fun NoticesScreen(
                 Spacer(modifier = Modifier.height(sp.sm))
 
                 // Notices list
-                if (state.isLoading) {
+                Crossfade(
+                    targetState = state.isLoading,
+                    animationSpec = tween(220),
+                    label = "teacher-notices-loading"
+                ) { loading ->
+                if (loading) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -188,14 +198,20 @@ fun NoticesScreen(
                         verticalArrangement = Arrangement.spacedBy(sp.sm),
                         contentPadding = PaddingValues(vertical = sp.xs)
                     ) {
-                        items(state.filteredNotices, key = { it.noticeId }) { notice ->
-                            NoticeCard(
-                                notice = notice,
-                                isSelected = state.selectedNotice?.noticeId == notice.noticeId,
-                                onClick = { viewModel.selectNotice(notice) }
-                            )
+                        itemsIndexed(
+                            items = state.filteredNotices,
+                            key = { _, it -> it.noticeId }
+                        ) { index, notice ->
+                            Box(modifier = Modifier.staggerIn(index)) {
+                                NoticeCard(
+                                    notice = notice,
+                                    isSelected = state.selectedNotice?.noticeId == notice.noticeId,
+                                    onClick = { viewModel.selectNotice(notice) }
+                                )
+                            }
                         }
                     }
+                }
                 }
             }
 
@@ -259,7 +275,7 @@ private fun NoticeCard(
                 borderColor = if (isSelected) c.accent.copy(alpha = 0.5f) else c.glassBorder,
                 backgroundColor = if (isSelected) c.accentSurface else c.glass
             )
-            .clickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick)
     ) {
         // 4dp left color strip — subtle ERP-style priority/category cue
         Box(

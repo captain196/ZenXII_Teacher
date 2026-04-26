@@ -111,6 +111,6 @@ class StaffFirestoreRepository @Inject constructor(
     }
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 }

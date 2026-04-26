@@ -1,5 +1,8 @@
 package com.schoolsync.teacher.ui.students
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonSearch
@@ -69,9 +73,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.schoolsync.teacher.ui.theme.Divider as DividerColor
+import com.schoolsync.teacher.ui.theme.ErrorRed
+import com.schoolsync.teacher.ui.theme.ErrorRedSurface
 import com.schoolsync.teacher.ui.theme.Glass
 import com.schoolsync.teacher.ui.theme.GlassBorder
 import com.schoolsync.teacher.ui.theme.GradientBackground
+import com.schoolsync.teacher.ui.theme.SuccessGreen
+import com.schoolsync.teacher.ui.theme.SuccessGreenSurface
 import com.schoolsync.teacher.ui.theme.SurfaceDark
 import com.schoolsync.teacher.ui.theme.InfoBlue
 import com.schoolsync.teacher.ui.theme.InfoBlueSurface
@@ -80,6 +88,8 @@ import com.schoolsync.teacher.ui.theme.TealSurface
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
+import com.schoolsync.teacher.ui.theme.WarningAmber
+import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.glassCard
@@ -317,6 +327,7 @@ private fun StudentCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -386,12 +397,25 @@ private fun StudentCard(
             }
 
             if (student.phone.isNotEmpty()) {
-                Icon(
-                    Icons.Filled.Phone,
-                    contentDescription = "Has phone",
-                    tint = TextTertiary,
-                    modifier = Modifier.size(14.dp)
-                )
+                // Tap-to-dial: opens the system dialer pre-filled with the
+                // parent's phone number. ACTION_DIAL needs no runtime permission.
+                IconButton(
+                    onClick = {
+                        val intent = Intent(
+                            Intent.ACTION_DIAL,
+                            Uri.parse("tel:${student.phone}")
+                        ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Call,
+                        contentDescription = "Call ${student.name}",
+                        tint = Teal,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
@@ -469,7 +493,7 @@ private fun StudentDetailPanel(
         )
 
         Text(
-            text = "Class ${student.className} - ${student.section} | Roll: ${student.rollNo}",
+            text = "${student.className} - ${student.section} | Roll: ${student.rollNo}",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -490,6 +514,100 @@ private fun StudentDetailPanel(
         ProfileDetailRow("Email", student.email)
         ProfileDetailRow("Address", student.address)
         ProfileDetailRow("Admission Date", student.admissionDate)
+
+        // ── Fees snapshot: per-month paid chips ──
+        // Data comes from the canonical Firestore collections that the
+        // parent app writes on every successful payment, so this block
+        // is always in sync with what the parent has paid.
+        if (student.monthFee.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Divider(color = DividerColor, thickness = 0.5.dp)
+            Spacer(modifier = Modifier.height(12.dp))
+            FeeSnapshotCard(
+                monthFee = student.monthFee
+            )
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun FeeSnapshotCard(monthFee: Map<String, Int>) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "FEES",
+            style = MaterialTheme.typography.labelMedium,
+            color = TextTertiary,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (monthFee.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.CalendarMonth,
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Monthly Status",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            // Sort chips by academic order (April → March) so the
+            // teacher sees months in the same order parents do.
+            val academicOrder = listOf(
+                "April", "May", "June", "July", "August", "September",
+                "October", "November", "December", "January", "February", "March",
+                "Yearly Fees"
+            )
+            val sortedEntries = monthFee.entries.sortedBy { e ->
+                val idx = academicOrder.indexOf(e.key); if (idx >= 0) idx else 99
+            }
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                sortedEntries.forEach { (month, paid) ->
+                    MonthChip(month = month, isPaid = paid >= 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthChip(month: String, isPaid: Boolean) {
+    val bg  = if (isPaid) SuccessGreenSurface else WarningAmberSurface
+    val fg  = if (isPaid) SuccessGreen        else WarningAmber
+    val label = if (month == "Yearly Fees") "Yearly" else month.take(3)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (isPaid) "✓" else "•",
+            style = MaterialTheme.typography.labelSmall,
+            color = fg,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = fg,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 

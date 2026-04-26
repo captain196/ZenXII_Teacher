@@ -53,8 +53,8 @@ class StudentFirestoreRepository @Inject constructor(
                 Constants.Firestore.STUDENTS
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
-                    .whereEqualTo("className", className)
-                    .whereEqualTo("section", section)
+                    .whereEqualTo("className", Constants.classKey(className))
+                    .whereEqualTo("section", Constants.sectionKey(section))
             }
             Result.success(students)
         } catch (e: Exception) {
@@ -118,6 +118,6 @@ class StudentFirestoreRepository @Inject constructor(
     }
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 }

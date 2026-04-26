@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class MessageTemplateDoc(
     @DocumentId
@@ -14,6 +12,5 @@ data class MessageTemplateDoc(
     val mergeFields: List<String> = emptyList(),
     val category: String = "",
     val createdBy: String = "",
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )

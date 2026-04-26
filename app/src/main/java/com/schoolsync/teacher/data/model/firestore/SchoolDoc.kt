@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class SchoolDoc(
     @DocumentId
@@ -16,10 +14,8 @@ data class SchoolDoc(
     val status: String = "",
     val currentSession: String = "",
     val subscription: SubscriptionInfo = SubscriptionInfo(),
-    @ServerTimestamp
-    val createdAt: Timestamp? = null,
-    @ServerTimestamp
-    val updatedAt: Timestamp? = null
+    val createdAt: Any? = null,
+    val updatedAt: Any? = null
 )
 
 data class SubscriptionInfo(

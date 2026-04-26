@@ -4,9 +4,21 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:translateX="22" android:translateY="22">
+
+    <!-- ZENZ logo — bold Z letter, green top+diagonal, dark bottom bar -->
+    <group
+        android:translateX="24"
+        android:translateY="24">
+
+        <!-- Green: top bar + diagonal stroke -->
         <path
-            android:fillColor="#14B8A6"
-            android:pathData="M12,4L52,4A8,8 0,0 1,60 12L60,52A8,8 0,0 1,52 60L12,60A8,8 0,0 1,4 52L4,12A8,8 0,0 1,12 4z M16,16v8h32v-8H16z M16,28v4h24v-4H16z M16,36v4h28v-4H16z M16,44v4h20v-4H16z" />
+            android:fillColor="#2DB87A"
+            android:pathData="M4,2 L56,2 L56,16 L40,16 L16,44 L4,44 Z" />
+
+        <!-- Dark: bottom bar -->
+        <path
+            android:fillColor="#1E2D3D"
+            android:pathData="M4,44 L56,44 L56,58 L4,58 Z" />
+
     </group>
 </vector>

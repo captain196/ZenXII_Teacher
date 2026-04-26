@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class PurchaseOrderDoc(
     @DocumentId
@@ -19,8 +17,7 @@ data class PurchaseOrderDoc(
     val requestedBy: String = "",
     val approvedBy: String = "",
     val paymentStatus: String = "pending", // pending, partial, paid
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )
 
 data class POItemDoc(

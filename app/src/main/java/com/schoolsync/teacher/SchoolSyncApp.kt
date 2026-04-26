@@ -11,6 +11,7 @@ import dagger.hilt.android.HiltAndroidApp
 class SchoolSyncApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        com.schoolsync.teacher.util.initDebugLog(this)
         FirebaseDatabase.getInstance().setPersistenceEnabled(true)
         createNotificationChannel()
     }

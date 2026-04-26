@@ -2,6 +2,7 @@ package com.schoolsync.teacher.data.firebase
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GetTokenResult
 import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -9,33 +10,65 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Manages Firebase Authentication via custom tokens.
- * The server issues a Firebase custom token at login and refresh,
- * which we use to sign in to Firebase for RTDB Security Rules.
+ * Manages Firebase Authentication via email/password.
+ * Uses synthetic emails: {userId}@schoolsync.app
  */
 @Singleton
 class FirebaseAuthManager @Inject constructor(
     private val firebaseAuth: FirebaseAuth
 ) {
+    companion object {
+        private const val EMAIL_DOMAIN = "schoolsync.app"
+    }
+
     /**
-     * Sign in to Firebase using a custom token from the auth API.
-     * Must be called after login and after each token refresh.
+     * Sign in to Firebase using userId + password.
+     * Constructs synthetic email as {userId.lowercase()}@schoolsync.app
      *
-     * @param customToken The Firebase custom token from the server
-     * @return The signed-in FirebaseUser
+     * @param userId The teacher ID (e.g., "STA0001")
+     * @param password The password
+     * @return The signed-in FirebaseUser, or null on failure
      */
-    suspend fun signInWithCustomToken(customToken: String): FirebaseUser {
+    suspend fun signInWithEmailAndPassword(userId: String, password: String): FirebaseUser? {
+        val email = "${userId.lowercase()}@$EMAIL_DOMAIN"
         return suspendCancellableCoroutine { cont ->
-            firebaseAuth.signInWithCustomToken(customToken)
+            firebaseAuth.signInWithEmailAndPassword(email, password)
                 .addOnSuccessListener { authResult ->
-                    val user = authResult.user
-                    if (user != null && cont.isActive) {
-                        cont.resume(user)
-                    } else if (cont.isActive) {
-                        cont.resumeWithException(
-                            IllegalStateException("Firebase sign-in succeeded but user is null")
-                        )
-                    }
+                    if (cont.isActive) cont.resume(authResult.user)
+                }
+                .addOnFailureListener { exception ->
+                    if (cont.isActive) cont.resumeWithException(exception)
+                }
+        }
+    }
+
+    /**
+     * Get the ID token result with custom claims (role, school_id, etc.).
+     */
+    suspend fun getIdTokenResult(forceRefresh: Boolean = false): GetTokenResult {
+        val user = firebaseAuth.currentUser
+            ?: throw IllegalStateException("No authenticated user")
+        return suspendCancellableCoroutine { cont ->
+            user.getIdToken(forceRefresh)
+                .addOnSuccessListener { result ->
+                    if (cont.isActive) cont.resume(result)
+                }
+                .addOnFailureListener { exception ->
+                    if (cont.isActive) cont.resumeWithException(exception)
+                }
+        }
+    }
+
+    /**
+     * Change the current user's password.
+     */
+    suspend fun changePassword(newPassword: String) {
+        val user = firebaseAuth.currentUser
+            ?: throw IllegalStateException("No authenticated user")
+        return suspendCancellableCoroutine { cont ->
+            user.updatePassword(newPassword)
+                .addOnSuccessListener {
+                    if (cont.isActive) cont.resume(Unit)
                 }
                 .addOnFailureListener { exception ->
                     if (cont.isActive) cont.resumeWithException(exception)

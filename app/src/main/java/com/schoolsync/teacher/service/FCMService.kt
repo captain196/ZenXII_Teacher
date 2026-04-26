@@ -113,6 +113,13 @@ class FCMService : FirebaseMessagingService() {
                     data
                 )
             }
+            "event", "event_created" -> {
+                // Backend sends title = "New Event: {…}", body = "{startDate} | {location}".
+                // Keep the server-provided text, fall back if either is missing.
+                val title = data["title"] ?: "New Event"
+                val body  = data["body"]  ?: "Tap to view details"
+                showNotification(title, body, data)
+            }
             else -> {
                 val title = data["title"] ?: "SchoolSync"
                 val body = data["body"] ?: ""

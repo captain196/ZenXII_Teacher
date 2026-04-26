@@ -20,12 +20,17 @@ data class FeeDemandDoc(
     val sectionKey: String = "",
     val month: String = "",
     val demandId: String = "",
+    val feeHead: String = "",
+    val category: String = "",
+    val frequency: String = "",
+    val period: String = "",
     val feeItems: Map<String, Double> = emptyMap(),
     val grossAmount: Double = 0.0,
     val discountAmount: Double = 0.0,
     val fineAmount: Double = 0.0,
     val netAmount: Double = 0.0,
     val paidAmount: Double = 0.0,
+    val balance: Double = 0.0,
     val status: String = "unpaid",  // "paid", "partial", "overdue", "unpaid"
     val createdAt: String = "",
     val updatedAt: String = ""

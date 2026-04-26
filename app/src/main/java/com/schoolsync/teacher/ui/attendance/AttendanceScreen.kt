@@ -2,6 +2,8 @@ package com.schoolsync.teacher.ui.attendance
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -281,6 +283,59 @@ fun AttendanceScreen(
                 confirmButton = {
                     TextButton(onClick = viewModel::clearError) {
                         Text("OK", color = Teal)
+                    }
+                },
+                containerColor = SurfaceDark,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // Phase 10f: Tardy arrival time dialog
+        if (state.showTardyDialog) {
+            var timeInput by remember { mutableStateOf(
+                java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    .format(java.util.Date())
+            ) }
+
+            AlertDialog(
+                onDismissRequest = viewModel::dismissTardyDialog,
+                title = { Text("Arrival Time", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text(
+                            "Enter the student's arrival time (HH:mm, 24-hour):",
+                            color = TextSecondary,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = timeInput,
+                            onValueChange = { if (it.length <= 5) timeInput = it },
+                            placeholder = { Text("08:47") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Teal,
+                                unfocusedBorderColor = GlassBorder,
+                                cursorColor = Teal,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        // TODO: store the time in lateTimes when writing summary
+                        viewModel.dismissTardyDialog()
+                    }) {
+                        Text("OK", color = Teal, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = viewModel::dismissTardyDialog) {
+                        Text("Skip", color = TextTertiary)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -717,6 +772,8 @@ private fun AttendanceLegend() {
     }
 }
 
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
 private fun getStatusColor(status: AttendanceStatus): Color {
     return when (status) {
         AttendanceStatus.PRESENT -> AttendancePresent

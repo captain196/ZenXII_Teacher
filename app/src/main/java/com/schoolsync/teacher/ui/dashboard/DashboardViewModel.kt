@@ -10,8 +10,10 @@ import com.schoolsync.teacher.data.repository.HomeworkTeacherRepository
 import com.schoolsync.teacher.data.repository.RedFlagRepository
 import com.schoolsync.teacher.data.repository.StudentRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
+import com.schoolsync.teacher.data.repository.firestore.AttendanceFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.CommunicationFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.SectionFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.TimetableFirestoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +51,20 @@ data class ActivityItem(
 
 enum class ActivityType { INFO, ATTENDANCE, MARKS, NOTICE }
 
+data class TodayAttendanceSummary(
+    val totalStudents: Int = 0,
+    val present: Int = 0,
+    val absent: Int = 0,
+    val tardy: Int = 0,
+    val leave: Int = 0,
+    val unmarked: Int = 0
+) {
+    val percentage: Float get() {
+        val working = present + absent + tardy + leave
+        return if (working > 0) (present + tardy).toFloat() / working * 100f else 0f
+    }
+}
+
 data class DashboardUiState(
     val teacherName: String = "",
     val todaySchedule: List<PeriodItem> = emptyList(),
@@ -57,7 +73,18 @@ data class DashboardUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val currentDate: String = "",
-    val assignedClasses: List<String> = emptyList()
+    val assignedClasses: List<String> = emptyList(),
+    /** Today's attendance summary across all class-teacher sections. */
+    val todayAttendance: TodayAttendanceSummary = TodayAttendanceSummary(),
+    /**
+     * Sections where the logged-in teacher is the designated Class Teacher.
+     * Each entry is "Class 8th — Section A". Computed from any
+     * [ClassAssignment] row whose `classTeacher` (isClassTeacher) is true.
+     * Empty list means the teacher is not the class teacher anywhere.
+     */
+    val classTeacherOf: List<String> = emptyList(),
+    /** Substitute info for today — shows if someone is covering this teacher's classes */
+    val substituteInfo: String? = null
 )
 
 @HiltViewModel
@@ -67,9 +94,11 @@ class DashboardViewModel @Inject constructor(
     private val homeworkRepository: HomeworkTeacherRepository,
     private val redFlagRepository: RedFlagRepository,
     private val studentRepository: StudentRepository,
-    // TODO: Remove RTDB fallback after Firestore validation
+    private val attendanceFirestoreRepo: AttendanceFirestoreRepository,
     private val sectionFirestoreRepo: SectionFirestoreRepository,
-    private val communicationFirestoreRepo: CommunicationFirestoreRepository
+    private val communicationFirestoreRepo: CommunicationFirestoreRepository,
+    private val timetableFirestoreRepo: TimetableFirestoreRepository,
+    private val firestoreService: com.schoolsync.teacher.data.firebase.FirestoreService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -93,13 +122,67 @@ class DashboardViewModel @Inject constructor(
                     onSuccess = { classes ->
                         assignedClasses = classes
                         val classLabels = classes.map { it.classKey }.distinct()
-                        _uiState.update { it.copy(assignedClasses = classLabels) }
+
+                        // Class-teacher sections — collected from any
+                        // assignment row with isClassTeacher=true. Same
+                        // teacher may be class teacher of multiple sections
+                        // in theory, so we keep a list and de-dupe.
+                        val classTeacherOf = classes
+                            .filter { it.classTeacher }
+                            .map { "${it.className} — ${it.section}" }
+                            .distinct()
+
+                        _uiState.update {
+                            it.copy(
+                                assignedClasses = classLabels,
+                                classTeacherOf = classTeacherOf,
+                            )
+                        }
                     },
                     onFailure = { /* non-critical */ }
                 )
 
-                // Load today's timetable
-                teacherRepository.getMyTimetable().fold(
+                // Phase 10f: Load today's attendance summary for class-teacher sections
+                val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+                val monthKey = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
+                val classTeacherSections = assignedClasses
+                    .filter { it.classTeacher }
+                    .map { it.className to it.section }
+                    .distinct()
+                var attTotal = 0; var attP = 0; var attA = 0; var attT = 0; var attL = 0; var attUnmarked = 0
+                for ((cls, sec) in classTeacherSections) {
+                    try {
+                        val students = studentRepository.getStudentsForClass(cls, sec).getOrNull() ?: emptyList()
+                        for (student in students) {
+                            attTotal++
+                            val summary = attendanceFirestoreRepo.getStudentAttendanceSummary(student.studentId, monthKey).getOrNull()
+                            val dw = summary?.dayWise ?: ""
+                            if (dw.length >= today) {
+                                when (dw[today - 1]) {
+                                    'P' -> attP++
+                                    'A' -> attA++
+                                    'T' -> attT++
+                                    'L' -> attL++
+                                    else -> attUnmarked++
+                                }
+                            } else {
+                                attUnmarked++
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+                _uiState.update { it.copy(todayAttendance = TodayAttendanceSummary(
+                    totalStudents = attTotal, present = attP, absent = attA,
+                    tardy = attT, leave = attL, unmarked = attUnmarked
+                )) }
+
+                // Load today's timetable — Firestore canonical source (Phase C-1).
+                // Pre-compute class/section pairs from already-fetched assignments
+                // so we don't re-query them inside the repo.
+                val timetableClassSections = assignedClasses
+                    .map { it.className to it.section }
+                    .distinct()
+                timetableFirestoreRepo.getMyTimetable(timetableClassSections).fold(
                     onSuccess = { dayTimetables ->
                         val todayName = todayDayName()
                         val todayPeriods = dayTimetables
@@ -174,8 +257,72 @@ class DashboardViewModel @Inject constructor(
                     QuickStat("Flags", activeFlagCount.toString(), "active")
                 )
 
+                // Load substitute info for today
+                // Shows either "X is covering your P1" (if I'm absent)
+                // or "You are covering for X at P1" (if I'm the substitute)
+                var subInfo: String? = null
+                try {
+                    val myId = tokenManager.userId.firstOrNull() ?: ""
+                    val mySchool = tokenManager.schoolCode.firstOrNull()
+                        ?: tokenManager.schoolId.firstOrNull() ?: ""
+                    val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                    if (myId.isNotBlank() && mySchool.isNotBlank()) {
+                        val subSnapshot = firestoreService.queryDocuments("substitutes") { ref ->
+                            ref.whereEqualTo("date", todayStr)
+                        }
+                        if (!subSnapshot.isEmpty) {
+                            val parts = mutableListOf<String>()
+                            for (doc in subSnapshot.documents) {
+                                val data = doc.data ?: continue
+                                if ((data["schoolId"]?.toString() ?: "") != mySchool) continue
+                                if ((data["status"]?.toString() ?: "") == "cancelled") continue
+
+                                val absentId = data["absent_teacher_id"]?.toString() ?: ""
+                                val absentName = data["absent_teacher_name"]?.toString() ?: ""
+
+                                @Suppress("UNCHECKED_CAST")
+                                val assignments = data["assignments"] as? List<Map<String, Any>>
+
+                                if (absentId == myId) {
+                                    // I'm absent — show who is covering my classes
+                                    if (assignments != null && assignments.isNotEmpty()) {
+                                        for (a in assignments) {
+                                            val sName = a["substitute_teacher_name"]?.toString() ?: "Substitute"
+                                            val pn = (a["periodNumber"] as? Number)?.toInt() ?: continue
+                                            parts.add("$sName covering P$pn")
+                                        }
+                                    } else {
+                                        val sName = data["substitute_teacher_name"]?.toString() ?: "Substitute"
+                                        @Suppress("UNCHECKED_CAST")
+                                        val periods = (data["periods"] as? List<*>)?.joinToString(", ") { "P$it" } ?: ""
+                                        parts.add("$sName covering $periods")
+                                    }
+                                } else if (assignments != null && assignments.isNotEmpty()) {
+                                    // Check if I'm a substitute in any assignment
+                                    for (a in assignments) {
+                                        val subTid = a["substitute_teacher_id"]?.toString() ?: ""
+                                        if (subTid == myId) {
+                                            val pn = (a["periodNumber"] as? Number)?.toInt() ?: continue
+                                            val subj = a["subject"]?.toString() ?: ""
+                                            parts.add("Covering for $absentName — P$pn $subj")
+                                        }
+                                    }
+                                } else {
+                                    // Legacy: check flat substitute_teacher_id
+                                    if ((data["substitute_teacher_id"]?.toString() ?: "") == myId) {
+                                        @Suppress("UNCHECKED_CAST")
+                                        val periods = (data["periods"] as? List<*>)?.joinToString(", ") { "P$it" } ?: ""
+                                        parts.add("Covering for $absentName — $periods")
+                                    }
+                                }
+                            }
+                            if (parts.isNotEmpty()) subInfo = parts.joinToString(" | ")
+                        }
+                    }
+                } catch (_: Exception) { /* non-critical */ }
+
                 _uiState.update {
-                    it.copy(quickStats = stats, isLoading = false)
+                    it.copy(quickStats = stats, substituteInfo = subInfo, isLoading = false)
                 }
 
             } catch (e: Exception) {

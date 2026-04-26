@@ -104,7 +104,10 @@ fun SchoolSyncTeacherTheme(
         }
     }
 
-    CompositionLocalProvider(LocalAppColors provides appColors) {
+    CompositionLocalProvider(
+        LocalAppColors provides appColors,
+        LocalSpacing provides Spacing()
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

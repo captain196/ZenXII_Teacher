@@ -105,7 +105,10 @@ class FirestoreService @Inject constructor(
         val registration = queryBuilder(ref)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    cancel("Firestore listener error", error)
+                    // close() propagates the error to downstream .catch {}.
+                    // cancel() raised CancellationException which .catch
+                    // deliberately ignores, silently killing the flow.
+                    close(error)
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {

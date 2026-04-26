@@ -1,6 +1,7 @@
 package com.schoolsync.teacher.ui.dashboard
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -46,14 +47,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.schoolsync.teacher.R
 import com.schoolsync.teacher.ui.theme.BgStart
+import com.schoolsync.teacher.ui.theme.LocalAppColors
+import com.schoolsync.teacher.ui.theme.MetricLarge
+import com.schoolsync.teacher.ui.theme.OverlineLabel
 import com.schoolsync.teacher.ui.theme.Divider as DividerColor
 import com.schoolsync.teacher.ui.theme.ErrorRed
 import com.schoolsync.teacher.ui.theme.ErrorRedSurface
@@ -78,9 +85,30 @@ import java.util.Locale
 
 @Composable
 fun DashboardScreen(
+    onNotificationsClick: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Refresh when the dashboard becomes visible again (e.g. after coming
+    // back from Red Flags screen) so counts like "Flags: N active" reflect
+    // any flag the teacher just created or deleted. Skips the very first
+    // resume — init already loaded everything once.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        var firstResume = true
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                if (firstResume) {
+                    firstResume = false
+                } else {
+                    viewModel.refresh()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     GradientBackground {
         if (state.isLoading) {
@@ -92,8 +120,43 @@ fun DashboardScreen(
                 // Top header bar
                 DashboardHeader(
                     teacherName = state.teacherName,
-                    onRefresh = viewModel::refresh
+                    classTeacherOf = state.classTeacherOf,
+                    onRefresh = viewModel::refresh,
+                    onNotificationsClick = onNotificationsClick
                 )
+
+                // Substitute info banner
+                state.substituteInfo?.let { subInfo ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(WarningAmber.copy(alpha = 0.12f))
+                            .border(
+                                width = 1.dp,
+                                color = WarningAmber.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = null,
+                            tint = WarningAmber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Substitute covering your classes: $subInfo",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
 
                 // Two-column landscape layout
                 Row(
@@ -121,6 +184,12 @@ fun DashboardScreen(
                         QuickStatsRow(stats = state.quickStats)
 
                         Spacer(modifier = Modifier.height(12.dp))
+
+                        // Phase 10f: Today's class attendance widget
+                        if (state.todayAttendance.totalStudents > 0) {
+                            TodayAttendanceWidget(state.todayAttendance)
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
 
                         // Recent activity
                         RecentActivityPanel(
@@ -159,48 +228,114 @@ fun DashboardScreen(
 @Composable
 private fun DashboardHeader(
     teacherName: String,
-    onRefresh: () -> Unit
+    classTeacherOf: List<String>,
+    onRefresh: () -> Unit,
+    onNotificationsClick: () -> Unit = {}
 ) {
+    val c = LocalAppColors.current
     val dateFormat = SimpleDateFormat("EEEE, dd MMM yyyy", Locale.getDefault())
     val today = dateFormat.format(Date())
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        c.accent.copy(alpha = 0.15f),
+                        c.accentSecondary.copy(alpha = 0.08f),
+                        c.glass
+                    )
+                )
+            )
+            .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
-        Column {
-            Text(
-                text = if (teacherName.isNotEmpty()) "Hello, $teacherName" else "Dashboard",
-                style = MaterialTheme.typography.headlineMedium,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = today,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
-            )
-        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (teacherName.isNotEmpty())
+                        stringResource(R.string.dashboard_greeting, teacherName)
+                    else
+                        stringResource(R.string.dashboard_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = today,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+                if (classTeacherOf.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ClassTeacherBadgeRow(sections = classTeacherOf)
+                }
+            }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onRefresh) {
-                Icon(
-                    Icons.Filled.Refresh,
-                    contentDescription = "Refresh",
-                    tint = TextSecondary
-                )
-            }
-            IconButton(onClick = { /* TODO: notifications */ }) {
-                Icon(
-                    Icons.Filled.Notifications,
-                    contentDescription = "Notifications",
-                    tint = TextSecondary
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onRefresh, modifier = Modifier.size(44.dp)) {
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.action_refresh),
+                        tint = TextSecondary
+                    )
+                }
+                IconButton(onClick = onNotificationsClick, modifier = Modifier.size(44.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Filled.Notifications,
+                            contentDescription = stringResource(R.string.cd_notifications),
+                            tint = c.accent
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+/**
+ * Pill row shown under the date when the logged-in teacher is the
+ * designated class teacher of one or more sections. Sourced from the
+ * canonical `subjectAssignments.isClassTeacher` flag via the dashboard VM.
+ */
+@Composable
+private fun ClassTeacherBadgeRow(sections: List<String>) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Teal.copy(alpha = 0.18f))
+            .border(
+                width = 1.dp,
+                color = Teal.copy(alpha = 0.45f),
+                shape = RoundedCornerShape(10.dp),
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Class,
+            contentDescription = null,
+            tint = Teal,
+            modifier = Modifier.size(13.dp),
+        )
+        Spacer(modifier = Modifier.width(5.dp))
+        Text(
+            text = stringResource(
+                R.string.dashboard_class_teacher_one,
+                if (sections.size == 1) sections[0] else sections.joinToString("  •  ")
+            ),
+            color = Teal,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -226,17 +361,41 @@ private fun SchedulePanel(schedule: List<PeriodItem>) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Today's Schedule",
+                    text = stringResource(R.string.dashboard_today_schedule),
                     style = MaterialTheme.typography.titleLarge,
                     color = TextPrimary,
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Text(
-                text = "${schedule.size} periods",
-                style = MaterialTheme.typography.labelMedium,
-                color = TextTertiary
-            )
+            // Periods header — tiny progress ring shows day completion at a
+            // glance. We approximate "completed" as the index of the current
+            // period (everything before it is done). When no current period
+            // is detected we fall back to "0 done", so the ring still renders
+            // meaningfully without inventing data.
+            if (schedule.isNotEmpty()) {
+                val currentIdx = schedule.indexOfFirst { it.isCurrent }
+                val done = if (currentIdx >= 0) currentIdx else 0
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.dashboard_periods_count, schedule.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextTertiary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    com.schoolsync.teacher.ui.components.charts.ProgressRingMini(
+                        progress = done.toFloat() / schedule.size.coerceAtLeast(1),
+                        diameter = 28.dp,
+                        strokeWidth = 3.dp,
+                        showPercent = false,
+                    )
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.dashboard_periods_count, schedule.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextTertiary
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -257,7 +416,7 @@ private fun SchedulePanel(schedule: List<PeriodItem>) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "No classes scheduled today",
+                        text = stringResource(R.string.dashboard_no_classes_today),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextTertiary
                     )
@@ -305,7 +464,7 @@ private fun PeriodCard(period: PeriodItem) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "P${period.periodNumber}",
+                text = stringResource(R.string.dashboard_period_label, period.periodNumber),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (period.isCurrent) BgStart else TextPrimary,
                 fontWeight = FontWeight.Bold,
@@ -325,9 +484,10 @@ private fun PeriodCard(period: PeriodItem) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "Class ${period.className} - ${period.section}",
+                text = "${period.className.removePrefix("Class ")} - ${period.section.removePrefix("Section ")}",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
+                color = TextSecondary,
+                maxLines = 1
             )
         }
 
@@ -351,12 +511,13 @@ private fun PeriodCard(period: PeriodItem) {
 
 @Composable
 private fun QuickStatsRow(stats: List<QuickStat>) {
+    val dash = stringResource(R.string.stat_dash)
     val defaultStats = stats.ifEmpty {
         listOf(
-            QuickStat("Classes", "--", "assigned"),
-            QuickStat("Today", "--", "periods"),
-            QuickStat("HW Due", "--", "today"),
-            QuickStat("Flags", "--", "active")
+            QuickStat(stringResource(R.string.stat_classes), dash, stringResource(R.string.stat_assigned)),
+            QuickStat(stringResource(R.string.stat_today), dash, stringResource(R.string.stat_periods)),
+            QuickStat(stringResource(R.string.stat_hw_due), dash, stringResource(R.string.stat_today_lower)),
+            QuickStat(stringResource(R.string.stat_flags), dash, stringResource(R.string.stat_active))
         )
     }
 
@@ -420,8 +581,8 @@ private fun StatCard(
             }
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = stat.label,
-                style = MaterialTheme.typography.labelMedium,
+                text = stat.label.uppercase(),
+                style = OverlineLabel,
                 color = TextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -430,9 +591,8 @@ private fun StatCard(
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = stat.value,
-            style = MaterialTheme.typography.headlineMedium,
-            color = TextPrimary,
-            fontWeight = FontWeight.Bold
+            style = MetricLarge.copy(fontSize = 24.sp),
+            color = TextPrimary
         )
         if (stat.subtitle.isNotEmpty()) {
             Text(
@@ -464,7 +624,7 @@ private fun RecentActivityPanel(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Recent Activity",
+                text = stringResource(R.string.dashboard_recent_activity),
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold
@@ -481,7 +641,7 @@ private fun RecentActivityPanel(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No recent activity",
+                    text = stringResource(R.string.dashboard_no_recent_activity),
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextTertiary
                 )
@@ -553,5 +713,133 @@ private fun ActivityRow(activity: ActivityItem) {
             style = MaterialTheme.typography.labelSmall,
             color = TextTertiary
         )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 10f: Today's Class Attendance Widget
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun TodayAttendanceWidget(att: TodayAttendanceSummary) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassCard(cornerRadius = 14.dp)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Today's Attendance",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            // Donut viz of present / absent / leave — small enough to sit
+            // in the header without disrupting the existing progress bar
+            // and stat-dots layout below.
+            val total = att.present + att.absent + att.tardy + att.leave
+            if (total > 0) {
+                com.schoolsync.teacher.ui.components.charts.DonutMini(
+                    segments = listOf(
+                        (att.present + att.tardy).toFloat() to SuccessGreen,
+                        att.absent.toFloat() to ErrorRed,
+                        att.leave.toFloat() to WarningAmber,
+                    ),
+                    diameter = 56.dp,
+                    strokeWidth = 7.dp,
+                    centerLabel = "${att.percentage.toInt()}%",
+                )
+            } else {
+                Text(
+                    "${att.percentage.toInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Teal,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Progress bar
+        val total = att.present + att.absent + att.tardy + att.leave
+        if (total > 0) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Glass)
+            ) {
+                val presentFraction = (att.present + att.tardy).toFloat() / total
+                val absentFraction = att.absent.toFloat() / total
+                val leaveFraction = att.leave.toFloat() / total
+
+                if (presentFraction > 0) {
+                    Box(
+                        modifier = Modifier
+                            .weight(presentFraction)
+                            .fillMaxHeight()
+                            .background(SuccessGreen)
+                    )
+                }
+                if (absentFraction > 0) {
+                    Box(
+                        modifier = Modifier
+                            .weight(absentFraction)
+                            .fillMaxHeight()
+                            .background(ErrorRed)
+                    )
+                }
+                if (leaveFraction > 0) {
+                    Box(
+                        modifier = Modifier
+                            .weight(leaveFraction)
+                            .fillMaxHeight()
+                            .background(WarningAmber)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Stat dots row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            AttDot(color = SuccessGreen, count = att.present + att.tardy, label = "Present")
+            AttDot(color = ErrorRed, count = att.absent, label = "Absent")
+            AttDot(color = WarningAmber, count = att.leave, label = "Leave")
+            AttDot(color = TextTertiary, count = att.unmarked, label = "Unmarked")
+        }
+    }
+}
+
+@Composable
+private fun AttDot(color: Color, count: Int, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                "$count",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = TextPrimary
+            )
+        }
+        Text(label, fontSize = 10.sp, color = TextTertiary)
     }
 }

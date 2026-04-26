@@ -6,7 +6,7 @@ import com.google.firebase.firestore.DocumentId
  * Represents a fee defaulter record for a student with outstanding dues.
  *
  * Collection: `feeDefaulters`
- * Doc ID: `{schoolId}_{studentId}`
+ * Doc ID: `{schoolId}_{session}_{studentId}`
  */
 data class FeeDefaulterDoc(
     @DocumentId

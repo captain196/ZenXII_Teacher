@@ -1,7 +1,11 @@
 package com.schoolsync.teacher.data.repository.firestore
 
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.Query
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
+import com.schoolsync.teacher.data.model.GalleryAlbum
+import com.schoolsync.teacher.data.model.GalleryMedia
 import com.schoolsync.teacher.data.model.firestore.GalleryAlbumDoc
 import com.schoolsync.teacher.data.model.firestore.GalleryMediaDoc
 import kotlinx.coroutines.flow.firstOrNull
@@ -9,8 +13,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Repository for gallery data from Firestore.
- * Collections: `galleryAlbums`, `galleryMedia`
+ * Phase C-2 canonical gallery repository (Teacher).
+ *
+ * Reads + writes the unified `galleryAlbums` / `galleryMedia` collections
+ * shared with Admin (Events.php) and Parent. No RTDB.
+ *
+ * Visibility filter: `isArchived == false` (replaces legacy `status==active`).
+ * Wire format: see GalleryAlbumDoc / GalleryMediaDoc.
  */
 @Singleton
 class GalleryFirestoreRepository @Inject constructor(
@@ -18,58 +27,123 @@ class GalleryFirestoreRepository @Inject constructor(
     private val tokenManager: TokenManager
 ) {
 
-    suspend fun getAlbums(): Result<List<GalleryAlbumDoc>> {
+    // ── Doc → UI model mapping ─────────────────────────────────────────
+    private fun GalleryAlbumDoc.toAlbum(): GalleryAlbum = GalleryAlbum(
+        albumId     = albumId.ifBlank { id },
+        schoolId    = schoolId,
+        title       = title,
+        description = description,
+        coverImage  = coverImage,
+        source      = source.ifBlank { "general" },
+        eventId     = eventId,
+        session     = session,
+        category    = category,
+        mediaCount  = mediaCount,
+        isArchived  = isArchived,
+        createdBy   = createdBy,
+        createdAt   = createdAt,
+        updatedAt   = updatedAt,
+        archivedAt  = archivedAt,
+        archivedBy  = archivedBy
+    )
+
+    private fun GalleryMediaDoc.toMedia(): GalleryMedia = GalleryMedia(
+        mediaId    = id,
+        albumId    = albumId,
+        url        = url,
+        type       = type,
+        caption    = caption,
+        isArchived = isArchived,
+        uploadedBy = uploadedBy,
+        uploadedAt = uploadedAt,
+        updatedAt  = updatedAt
+    )
+
+    // ── Reads ──────────────────────────────────────────────────────────
+
+    /**
+     * All non-archived albums for the current school, newest first.
+     */
+    suspend fun getAlbums(): Result<List<GalleryAlbum>> {
         val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
 
         return try {
-            val albums = firestoreService.queryDocumentsAs<GalleryAlbumDoc>(
+            val docs = firestoreService.queryDocumentsAs<GalleryAlbumDoc>(
                 "galleryAlbums"
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
-                    .whereEqualTo("status", "active")
-                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .whereEqualTo("isArchived", false)
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
             }
-            Result.success(albums)
+            Result.success(docs.map { it.toAlbum() })
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun getAlbumMedia(albumId: String): Result<List<GalleryMediaDoc>> {
-        return try {
-            val media = firestoreService.queryDocumentsAs<GalleryMediaDoc>(
-                "galleryMedia"
-            ) { ref ->
-                ref.whereEqualTo("albumId", albumId)
-                    .orderBy("uploadedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-            }
-            Result.success(media)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun createAlbum(
-        title: String,
-        description: String = "",
-        eventId: String = "",
-        createdBy: String
-    ): Result<String> {
+    /**
+     * All non-archived media for an album, newest first.
+     *
+     * The schoolId filter is REQUIRED — Firestore rules check
+     * resource.data.schoolId per-doc, so the query must guarantee all
+     * returned docs share the auth'd user's school, otherwise the entire
+     * query is rejected with PERMISSION_DENIED.
+     */
+    suspend fun getAlbumMedia(albumId: String): Result<List<GalleryMedia>> {
         val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
 
+        return try {
+            val docs = firestoreService.queryDocumentsAs<GalleryMediaDoc>(
+                "galleryMedia"
+            ) { ref ->
+                ref.whereEqualTo("schoolId", schoolCode)
+                    .whereEqualTo("albumId", albumId)
+                    .whereEqualTo("isArchived", false)
+                    .orderBy("uploadedAt", Query.Direction.DESCENDING)
+            }
+            Result.success(docs.map { it.toMedia() })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ── Writes ─────────────────────────────────────────────────────────
+
+    /**
+     * Create a teacher-authored ("source=general") album.
+     * Signature matches the legacy GalleryRepository.createAlbum so the
+     * GalleryTeacherViewModel call site stays unchanged.
+     */
+    suspend fun createAlbum(
+        title: String,
+        description: String = "",
+        category: String = ""
+    ): Result<String> {
+        val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(Exception("School code not available"))
+        val teacherId = tokenManager.userId.firstOrNull().orEmpty()
+        val session   = tokenManager.session.firstOrNull().orEmpty()
+
         val albumId = "${schoolCode}_${System.currentTimeMillis()}"
+        val nowIso  = nowIso()
+
         val data = hashMapOf(
-            "schoolId" to schoolCode,
-            "title" to title,
+            "schoolId"    to schoolCode,
+            "albumId"     to albumId,
+            "title"       to title,
             "description" to description,
-            "coverUrl" to "",
-            "mediaCount" to 0,
-            "eventId" to eventId,
-            "createdBy" to createdBy,
-            "status" to "active",
-            "createdAt" to firestoreService.serverTimestamp()
+            "coverImage"  to "",
+            "source"      to "general",          // teacher-created
+            "eventId"     to "",
+            "session"     to session,
+            "category"    to category,
+            "mediaCount"  to 0,
+            "isArchived"  to false,              // replaces legacy `status: "active"`
+            "createdBy"   to teacherId,
+            "createdAt"   to nowIso,             // ISO 8601 string (matches admin)
+            "updatedAt"   to nowIso
         )
 
         return try {
@@ -80,32 +154,75 @@ class GalleryFirestoreRepository @Inject constructor(
         }
     }
 
-    suspend fun addMedia(
+    /**
+     * Upload a media item into an album. Signature matches the legacy
+     * GalleryRepository.uploadMedia so the ViewModel call site stays unchanged.
+     */
+    suspend fun uploadMedia(
         albumId: String,
         url: String,
         type: String = "image",
-        caption: String = "",
-        uploadedBy: String
+        caption: String = ""
     ): Result<String> {
         val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
+        val teacherId = tokenManager.userId.firstOrNull().orEmpty()
 
         val mediaId = "${albumId}_${System.currentTimeMillis()}"
+        val nowIso  = nowIso()
+
         val data = hashMapOf(
-            "schoolId" to schoolCode,
-            "albumId" to albumId,
-            "url" to url,
-            "type" to type,
-            "caption" to caption,
-            "uploadedBy" to uploadedBy,
-            "uploadedAt" to firestoreService.serverTimestamp()
+            "schoolId"   to schoolCode,
+            "albumId"    to albumId,
+            "url"        to url,
+            "type"       to type,
+            "caption"    to caption,
+            "isArchived" to false,
+            "uploadedBy" to teacherId,
+            "uploadedAt" to nowIso,
+            "updatedAt"  to nowIso
         )
 
         return try {
             firestoreService.setDocument("galleryMedia", mediaId, data)
+
+            // Atomically bump the album's mediaCount and updatedAt.
+            // We have to find the album doc by `albumId` field because
+            // the doc-ID format differs between admin-created event
+            // albums ("{loginCode}_{albumId}") and teacher-created
+            // albums ("{schoolCode}_{millis}"). Failure here is logged
+            // but doesn't fail the upload — the media row exists either
+            // way, just the count display might be stale until the next
+            // album refresh.
+            try {
+                val albumDocs = firestoreService.queryDocumentsAs<GalleryAlbumDoc>(
+                    "galleryAlbums"
+                ) { ref ->
+                    ref.whereEqualTo("schoolId", schoolCode)
+                        .whereEqualTo("albumId", albumId)
+                        .limit(1)
+                }
+                val albumDocId = albumDocs.firstOrNull()?.id
+                if (albumDocId != null) {
+                    firestoreService.updateDocument(
+                        "galleryAlbums",
+                        albumDocId,
+                        mapOf(
+                            "mediaCount" to FieldValue.increment(1L),
+                            "updatedAt"  to nowIso
+                        )
+                    )
+                }
+            } catch (_: Exception) { /* best-effort */ }
+
             Result.success(mediaId)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
+
+    // ── Helpers ────────────────────────────────────────────────────────
+    private fun nowIso(): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US)
+            .format(java.util.Date())
 }

@@ -62,7 +62,7 @@ class ExamFirestoreRepository @Inject constructor(
         val schoolCode = getSchoolCode()
             ?: return Result.failure(Exception("School code not available"))
 
-        val docId = "${schoolCode}_${examId}_${className}_${section}"
+        val docId = "${schoolCode}_${examId}_${Constants.classKey(className)}_${Constants.sectionKey(section)}"
 
         return try {
             val doc = firestoreService.getDocumentAs<ExamScheduleDoc>(
@@ -128,14 +128,16 @@ class ExamFirestoreRepository @Inject constructor(
         val teacherId = getTeacherId()
             ?: return Result.failure(Exception("Teacher ID not available"))
 
+        val cls = Constants.classKey(className)
+        val sec = Constants.sectionKey(section)
         val docId = "${schoolCode}_${examId}_${sectionKey}_${subject}_${studentId}"
         val data = hashMapOf(
             "schoolId" to schoolCode,
             "session" to session,
             "examId" to examId,
             "sectionKey" to sectionKey,
-            "className" to className,
-            "section" to section,
+            "className" to cls,
+            "section" to sec,
             "subject" to subject,
             "studentId" to studentId,
             "studentName" to studentName,
@@ -184,6 +186,9 @@ class ExamFirestoreRepository @Inject constructor(
         val teacherId = getTeacherId()
             ?: return Result.failure(Exception("Teacher ID not available"))
 
+        val cls = Constants.classKey(className)
+        val sec = Constants.sectionKey(section)
+
         return try {
             var count = 0
             for (entry in marksList) {
@@ -193,8 +198,8 @@ class ExamFirestoreRepository @Inject constructor(
                     "session" to session,
                     "examId" to examId,
                     "sectionKey" to sectionKey,
-                    "className" to className,
-                    "section" to section,
+                    "className" to cls,
+                    "section" to sec,
                     "subject" to subject,
                     "studentId" to entry.studentId,
                     "studentName" to entry.studentName,
@@ -275,7 +280,7 @@ class ExamFirestoreRepository @Inject constructor(
     }
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getSession(): String? {

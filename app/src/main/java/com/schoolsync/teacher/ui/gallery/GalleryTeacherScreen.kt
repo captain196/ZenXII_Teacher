@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -165,12 +166,15 @@ fun GalleryTeacherScreen(
             )
         }
 
-        // Upload Media Dialog
+        // Upload Media Dialog (file picker + Storage upload)
         if (state.showUploadMediaDialog) {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
             UploadMediaDialog(
                 isUploading = state.isUploading,
                 onDismiss = viewModel::hideUploadMediaDialog,
-                onUpload = viewModel::uploadMedia
+                onUpload = { uri, type, caption ->
+                    viewModel.uploadMediaFile(ctx, uri, type, caption)
+                }
             )
         }
 
@@ -370,9 +374,9 @@ private fun AlbumCard(
                     color = TextTertiary,
                     fontSize = 10.sp
                 )
-                if (album.createdAt > 0) {
+                if (album.createdAt.isNotBlank()) {
                     Text(
-                        text = formatDate(album.createdAt),
+                        text = album.createdAt.take(10),   // ISO date portion: YYYY-MM-DD
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         fontSize = 10.sp
@@ -475,6 +479,7 @@ private fun MediaPanel(
                     }
                 }
             } else {
+                var viewerMedia by remember { mutableStateOf<GalleryMedia?>(null) }
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 160.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -482,8 +487,11 @@ private fun MediaPanel(
                     contentPadding = PaddingValues(4.dp)
                 ) {
                     items(media, key = { it.mediaId }) { item ->
-                        MediaCard(media = item)
+                        MediaCard(media = item, onClick = { viewerMedia = item })
                     }
+                }
+                viewerMedia?.let { m ->
+                    MediaViewerDialog(media = m, onDismiss = { viewerMedia = null })
                 }
             }
         } else {
@@ -517,12 +525,13 @@ private fun MediaPanel(
 }
 
 @Composable
-private fun MediaCard(media: GalleryMedia) {
+private fun MediaCard(media: GalleryMedia, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
             .glassCard(cornerRadius = 10.dp)
+            .clickable(onClick = onClick)
     ) {
         if (media.url.isNotEmpty()) {
             AsyncImage(
@@ -679,29 +688,130 @@ private fun CreateAlbumDialog(
 private fun UploadMediaDialog(
     isUploading: Boolean,
     onDismiss: () -> Unit,
-    onUpload: (url: String, caption: String, type: String) -> Unit
+    onUpload: (uri: android.net.Uri, type: String, caption: String) -> Unit
 ) {
-    var url by remember { mutableStateOf("") }
+    var pickedUri by remember { mutableStateOf<android.net.Uri?>(null) }
     var caption by remember { mutableStateOf("") }
     var isVideo by remember { mutableStateOf(false) }
 
+    // System Photo Picker — no runtime permissions needed (Android 13+ falls
+    // back to MediaStore picker on older devices automatically).
+    val pickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) pickedUri = uri
+    }
+
     AlertDialog(
-        onDismissRequest = { if (!isUploading) onDismiss() },
+        // Block tap-outside + back-press dismissal so an in-progress
+        // upload (or partly-filled form) can't be lost by accident.
+        // Only the X / Cancel buttons close the dialog.
+        onDismissRequest = { /* no-op — must use X or Cancel */ },
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress    = false
+        ),
         title = {
-            Text("Upload Media", color = TextPrimary, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Upload Media",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = onDismiss,
+                    enabled = !isUploading,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = if (isUploading) TextTertiary else TextSecondary
+                    )
+                }
+            }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Image / Video URL *") },
-                    singleLine = true,
-                    placeholder = { Text("https://...", color = TextTertiary) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = galleryTextFieldColors(),
-                    shape = RoundedCornerShape(10.dp)
-                )
+                // Type toggle (drives which picker filter we use)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Type:", color = TextSecondary, fontSize = 13.sp)
+                    TextButton(
+                        onClick = { isVideo = false; pickedUri = null },
+                        enabled = !isUploading,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = if (!isVideo) Teal else TextTertiary
+                        )
+                    ) {
+                        Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Image", fontWeight = if (!isVideo) FontWeight.Bold else FontWeight.Normal)
+                    }
+                    TextButton(
+                        onClick = { isVideo = true; pickedUri = null },
+                        enabled = !isUploading,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = if (isVideo) Teal else TextTertiary
+                        )
+                    ) {
+                        Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Video", fontWeight = if (isVideo) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+
+                // Picker / preview
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SurfaceDark)
+                        .clickable(enabled = !isUploading) {
+                            val mediaType = if (isVideo) {
+                                androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VideoOnly
+                            } else {
+                                androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                            }
+                            pickerLauncher.launch(
+                                androidx.activity.result.PickVisualMediaRequest(mediaType)
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    val uri = pickedUri
+                    if (uri != null) {
+                        AsyncImage(
+                            model = uri,
+                            contentDescription = "Selected media",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Filled.AddPhotoAlternate,
+                                contentDescription = null,
+                                tint = Teal,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Tap to choose ${if (isVideo) "video" else "photo"}",
+                                color = TextSecondary,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = caption,
                     onValueChange = { caption = it },
@@ -709,50 +819,19 @@ private fun UploadMediaDialog(
                     maxLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                     colors = galleryTextFieldColors(),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = !isUploading
                 )
-
-                // Type toggle
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("Type:", color = TextSecondary, fontSize = 13.sp)
-                    TextButton(
-                        onClick = { isVideo = false },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = if (!isVideo) Teal else TextTertiary
-                        )
-                    ) {
-                        Icon(
-                            Icons.Filled.Image,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Image", fontWeight = if (!isVideo) FontWeight.Bold else FontWeight.Normal)
-                    }
-                    TextButton(
-                        onClick = { isVideo = true },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = if (isVideo) Teal else TextTertiary
-                        )
-                    ) {
-                        Icon(
-                            Icons.Filled.Videocam,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Video", fontWeight = if (isVideo) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onUpload(url.trim(), caption.trim(), if (isVideo) "video" else "image") },
-                enabled = !isUploading && url.isNotBlank(),
+                onClick = {
+                    pickedUri?.let { uri ->
+                        onUpload(uri, if (isVideo) "video" else "image", caption.trim())
+                    }
+                },
+                enabled = !isUploading && pickedUri != null,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Teal,
                     contentColor = BgStart
@@ -767,20 +846,76 @@ private fun UploadMediaDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Upload")
+                Text(if (isUploading) "Uploading..." else "Upload")
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isUploading
-            ) {
+            TextButton(onClick = onDismiss, enabled = !isUploading) {
                 Text("Cancel", color = TextSecondary)
             }
         },
         containerColor = SurfaceDark,
         shape = RoundedCornerShape(16.dp)
     )
+}
+
+/**
+ * Full-screen media viewer. Tap dismisses.
+ */
+@Composable
+private fun MediaViewerDialog(media: GalleryMedia, onDismiss: () -> Unit) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BgStart.copy(alpha = 0.95f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            if (media.url.isNotBlank()) {
+                AsyncImage(
+                    model = media.url,
+                    contentDescription = media.caption,
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                Text("No preview available", color = TextSecondary)
+            }
+            // Caption overlay
+            if (media.caption.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(BgStart.copy(alpha = 0.8f))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = media.caption,
+                        color = TextPrimary,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+            // Close button
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+            ) {
+                Icon(
+                    Icons.Filled.ArrowBack,
+                    contentDescription = "Close",
+                    tint = TextPrimary
+                )
+            }
+        }
+    }
 }
 
 @Composable

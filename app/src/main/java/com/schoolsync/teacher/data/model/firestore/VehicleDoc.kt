@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class VehicleDoc(
     @DocumentId
@@ -25,6 +23,5 @@ data class VehicleDoc(
     val permitExpiry: String = "",
     val gpsDeviceId: String = "",
     val status: String = "active",
-    @ServerTimestamp
-    val updatedAt: Timestamp? = null
+    val updatedAt: Any? = null
 )

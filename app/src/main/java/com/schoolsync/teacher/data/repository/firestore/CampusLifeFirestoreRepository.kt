@@ -129,6 +129,11 @@ class CampusLifeFirestoreRepository @Inject constructor(
 
     /**
      * Fetch outstanding library fines for a student.
+     *
+     * If the `libraryFines` Firestore rule isn't deployed yet, this query
+     * fails with PERMISSION_DENIED. We treat that as "no fines" rather than
+     * surfacing an error to the UI, so the rest of the library screen stays
+     * usable during local testing. Other errors bubble up normally.
      */
     suspend fun getMyFines(studentId: String): Result<List<LibraryFineDoc>> {
         val schoolCode = getSchoolCode()
@@ -143,6 +148,16 @@ class CampusLifeFirestoreRepository @Inject constructor(
                     .whereEqualTo("paid", false)
             }
             Result.success(fines)
+        } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+            if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                android.util.Log.w(
+                    "CampusLifeRepo",
+                    "libraryFines rule not deployed yet — returning empty list"
+                )
+                Result.success(emptyList())
+            } else {
+                Result.failure(e)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -425,7 +440,7 @@ class CampusLifeFirestoreRepository @Inject constructor(
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getSession(): String? {

@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 /**
  * Represents the exam schedule for a specific class-section.
@@ -19,8 +17,7 @@ data class ExamScheduleDoc(
     val className: String = "",
     val section: String = "",
     val subjects: List<ExamSubjectScheduleDoc> = emptyList(),
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )
 
 /**

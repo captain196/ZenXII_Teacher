@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -123,6 +124,7 @@ fun FeesTeacherScreen(viewModel: FeesTeacherViewModel = hiltViewModel()) {
                     state.selectedClass == null -> EmptyState(state.availableClasses.isEmpty())
                     state.selectedView == "summary" -> SummaryView(
                         overview = state.classOverview,
+                        monthlyBreakdown = state.monthlyBreakdown,
                         students = filterStudents(state.studentStatuses, searchQuery, filterMode),
                         onStudentClick = { studentDetailDialog = it },
                         onCardClick = { when (it) {
@@ -133,6 +135,7 @@ fun FeesTeacherScreen(viewModel: FeesTeacherViewModel = hiltViewModel()) {
                     )
                     state.selectedView == "defaulters" -> DefaultersView(
                         defaulters = filterDefaulters(state.defaulters, searchQuery),
+                        lastReminderByStudent = state.lastReminderByStudent,
                         onDefaulterClick = { defaulterDetailDialog = it }
                     )
                 }
@@ -160,16 +163,14 @@ private fun LoadingState() {
 
 @Composable
 private fun EmptyState(noClasses: Boolean) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Filled.CurrencyRupee, null, tint = TextTertiary, modifier = Modifier.size(64.dp))
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(if (noClasses) "No classes assigned" else "Select a class",
-                style = MaterialTheme.typography.titleMedium, color = TextSecondary)
-            Text(if (noClasses) "Contact admin to assign classes" else "Choose a class from the dropdown above",
-                style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-        }
-    }
+    com.schoolsync.teacher.ui.components.EmptyStatePro(
+        icon = Icons.Filled.CurrencyRupee,
+        title = if (noClasses) "No classes assigned" else "Select a class",
+        description = if (noClasses)
+            "Contact admin to assign classes."
+        else
+            "Choose a class from the dropdown above to view fee status.",
+    )
 }
 
 @Composable
@@ -270,12 +271,17 @@ private fun Chip(text: String, selected: Boolean, color: Color = Teal, onClick: 
 // ── Summary / Overview ──────────────────────────────────────────────────
 
 @Composable
-private fun SummaryView(overview: ClassFeeOverview?, students: List<StudentFeeStatus>,
+private fun SummaryView(overview: ClassFeeOverview?, monthlyBreakdown: List<MonthlyClassBreakdown>,
+                        students: List<StudentFeeStatus>,
                         onStudentClick: (StudentFeeStatus) -> Unit, onCardClick: (String) -> Unit) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
         if (overview != null) { item { ClassReadinessCard(overview, onCardClick) } }
+
+        if (monthlyBreakdown.isNotEmpty()) {
+            item { MonthlyBreakdownCard(monthlyBreakdown) }
+        }
 
         item {
             Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -292,6 +298,56 @@ private fun SummaryView(overview: ClassFeeOverview?, students: List<StudentFeeSt
 
         items(students, key = { it.studentId }) { s -> StudentRow(s) { onStudentClick(s) } }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+/**
+ * Per-month payment breakdown card — shows "Apr 28/30 · May 25/30 · Jun 12/30"
+ * so teachers can see exactly which month is dragging down collection %.
+ * Driven by a Firestore demands listener: updates within ~500 ms of any
+ * parent payment in the class.
+ */
+@Composable
+private fun MonthlyBreakdownCard(items: List<MonthlyClassBreakdown>) {
+    Column(modifier = Modifier.fillMaxWidth().glassCard(cornerRadius = 14.dp).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.CalendarMonth, null, tint = Teal, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Monthly Collection", style = MaterialTheme.typography.titleSmall,
+                color = TextPrimary, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items.forEach { mb ->
+                val pct = if (mb.totalStudents > 0) (mb.paidStudents * 100) / mb.totalStudents else 0
+                val (fg, bg) = when {
+                    pct >= 80 -> SuccessGreen to SuccessGreenSurface
+                    pct >= 50 -> WarningAmber to WarningAmberSurface
+                    else      -> ErrorRed   to ErrorRedSurface
+                }
+                Column(
+                    modifier = Modifier
+                        .background(bg.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        mb.month.take(3),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "${mb.paidStudents}/${mb.totalStudents}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = fg,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -385,7 +441,11 @@ private fun StudentRow(s: StudentFeeStatus, onClick: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DefaultersView(defaulters: List<FeeDefaulter>, onDefaulterClick: (FeeDefaulter) -> Unit) {
+private fun DefaultersView(
+    defaulters: List<FeeDefaulter>,
+    lastReminderByStudent: Map<String, String>,
+    onDefaulterClick: (FeeDefaulter) -> Unit
+) {
     if (defaulters.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -411,12 +471,17 @@ private fun DefaultersView(defaulters: List<FeeDefaulter>, onDefaulterClick: (Fe
         }
 
         items(defaulters, key = { it.studentId }) { d ->
-            DefaulterCard(d, onCallParent = { phone ->
-                if (phone.isNotBlank()) {
-                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
-                    context.startActivity(intent)
-                }
-            }, onViewDetails = { onDefaulterClick(d) })
+            DefaulterCard(
+                d = d,
+                lastReminderIso = lastReminderByStudent[d.studentId],
+                onCallParent = { phone ->
+                    if (phone.isNotBlank()) {
+                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
+                        context.startActivity(intent)
+                    }
+                },
+                onViewDetails = { onDefaulterClick(d) }
+            )
         }
         item { Spacer(Modifier.height(16.dp)) }
     }
@@ -424,8 +489,18 @@ private fun DefaultersView(defaulters: List<FeeDefaulter>, onDefaulterClick: (Fe
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DefaulterCard(d: FeeDefaulter, onCallParent: (String) -> Unit, onViewDetails: () -> Unit) {
+private fun DefaulterCard(
+    d: FeeDefaulter,
+    lastReminderIso: String?,
+    onCallParent: (String) -> Unit,
+    onViewDetails: () -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
+    // Compute the "reminded X ago" label once per recomposition. Fresh
+    // reminders (< 7 days) surface a visible pill; older ones are dropped
+    // so we don't clutter the card with stale history — the admin already
+    // has a full log view.
+    val reminderLabel = remember(lastReminderIso) { formatReminderAge(lastReminderIso) }
 
     Column(modifier = Modifier.fillMaxWidth().glassCard(cornerRadius = 10.dp)
         .clickable { expanded = !expanded }.padding(12.dp)) {
@@ -436,8 +511,28 @@ private fun DefaulterCard(d: FeeDefaulter, onCallParent: (String) -> Unit, onVie
                 RollBadge(d.rollNo)
                 Spacer(Modifier.width(10.dp))
                 Column {
-                    Text(d.studentName, style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
-                        fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(d.studentName, style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
+                            fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // Phase 8B: reminder badge — shows "Reminded 2h ago"
+                        // when admin/teacher sent a fee reminder for this
+                        // student recently. Lets the teacher know the parent
+                        // has already been nudged so they don't duplicate.
+                        if (reminderLabel != null) {
+                            Spacer(Modifier.width(6.dp))
+                            Box(modifier = Modifier
+                                .background(TealSurface, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                Text(
+                                    text = "✓ $reminderLabel",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Teal,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                     if (d.fatherName.isNotBlank()) {
                         Text("Parent: ${d.fatherName}", style = MaterialTheme.typography.bodySmall, color = TextTertiary, fontSize = 10.sp)
                     }
@@ -628,6 +723,40 @@ private fun formatRs(amount: Double): String {
     val fmt = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
     fmt.maximumFractionDigits = 0
     return fmt.format(amount)
+}
+
+/**
+ * Phase 8B: convert a feeReminderLog.sent_date into a short "Xh ago"
+ * label for the defaulter card. Returns null for entries older than
+ * 7 days so the badge doesn't clutter the row with stale history —
+ * admin sees the full log separately.
+ *
+ * Accepts either "YYYY-MM-DD HH:mm:ss" (Fee_management::send_reminder's
+ * $now) or ISO-8601 (deliveredAt field). Returns null on parse failure
+ * so the card silently drops the badge rather than showing garbage.
+ */
+private fun formatReminderAge(sentIso: String?): String? {
+    if (sentIso.isNullOrBlank()) return null
+    val ts = try {
+        when {
+            sentIso.contains('T') ->
+                java.time.OffsetDateTime.parse(sentIso).toInstant().toEpochMilli()
+            else ->
+                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    .apply { timeZone = java.util.TimeZone.getDefault() }
+                    .parse(sentIso)?.time ?: return null
+        }
+    } catch (e: Exception) { return null }
+
+    val ageMin = (System.currentTimeMillis() - ts) / 60000L
+    if (ageMin < 0) return null
+    if (ageMin > 60 * 24 * 7) return null  // older than 7 days — drop it
+    return when {
+        ageMin < 1     -> "Reminded just now"
+        ageMin < 60    -> "Reminded ${ageMin}m ago"
+        ageMin < 60*24 -> "Reminded ${ageMin / 60}h ago"
+        else           -> "Reminded ${ageMin / (60*24)}d ago"
+    }
 }
 
 private fun filterStudents(list: List<StudentFeeStatus>, q: String, mode: String): List<StudentFeeStatus> {

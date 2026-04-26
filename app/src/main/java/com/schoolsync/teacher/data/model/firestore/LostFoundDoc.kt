@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class LostFoundDoc(
     @DocumentId
@@ -19,6 +17,5 @@ data class LostFoundDoc(
     val claimed: Boolean = false,
     val claimedBy: String = "",
     val status: String = "open",           // open, claimed, closed
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )

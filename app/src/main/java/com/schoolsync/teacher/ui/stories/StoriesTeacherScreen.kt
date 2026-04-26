@@ -3,6 +3,9 @@ package com.schoolsync.teacher.ui.stories
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Timer
@@ -39,6 +43,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -57,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -143,14 +149,18 @@ fun StoriesTeacherScreen(
 
         // Upload dialog
         if (state.showUploadDialog) {
+            val context = LocalContext.current
             UploadStoryDialog(
                 url = state.uploadUrl,
                 caption = state.uploadCaption,
                 type = state.uploadType,
                 isUploading = state.isUploading,
+                mediaUploadPercent = state.mediaUploadPercent,
                 onUrlChange = viewModel::setUploadUrl,
                 onCaptionChange = viewModel::setUploadCaption,
                 onTypeChange = viewModel::setUploadType,
+                onPickMedia = { uri -> viewModel.pickAndUploadMedia(context, uri) },
+                onClearPickedMedia = viewModel::clearPickedMedia,
                 onUpload = viewModel::uploadStory,
                 onDismiss = viewModel::toggleUploadDialog
             )
@@ -449,12 +459,31 @@ private fun UploadStoryDialog(
     caption: String,
     type: String,
     isUploading: Boolean,
+    /** -1 = idle, 0..99 = picker upload in flight, 100 = ready. */
+    mediaUploadPercent: Int,
     onUrlChange: (String) -> Unit,
     onCaptionChange: (String) -> Unit,
     onTypeChange: (String) -> Unit,
+    onPickMedia: (android.net.Uri) -> Unit,
+    onClearPickedMedia: () -> Unit,
     onUpload: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    // Modern photo / video picker — no runtime permission required on
+    // any Android version; Photos UI is system-provided and respects
+    // user privacy. Constrained to image-or-video by `type` chip.
+    val mediaPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) onPickMedia(uri)
+    }
+    val pickerMime = if (type == "video") {
+        ActivityResultContracts.PickVisualMedia.VideoOnly
+    } else {
+        ActivityResultContracts.PickVisualMedia.ImageOnly
+    }
+    val isPicking = mediaUploadPercent in 0..99
+    val hasPickedMedia = mediaUploadPercent == 100 && url.isNotBlank()
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
         unfocusedTextColor = TextPrimary,
@@ -481,15 +510,99 @@ private fun UploadStoryDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = onUrlChange,
-                    label = { Text("Media URL *") },
-                    placeholder = { Text("https://...", color = TextTertiary) },
-                    singleLine = true,
+
+                // ── PICKER PRIMARY ────────────────────────────────
+                // Phase B: device gallery picker → Firebase Storage
+                // upload → URL injected into uploadUrl. Replaces the
+                // unusable "paste a URL" path as the primary flow.
+                Button(
+                    onClick = {
+                        mediaPicker.launch(PickVisualMediaRequest(pickerMime))
+                    },
+                    enabled = !isPicking && !isUploading,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = textFieldColors
-                )
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Teal,
+                        contentColor = BgStart
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.AddPhotoAlternate,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        when {
+                            hasPickedMedia -> "Replace ${if (type == "video") "video" else "photo"}"
+                            else -> "Pick ${if (type == "video") "video" else "photo"} from device"
+                        },
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                // ── PROGRESS ──────────────────────────────────────
+                if (isPicking) {
+                    LinearProgressIndicator(
+                        progress = { mediaUploadPercent / 100f },
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                        color = Teal,
+                        trackColor = GlassBorder
+                    )
+                    Text(
+                        "Uploading… $mediaUploadPercent%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
+                }
+
+                // ── PICKED-MEDIA SUMMARY ─────────────────────────
+                if (hasPickedMedia) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(TealSurface)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Image,
+                            contentDescription = null,
+                            tint = Teal,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Media ready to publish",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Teal,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onClearPickedMedia) {
+                            Text("Remove", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                // ── URL FALLBACK (power-user / external CDN) ─────
+                // Hidden by default once media is picked to keep the
+                // dialog clean — show a compact "or paste URL" line
+                // for the rare case the cashier is using an external
+                // host. Tap reveals an editable text field.
+                if (!hasPickedMedia) {
+                    OutlinedTextField(
+                        value = url,
+                        onValueChange = onUrlChange,
+                        label = { Text("…or paste a URL") },
+                        placeholder = { Text("https://...", color = TextTertiary) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = textFieldColors,
+                        enabled = !isPicking
+                    )
+                }
 
                 OutlinedTextField(
                     value = caption,
@@ -596,7 +709,7 @@ private fun UploadStoryDialog(
         confirmButton = {
             Button(
                 onClick = onUpload,
-                enabled = !isUploading && url.isNotBlank(),
+                enabled = !isUploading && !isPicking && url.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Teal,
                     contentColor = BgStart

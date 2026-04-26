@@ -3,8 +3,8 @@ package com.schoolsync.teacher.ui.auth
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.repository.AuthRepository
+import com.schoolsync.teacher.data.local.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 /**
  * Represents the fee structure for a specific class and section within a session.
@@ -20,8 +18,7 @@ data class FeeStructureDoc(
     val feeHeads: List<FeeHeadDoc> = emptyList(),
     val totalMonthlyFee: Double = 0.0,
     val totalAnnualFee: Double = 0.0,
-    @ServerTimestamp
-    val updatedAt: Timestamp? = null
+    val updatedAt: Any? = null
 )
 
 /**

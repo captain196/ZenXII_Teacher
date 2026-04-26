@@ -138,15 +138,11 @@ private fun PayslipsTopBar(onRefresh: () -> Unit, isLoading: Boolean) {
 
 @Composable
 private fun EmptyState() {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Filled.AccountBalanceWallet, null, tint = TextTertiary, modifier = Modifier.size(48.dp))
-            Spacer(Modifier.height(12.dp))
-            Text("No payslips yet", color = TextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.height(4.dp))
-            Text("Your monthly payslips will appear here once released.", color = TextTertiary, fontSize = 12.sp)
-        }
-    }
+    com.schoolsync.teacher.ui.components.EmptyStatePro(
+        icon = Icons.Filled.AccountBalanceWallet,
+        title = "No payslips yet",
+        description = "Your monthly payslips will appear here once released by HR.",
+    )
 }
 
 @Composable

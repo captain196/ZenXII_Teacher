@@ -333,27 +333,12 @@ private fun EmptyState(
     subtitle: String,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = TextTertiary,
-                modifier = Modifier.size(64.dp)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = TextSecondary
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextTertiary
-            )
-        }
-    }
+    com.schoolsync.teacher.ui.components.EmptyStatePro(
+        icon = icon,
+        title = title,
+        description = subtitle,
+        modifier = modifier,
+    )
 }
 
 // ── Catalog Tab ──────────────────────────────────────────────────────────────
@@ -894,6 +879,8 @@ private fun calculateDaysLeft(dueDate: String): Long {
     return if (diff >= 0) TimeUnit.MILLISECONDS.toDays(diff) else -1
 }
 
+@androidx.compose.runtime.Composable
+@androidx.compose.runtime.ReadOnlyComposable
 private fun getCategoryColor(category: String): Color {
     val lower = category.lowercase()
     return when {

@@ -6,6 +6,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.schoolsync.teacher.ui.components.bouncyClickable
+import com.schoolsync.teacher.ui.components.staggerIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -106,6 +113,7 @@ import com.schoolsync.teacher.util.toFormattedDate
 import com.schoolsync.teacher.util.toRelativeTime
 import kotlinx.coroutines.flow.collectLatest
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeworkTeacherScreen(
     viewModel: HomeworkTeacherViewModel = hiltViewModel()
@@ -183,7 +191,7 @@ fun HomeworkTeacherScreen(
                         submissions = state.submissions,
                         isLoading = state.isLoadingSubmissions,
                         onMarkStatus = viewModel::markStudentStatus,
-                        onDelete = viewModel::deleteHomework,
+                        onDelete = { viewModel.confirmDelete(it) },
                         onClose = viewModel::hideDetailSheet,
                         modifier = Modifier
                             .weight(0.6f)
@@ -231,6 +239,32 @@ fun HomeworkTeacherScreen(
                 confirmButton = {
                     TextButton(onClick = viewModel::clearError) {
                         Text("OK", color = Teal)
+                    }
+                },
+                containerColor = SurfaceDark,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // Delete confirmation dialog
+        state.homeworkToDelete?.let { hw ->
+            AlertDialog(
+                onDismissRequest = { viewModel.confirmDelete(null) },
+                title = { Text("Delete Homework?", color = TextPrimary) },
+                text = {
+                    Text(
+                        "\"${hw.title}\" and all its submissions will be permanently deleted.",
+                        color = TextSecondary
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = viewModel::executeDelete) {
+                        Text("Delete", color = ErrorRed)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.confirmDelete(null) }) {
+                        Text("Cancel", color = TextSecondary)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -429,12 +463,17 @@ private fun HomeworkListContent(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            items(state.homeworkList, key = { it.hwId }) { hw ->
-                HomeworkCard(
-                    homework = hw,
-                    isSelected = hw.hwId == state.selectedHomework?.hwId,
-                    onClick = { onHomeworkClick(hw) }
-                )
+            itemsIndexed(
+                items = state.homeworkList,
+                key = { _, it -> it.hwId }
+            ) { index, hw ->
+                Box(modifier = Modifier.staggerIn(index)) {
+                    HomeworkCard(
+                        homework = hw,
+                        isSelected = hw.hwId == state.selectedHomework?.hwId,
+                        onClick = { onHomeworkClick(hw) }
+                    )
+                }
             }
         }
     }
@@ -458,7 +497,7 @@ private fun HomeworkCard(
                 if (isSelected) subjectColor.copy(alpha = 0.3f) else GlassBorder,
                 RoundedCornerShape(14.dp)
             )
-            .clickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -553,7 +592,7 @@ private fun HomeworkDetailPanel(
     students: List<StudentInfo>,
     submissions: List<HomeworkStatusEntry>,
     isLoading: Boolean,
-    onMarkStatus: (studentId: String, studentName: String, status: String, remark: String) -> Unit,
+    onMarkStatus: (studentId: String, studentName: String, status: String, remark: String, score: Int) -> Unit,
     onDelete: (HomeworkTeacher) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -671,8 +710,8 @@ private fun HomeworkDetailPanel(
                     StudentSubmissionRow(
                         student = student,
                         entry = entry,
-                        onStatusChange = { newStatus ->
-                            onMarkStatus(student.studentId, student.displayName, newStatus, "")
+                        onStatusChange = { newStatus, remark, score ->
+                            onMarkStatus(student.studentId, student.displayName, newStatus, remark, score)
                         }
                     )
                 }
@@ -716,17 +755,19 @@ private fun StatusChip(
 private fun StudentSubmissionRow(
     student: StudentInfo,
     entry: HomeworkStatusEntry?,
-    onStatusChange: (String) -> Unit
+    onStatusChange: (status: String, remark: String, score: Int) -> Unit
 ) {
     val currentStatus = entry?.status ?: "pending"
     val (statusColor, statusIcon) = when (currentStatus) {
         "complete" -> SuccessGreen to Icons.Filled.CheckCircle
+        "reviewed" -> SuccessGreen to Icons.Filled.CheckCircle
         "submitted" -> InfoBlue to Icons.Filled.Assignment
         "incomplete" -> WarningAmber to Icons.Filled.HourglassEmpty
         else -> TextTertiary to Icons.Filled.Pending
     }
 
     var showStatusMenu by remember { mutableStateOf(false) }
+    var showReviewDialog by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -756,15 +797,36 @@ private fun StudentSubmissionRow(
 
         Spacer(modifier = Modifier.width(10.dp))
 
-        // Student name
-        Text(
-            text = student.displayName,
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextPrimary,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        // Student name + submitted text
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = student.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            // Show what the student submitted
+            if (entry != null && entry.text.isNotBlank()) {
+                Text(
+                    text = entry.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            // Show score if graded
+            if (entry != null && entry.score >= 0) {
+                Text(
+                    text = "Score: ${entry.score}" + if (entry.remark.isNotBlank()) " — ${entry.remark}" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SuccessGreen,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
 
         // Status button
         Box {
@@ -791,7 +853,7 @@ private fun StudentSubmissionRow(
                 onDismissRequest = { showStatusMenu = false },
                 modifier = Modifier.background(SurfaceDark)
             ) {
-                listOf("pending", "submitted", "incomplete", "complete").forEach { status ->
+                listOf("pending", "submitted", "reviewed", "incomplete", "complete").forEach { status ->
                     DropdownMenuItem(
                         text = {
                             Text(
@@ -800,16 +862,99 @@ private fun StudentSubmissionRow(
                             )
                         },
                         onClick = {
-                            onStatusChange(status)
                             showStatusMenu = false
+                            if (status == "reviewed") {
+                                showReviewDialog = true
+                            } else {
+                                onStatusChange(status, "", -1)
+                            }
                         }
                     )
                 }
             }
         }
     }
+
+    // Review dialog — score + remark input
+    if (showReviewDialog) {
+        var scoreText by remember { mutableStateOf(if (entry != null && entry.score >= 0) entry.score.toString() else "") }
+        var remarkText by remember { mutableStateOf(entry?.remark ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { showReviewDialog = false },
+            title = {
+                Text("Review — ${student.displayName}", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (entry != null && entry.text.isNotBlank()) {
+                        Text("Student's response:", color = TextTertiary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            entry.text,
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Glass)
+                                .padding(10.dp)
+                        )
+                    }
+                    OutlinedTextField(
+                        value = scoreText,
+                        onValueChange = { scoreText = it.filter { c -> c.isDigit() }.take(3) },
+                        label = { Text("Score") },
+                        placeholder = { Text("e.g. 8") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Teal,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedLabelColor = Teal,
+                            unfocusedLabelColor = TextSecondary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = remarkText,
+                        onValueChange = { remarkText = it },
+                        label = { Text("Remark") },
+                        placeholder = { Text("e.g. Good work, keep it up!") },
+                        maxLines = 3,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Teal,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedLabelColor = Teal,
+                            unfocusedLabelColor = TextSecondary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val score = scoreText.toIntOrNull() ?: -1
+                    onStatusChange("reviewed", remarkText.trim(), score)
+                    showReviewDialog = false
+                }) {
+                    Text("Submit Review", color = Teal, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReviewDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = SurfaceDark,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateHomeworkDialog(
     formState: HomeworkFormState,
@@ -903,19 +1048,45 @@ private fun CreateHomeworkDialog(
                     }
                 }
 
+                // Fix #1: Due date with clickable field + DatePicker
+                var showDatePicker by remember { mutableStateOf(false) }
                 OutlinedTextField(
-                    value = formState.dueDate,
-                    onValueChange = { input ->
-                        // Only allow date-like characters
-                        val filtered = input.filter { it.isDigit() || it == '-' || it == '/' || it == ' ' || it.isLetter() }
-                        onDueDateChange(filtered)
-                    },
-                    label = { Text("Due Date (YYYY-MM-DD)") },
-                    placeholder = { Text("2026-03-30") },
+                    value = formState.dueDate.ifBlank { "Tap to select date" },
+                    onValueChange = {},
+                    label = { Text("Due Date") },
+                    readOnly = true,
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDatePicker = true },
+                    enabled = false, // makes entire field clickable
                     colors = textFieldColors
                 )
+
+                if (showDatePicker) {
+                    val datePickerState = rememberDatePickerState(
+                        initialSelectedDateMillis = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L // default: 1 week from now
+                    )
+                    DatePickerDialog(
+                        onDismissRequest = { showDatePicker = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                datePickerState.selectedDateMillis?.let { millis ->
+                                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                                    onDueDateChange(sdf.format(java.util.Date(millis)))
+                                }
+                                showDatePicker = false
+                            }) { Text("OK", color = Teal) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDatePicker = false }) {
+                                Text("Cancel", color = TextSecondary)
+                            }
+                        }
+                    ) {
+                        DatePicker(state = datePickerState)
+                    }
+                }
             }
         },
         confirmButton = {
@@ -956,6 +1127,8 @@ private fun CreateHomeworkDialog(
 }
 
 /** Map subject names to theme colors. */
+@androidx.compose.runtime.Composable
+@androidx.compose.runtime.ReadOnlyComposable
 private fun getSubjectColor(subject: String): Color {
     val lower = subject.lowercase()
     return when {

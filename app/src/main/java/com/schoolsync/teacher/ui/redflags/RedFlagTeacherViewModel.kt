@@ -3,6 +3,7 @@ package com.schoolsync.teacher.ui.redflags
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.ClassAssignment
 import com.schoolsync.teacher.data.model.StudentFlag
@@ -48,7 +49,9 @@ data class RedFlagUiState(
     val showCreateDialog: Boolean = false,
     val formState: FlagFormState = FlagFormState(),
     val selectedStudentId: String? = null,
-    val subjectsForClass: List<String> = emptyList()
+    val subjectsForClass: List<String> = emptyList(),
+    /** Current teacher's Firebase UID — drives delete-button visibility. */
+    val currentTeacherUid: String = ""
 )
 
 sealed class RedFlagEvent {
@@ -61,7 +64,8 @@ class RedFlagTeacherViewModel @Inject constructor(
     private val redFlagRepository: RedFlagRepository,
     private val teacherRepository: TeacherRepository,
     private val studentRepository: StudentRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val firebaseAuth: FirebaseAuth
 ) : ViewModel() {
 
     companion object {
@@ -77,6 +81,10 @@ class RedFlagTeacherViewModel @Inject constructor(
     private var allAssignments: List<ClassAssignment> = emptyList()
 
     init {
+        // Stamp the current teacher's UID into state once at startup so the
+        // screen can decide which delete buttons to render. Auth UID is the
+        // only thing the Firestore rule will accept for soft-delete RBAC.
+        _uiState.update { it.copy(currentTeacherUid = firebaseAuth.currentUser?.uid.orEmpty()) }
         loadAssignedClasses()
     }
 
@@ -216,7 +224,8 @@ class RedFlagTeacherViewModel @Inject constructor(
     }
 
     fun createFlag() {
-        val form = _uiState.value.formState
+        val state = _uiState.value
+        val form = state.formState
 
         if (form.studentId.isBlank()) {
             viewModelScope.launch { _events.emit(RedFlagEvent.Error("Select a student")) }
@@ -227,31 +236,68 @@ class RedFlagTeacherViewModel @Inject constructor(
             return
         }
 
+        // Hydrate denorm fields from the loaded class roster + selected class.
+        // Admin RBAC and dashboard analytics depend on className/section/rollNo
+        // being populated — empty strings break the teacher-can-access check.
+        val classSection = state.selectedClass
+        if (classSection == null) {
+            viewModelScope.launch { _events.emit(RedFlagEvent.Error("No class selected")) }
+            return
+        }
+        val student = state.students.firstOrNull { it.studentId == form.studentId }
+        if (student == null) {
+            viewModelScope.launch {
+                _events.emit(RedFlagEvent.Error("Student not found in current class roster"))
+            }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(formState = it.formState.copy(isSubmitting = true)) }
             try {
-                val teacherId = tokenManager.userId.firstOrNull() ?: ""
-                val teacherName = tokenManager.userName.firstOrNull() ?: ""
+                val teacherId   = tokenManager.userId.firstOrNull().orEmpty()
+                val teacherName = tokenManager.userName.firstOrNull().orEmpty()
+
+                // Match the canonical "Class X" / "Section Y" prefixed form
+                // that admin's _normalize_class_key/_normalize_section_key
+                // produces, so dashboard filters match exactly.
+                val classKey = if (classSection.className.startsWith("Class ", ignoreCase = true)) {
+                    classSection.className
+                } else "Class ${classSection.className}"
+                val sectionKey = if (classSection.section.startsWith("Section ", ignoreCase = true)) {
+                    classSection.section
+                } else "Section ${classSection.section}"
 
                 val flag = StudentFlag(
-                    type = form.type,
-                    message = form.message.trim(),
-                    subject = form.subject.trim(),
-                    teacherId = teacherId,
+                    studentId   = student.studentId,
+                    studentName = student.name.ifBlank { form.studentName },
+                    rollNo      = student.rollNo,
+                    fatherName  = student.fatherName,
+                    className   = classKey,
+                    section     = sectionKey,
+                    type        = form.type,
+                    message     = form.message.trim(),
+                    subject     = form.subject.trim(),
+                    teacherId   = teacherId,
                     teacherName = teacherName,
-                    severity = form.severity,
-                    timestamp = System.currentTimeMillis(),
-                    status = "active",
-                    studentName = form.studentName
+                    severity    = form.severity,
+                    createdAtMs = System.currentTimeMillis(),
+                    status      = "active"
                 )
 
-                redFlagRepository.createFlag(form.studentId, flag).fold(
+                redFlagRepository.createFlag(flag).fold(
                     onSuccess = { flagId ->
                         Log.d(TAG, "Flag created: $flagId")
                         _uiState.update {
-                            it.copy(showCreateDialog = false, formState = FlagFormState())
+                            it.copy(
+                                showCreateDialog = false,
+                                formState = FlagFormState(),
+                                // Auto-focus the just-flagged student so the
+                                // right panel immediately shows the new flag.
+                                selectedStudentId = student.studentId
+                            )
                         }
-                        _events.emit(RedFlagEvent.Success("Flag created"))
+                        _events.emit(RedFlagEvent.Success("Flag created for ${student.name}"))
                         loadStudentsAndFlags()
                     },
                     onFailure = { e ->
@@ -272,15 +318,41 @@ class RedFlagTeacherViewModel @Inject constructor(
 
     // --- Resolve flag ---
 
+    /**
+     * Soft-delete a flag. The screen guards the call site by only rendering
+     * the delete button for flags the current teacher created — but we
+     * defer the final authorization to the Firestore rule, which rejects
+     * any cross-teacher or admin-created delete attempt with PERMISSION_DENIED.
+     */
+    fun deleteFlag(flagId: String) {
+        viewModelScope.launch {
+            try {
+                redFlagRepository.softDeleteFlag(flagId).fold(
+                    onSuccess = {
+                        _events.emit(RedFlagEvent.Success("Flag deleted"))
+                        loadStudentsAndFlags()
+                    },
+                    onFailure = { e ->
+                        _events.emit(RedFlagEvent.Error(e.message ?: "Failed to delete"))
+                    }
+                )
+            } catch (e: Exception) {
+                _events.emit(RedFlagEvent.Error(e.message ?: "Failed to delete"))
+            }
+        }
+    }
+
     fun resolveFlag(studentId: String, flagId: String) {
         viewModelScope.launch {
             try {
-                redFlagRepository.resolveFlag(studentId, flagId).fold(
+                redFlagRepository.resolveFlag(flagId).fold(
                     onSuccess = {
                         _events.emit(RedFlagEvent.Success("Flag resolved"))
                         loadStudentsAndFlags()
                     },
                     onFailure = { e ->
+                        // Most common case: Firestore rule denies a teacher
+                        // resolving someone else's flag.
                         _events.emit(RedFlagEvent.Error(e.message ?: "Failed to resolve"))
                     }
                 )

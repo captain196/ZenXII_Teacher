@@ -1,9 +1,16 @@
 package com.schoolsync.teacher
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.schoolsync.teacher.util.DeepLinkBridge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,9 +35,15 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var tokenManager: TokenManager
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* granted or denied — app proceeds either way */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        requestNotificationPermissionIfNeeded()
+        publishDeepLinkFromIntent(intent)
 
         // Immersive landscape -- hide system bars
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -63,6 +76,42 @@ class MainActivity : ComponentActivity() {
                         startDestination = startDestination
                     )
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        publishDeepLinkFromIntent(intent)
+    }
+
+    /**
+     * Map FCM intent extras (set by FCMService.showNotification) onto a
+     * Route-string that AppNavGraph consumes via DeepLinkBridge. Quiet
+     * no-op when extras don't contain a supported 'type'.
+     */
+    private fun publishDeepLinkFromIntent(intent: Intent?) {
+        if (intent == null) return
+        val type = intent.getStringExtra("type") ?: return
+        val target = when (type) {
+            "event", "event_created"                           -> "events"
+            "notice", "notice_created",
+            "circular", "circular_created"                     -> "notices"
+            "message"                                          -> "messages"
+            "attendance_reminder"                              -> "attendance"
+            "leave_update"                                     -> "leave"
+            else -> null
+        } ?: return
+        DeepLinkBridge.publish(target)
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }

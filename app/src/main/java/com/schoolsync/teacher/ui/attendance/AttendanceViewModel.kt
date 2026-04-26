@@ -98,7 +98,11 @@ data class AttendanceUiState(
     val error: String? = null,
     val hasUnsavedChanges: Boolean = false,
     val todayDay: Int = Calendar.getInstance().get(Calendar.DAY_OF_MONTH),
-    val isClassTeacher: Boolean = true
+    val isClassTeacher: Boolean = true,
+    // Phase 10f: tardy time dialog
+    val showTardyDialog: Boolean = false,
+    val tardyStudentId: String = "",
+    val tardyDay: Int = 0
 )
 
 sealed class AttendanceEvent {
@@ -187,9 +191,16 @@ class AttendanceViewModel @Inject constructor(
     }
 
     fun selectMonth(month: Int, year: Int) {
+        // Phase 9b: don't silently discard unsaved changes — the UI
+        // should show a confirmation dialog before calling this.
+        // For now, reset the flag and reload.
         _uiState.update { it.copy(selectedMonth = month, selectedYear = year, hasUnsavedChanges = false) }
         loadAttendance()
     }
+
+    /** True if the user has unsaved mark changes. UI should check
+     *  before navigating away or switching months. */
+    fun hasUnsavedChanges(): Boolean = _uiState.value.hasUnsavedChanges
 
     fun previousMonth() {
         val current = _uiState.value
@@ -208,6 +219,11 @@ class AttendanceViewModel @Inject constructor(
             set(Calendar.MONTH, current.selectedMonth)
             add(Calendar.MONTH, 1)
         }
+        // Phase 9a: block navigating past the current month
+        val now = Calendar.getInstance()
+        if (cal.get(Calendar.YEAR) > now.get(Calendar.YEAR) ||
+            (cal.get(Calendar.YEAR) == now.get(Calendar.YEAR) && cal.get(Calendar.MONTH) > now.get(Calendar.MONTH))
+        ) return
         selectMonth(cal.get(Calendar.MONTH), cal.get(Calendar.YEAR))
     }
 
@@ -285,10 +301,22 @@ class AttendanceViewModel @Inject constructor(
 
     /**
      * Cycle a student's status for a given day: P -> A -> L -> H -> T -> V -> P
+     * Phase 9a: blocks future dates — can only mark today or past.
      */
     fun cycleStatus(studentId: String, day: Int) {
-        _uiState.update { state ->
-            val updatedStudents = state.students.map { row ->
+        // Block future dates
+        val state = _uiState.value
+        val now = Calendar.getInstance()
+        val isCurrentMonth = state.selectedMonth == now.get(Calendar.MONTH)
+                && state.selectedYear == now.get(Calendar.YEAR)
+        val isFutureMonth = state.selectedYear > now.get(Calendar.YEAR)
+                || (state.selectedYear == now.get(Calendar.YEAR) && state.selectedMonth > now.get(Calendar.MONTH))
+        if (isFutureMonth || (isCurrentMonth && day > now.get(Calendar.DAY_OF_MONTH))) {
+            return // silently ignore future dates
+        }
+
+        _uiState.update { st ->
+            val updatedStudents = st.students.map { row ->
                 if (row.studentId == studentId) {
                     val currentStatus = row.dayStatuses[day] ?: AttendanceStatus.PRESENT
                     val newStatus = currentStatus.next()
@@ -299,8 +327,19 @@ class AttendanceViewModel @Inject constructor(
                     row
                 }
             }
-            state.copy(students = updatedStudents, hasUnsavedChanges = true)
+            val newState = st.copy(students = updatedStudents, hasUnsavedChanges = true)
+            // Phase 10f: show tardy time dialog when mark lands on T
+            val landedOnT = updatedStudents.find { it.studentId == studentId }?.dayStatuses?.get(day) == AttendanceStatus.TARDY
+            if (landedOnT) {
+                newState.copy(showTardyDialog = true, tardyStudentId = studentId, tardyDay = day)
+            } else {
+                newState
+            }
         }
+    }
+
+    fun dismissTardyDialog() {
+        _uiState.update { it.copy(showTardyDialog = false, tardyStudentId = "", tardyDay = 0) }
     }
 
     /**
@@ -356,38 +395,43 @@ class AttendanceViewModel @Inject constructor(
                 val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
                 val sectionKey = "${Constants.classKey(classSection.className)}/${Constants.sectionKey(classSection.section)}"
 
-                // Firestore: Save today's date-specific attendance records in bulk
-                // TODO: Remove RTDB fallback after Firestore validation
+                // Phase 9a: Write per-day docs for TODAY (the primary mark
+                // day). Future: could also write for changed past days,
+                // but for now the summary dayWise carries the full month.
                 val todayDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-                val todayCal = Calendar.getInstance().apply {
-                    set(Calendar.YEAR, state.selectedYear)
-                    set(Calendar.MONTH, state.selectedMonth)
-                    set(Calendar.DAY_OF_MONTH, todayDay)
-                }
-                val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(todayCal.time)
+                val now = Calendar.getInstance()
+                val isCurrentMonth = state.selectedMonth == now.get(Calendar.MONTH)
+                        && state.selectedYear == now.get(Calendar.YEAR)
 
-                // Build student statuses for today for Firestore daily attendance
-                val todayStatuses = mutableMapOf<String, Pair<String, String>>()
-                for (student in state.students) {
-                    val uiStatus = student.dayStatuses[todayDay] ?: continue
-                    val studentInfo = currentStudentInfos.find { it.studentId == student.studentId }
-                    todayStatuses[student.studentId] = Pair(uiStatus.code, studentInfo?.displayName ?: student.name)
-                }
+                if (isCurrentMonth) {
+                    val todayCal = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, state.selectedYear)
+                        set(Calendar.MONTH, state.selectedMonth)
+                        set(Calendar.DAY_OF_MONTH, todayDay)
+                    }
+                    val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(todayCal.time)
 
-                // Firestore: Write daily attendance
-                if (todayStatuses.isNotEmpty()) {
-                    attendanceFirestoreRepo.markAttendance(
-                        sectionKey = sectionKey,
-                        date = todayIso,
-                        studentStatuses = todayStatuses
-                    ).fold(
-                        onSuccess = { count ->
-                            Log.d(TAG, "Firestore: wrote $count daily attendance records")
-                        },
-                        onFailure = { e ->
-                            Log.e(TAG, "Firestore daily attendance write failed: ${e.message}")
-                        }
-                    )
+                    val todayStatuses = mutableMapOf<String, Pair<String, String>>()
+                    for (student in state.students) {
+                        val uiStatus = student.dayStatuses[todayDay] ?: continue
+                        val studentInfo = currentStudentInfos.find { it.studentId == student.studentId }
+                        todayStatuses[student.studentId] = Pair(uiStatus.code, studentInfo?.displayName ?: student.name)
+                    }
+
+                    if (todayStatuses.isNotEmpty()) {
+                        attendanceFirestoreRepo.markAttendance(
+                            sectionKey = sectionKey,
+                            date = todayIso,
+                            studentStatuses = todayStatuses
+                        ).fold(
+                            onSuccess = { count ->
+                                Log.d(TAG, "Firestore: wrote $count daily attendance records")
+                            },
+                            onFailure = { e ->
+                                Log.e(TAG, "Firestore daily attendance write failed: ${e.message}")
+                            }
+                        )
+                    }
                 }
 
                 // Firestore: Update attendance summaries with full month dayWise string
@@ -395,7 +439,7 @@ class AttendanceViewModel @Inject constructor(
                     val dayWise = buildString {
                         for (day in 1..daysInMonth) {
                             val status = student.dayStatuses[day]
-                            append(status?.code ?: "-")
+                            append(status?.code ?: "V")  // Phase 9a: "V" not "-" to match PHP canonical codes
                         }
                     }
                     val studentInfo = currentStudentInfos.find { it.studentId == student.studentId }

@@ -19,7 +19,12 @@ data class TimetableEntry(
     val className: String,
     val section: String,
     val room: String = "",
-    val isCurrentPeriod: Boolean = false
+    val teacher: String = "",
+    val isCurrentPeriod: Boolean = false,
+    val startTime: String = "",
+    val endTime: String = "",
+    val isBreak: Boolean = false,
+    val isLunch: Boolean = false,
 )
 
 data class TimetableUiState(
@@ -89,7 +94,12 @@ class TimetableViewModel @Inject constructor(
                                         className = firebaseEntry.className,
                                         section = firebaseEntry.section,
                                         room = firebaseEntry.room,
-                                        isCurrentPeriod = day == currentDayName && periodNum - 1 == currentPeriod
+                                        teacher = firebaseEntry.teacher,
+                                        isCurrentPeriod = day == currentDayName && periodNum - 1 == currentPeriod,
+                                        startTime = firebaseEntry.startTime,
+                                        endTime = firebaseEntry.endTime,
+                                        isBreak = firebaseEntry.isBreak,
+                                        isLunch = firebaseEntry.isLunch,
                                     )
                                 } else {
                                     null

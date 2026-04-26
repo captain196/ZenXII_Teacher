@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class NotificationDoc(
     @DocumentId
@@ -16,8 +14,6 @@ data class NotificationDoc(
     val priority: String = "normal",  // normal, high
     val data: Map<String, String> = emptyMap(),  // deep link params
     val read: Boolean = false,
-    @ServerTimestamp
-    val createdAt: Timestamp? = null,
-    @ServerTimestamp
-    val expiresAt: Timestamp? = null
+    val createdAt: Any? = null,
+    val expiresAt: Any? = null
 )

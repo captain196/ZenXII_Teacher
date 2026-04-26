@@ -21,9 +21,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,7 +40,11 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.EventNote
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Grade
@@ -104,6 +111,7 @@ import com.schoolsync.teacher.ui.dashboard.DashboardScreen
 import com.schoolsync.teacher.ui.leave.LeaveScreen
 import com.schoolsync.teacher.ui.marks.MarksScreen
 import com.schoolsync.teacher.ui.messages.MessagesScreen
+import com.schoolsync.teacher.ui.events.EventsTeacherScreen
 import com.schoolsync.teacher.ui.notices.NoticesScreen
 import com.schoolsync.teacher.ui.homework.HomeworkTeacherScreen
 import com.schoolsync.teacher.ui.fees.FeesTeacherScreen
@@ -157,6 +165,8 @@ sealed class Route(val route: String) {
     data object Payslips : Route("payslips")
     data object Appraisals : Route("appraisals")
     data object Recruitment : Route("recruitment")
+    data object Events : Route("events")
+    data object Ptm : Route("ptm")
     data object More : Route("more")
     data object Profile : Route("profile")
 }
@@ -185,6 +195,8 @@ val moreSubItems = listOf(
     NavRailItem(Route.Stories, "Stories", Icons.Filled.CameraAlt, Icons.Outlined.CameraAlt),
     NavRailItem(Route.Timetable, "Time", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
     NavRailItem(Route.Notices, "Notices", Icons.Filled.Campaign, Icons.Outlined.Campaign),
+    NavRailItem(Route.Events, "Events", Icons.Filled.Event, Icons.Outlined.Event),
+    NavRailItem(Route.Ptm, "PTM", Icons.Filled.Groups, Icons.Outlined.Groups),
     NavRailItem(Route.Leave, "Leave", Icons.Filled.EventNote, Icons.Outlined.EventNote),
     NavRailItem(Route.Gallery, "Gallery", Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
     NavRailItem(Route.Library, "Library", Icons.Filled.LocalLibrary, Icons.Outlined.LocalLibrary),
@@ -289,6 +301,33 @@ fun MainScaffold(navController: NavHostController) {
     // Auto-expand More section if a sub-route is active
     LaunchedEffect(currentRoute) {
         if (currentRoute in moreRoutes) moreExpanded = true
+    }
+
+    // Consume FCM deep-link intents. MainActivity publishes a target route
+    // to DeepLinkBridge when a notification is tapped; we navigate here
+    // once MainScaffold is mounted, then clear the flag so tab switches
+    // later don't re-route.
+    //
+    // Use the SAME navigate options as the NavRail click handlers below —
+    // popUpTo(Dashboard) keeps the back stack clean so tapping Home later
+    // actually returns to Dashboard instead of getting stuck.
+    val pendingDeepLink by com.schoolsync.teacher.util.DeepLinkBridge.pending.collectAsState()
+    LaunchedEffect(pendingDeepLink) {
+        val target = pendingDeepLink ?: return@LaunchedEffect
+        val known = setOf(
+            Route.Dashboard.route, Route.Events.route, Route.Notices.route,
+            Route.Messages.route,  Route.Attendance.route, Route.Leave.route
+        )
+        if (target in known) {
+            innerNavController.navigate(target) {
+                popUpTo(Route.Dashboard.route) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            // If this is a "more" sub-item, expand the More group so it's visible
+            if (target in moreRoutes) moreExpanded = true
+        }
+        com.schoolsync.teacher.util.DeepLinkBridge.consume()
     }
 
     Row(modifier = Modifier.fillMaxSize()) {
@@ -482,6 +521,10 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.Students.route) { StudentsScreen() }
             composable(Route.Messages.route) { MessagesScreen() }
             composable(Route.Notices.route) { NoticesScreen() }
+            composable(Route.Events.route) { EventsTeacherScreen() }
+            composable(Route.Ptm.route) {
+                com.schoolsync.teacher.ui.ptm.MyPtmScreen()
+            }
             composable(Route.Leave.route) { LeaveScreen() }
             composable(Route.Homework.route) { HomeworkTeacherScreen() }
             composable(Route.RedFlags.route) { RedFlagTeacherScreen() }
@@ -502,10 +545,12 @@ fun MainScaffold(navController: NavHostController) {
 private fun NavRailEntry(
     item: NavRailItem,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    badgeCount: Int = 0,
 ) {
     val iconColor = if (isSelected) NavSelected else NavUnselected
     val labelColor = if (isSelected) NavSelected else NavUnselected
+    val haptics = com.schoolsync.teacher.ui.components.rememberAppHaptics()
 
     Column(
         modifier = Modifier
@@ -513,7 +558,10 @@ private fun NavRailEntry(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = rememberRipple(bounded = false, radius = 28.dp),
-                onClick = onClick
+                onClick = {
+                    if (!isSelected) haptics.navTick()
+                    onClick()
+                }
             )
             .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -533,6 +581,14 @@ private fun NavRailEntry(
                 tint = iconColor,
                 modifier = Modifier.size(22.dp)
             )
+            if (badgeCount > 0) {
+                NavRailBadge(
+                    count = badgeCount,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 6.dp, y = (-4).dp)
+                )
+            }
         }
         Spacer(modifier = Modifier.height(2.dp))
         Text(
@@ -542,6 +598,41 @@ private fun NavRailEntry(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+/** Tiny unread-count badge that sits on the corner of a NavRail icon. */
+@Composable
+private fun NavRailBadge(
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    if (count <= 0) return
+    val text = if (count > 99) "99+" else count.toString()
+    val isDot = count == 1
+    Box(
+        modifier = modifier
+            .then(
+                if (isDot) Modifier.size(8.dp)
+                else Modifier
+                    .height(14.dp)
+                    .widthIn(min = 14.dp)
+            )
+            .clip(CircleShape)
+            .background(NavSelected)
+            .border(width = 1.5.dp, color = NavRailBg, shape = CircleShape)
+            .padding(horizontal = if (isDot) 0.dp else 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!isDot) {
+            Text(
+                text = text,
+                color = Color.White,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
     }
 }
 

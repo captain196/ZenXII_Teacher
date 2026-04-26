@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 /**
  * Represents a computed result for one student in one exam.
@@ -30,8 +28,7 @@ data class ResultDoc(
     val grade: String = "",
     val rank: Int = 0,
     val passFail: String = "",           // "Pass" or "Fail"
-    @ServerTimestamp
-    val computedAt: Timestamp? = null
+    val computedAt: Any? = null
 )
 
 /**

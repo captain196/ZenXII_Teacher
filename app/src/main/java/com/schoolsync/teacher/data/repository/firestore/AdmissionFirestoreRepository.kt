@@ -95,7 +95,7 @@ class AdmissionFirestoreRepository @Inject constructor(
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getSession(): String? {

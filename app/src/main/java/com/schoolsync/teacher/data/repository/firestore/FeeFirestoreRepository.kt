@@ -2,11 +2,21 @@ package com.schoolsync.teacher.data.repository.firestore
 
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
+import com.schoolsync.teacher.data.model.firestore.FeeCarryForwardDoc
 import com.schoolsync.teacher.data.model.firestore.FeeDemandDoc
 import com.schoolsync.teacher.data.model.firestore.FeeDefaulterDoc
+import com.schoolsync.teacher.data.model.firestore.FeeReceiptDoc
 import com.schoolsync.teacher.data.model.firestore.FeeStructureDoc
 import com.schoolsync.teacher.util.Constants
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -97,7 +107,9 @@ class FeeFirestoreRepository @Inject constructor(
                 ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("session", session)
                     .whereEqualTo("studentId", studentId)
-                    .orderBy("month")
+                // No orderBy: Firestore drops docs missing the indexed field,
+                // and alphabetical month order is meaningless anyway. The VM
+                // re-sorts by academic order (April → March, Yearly last).
             }
             Result.success(demands)
         } catch (e: Exception) {
@@ -107,13 +119,15 @@ class FeeFirestoreRepository @Inject constructor(
 
     /**
      * Fetch the defaulter status for a specific student.
-     * Doc ID pattern: `{schoolId}_{studentId}`
+     * Doc ID pattern: `{schoolId}_{session}_{studentId}`
      */
     suspend fun getStudentDefaulterStatus(studentId: String): Result<FeeDefaulterDoc?> {
         val schoolCode = getSchoolCode()
             ?: return Result.failure(Exception("School code not available"))
+        val session = getSession()
+            ?: return Result.failure(Exception("Session not available"))
 
-        val docId = "${schoolCode}_${studentId}"
+        val docId = "${schoolCode}_${session}_${studentId}"
 
         return try {
             val doc = firestoreService.getDocumentAs<FeeDefaulterDoc>(
@@ -126,8 +140,244 @@ class FeeFirestoreRepository @Inject constructor(
         }
     }
 
+    /**
+     * Fetch all payment receipts for a specific class and section in the
+     * current session. Used by the teacher fee overview to compute
+     * `totalCollected`.
+     */
+    suspend fun getClassReceipts(
+        className: String,
+        section: String
+    ): Result<List<FeeReceiptDoc>> {
+        val schoolCode = getSchoolCode()
+            ?: return Result.failure(Exception("School code not available"))
+        val session = getSession()
+            ?: return Result.failure(Exception("Session not available"))
+
+        return try {
+            val receipts = firestoreService.queryDocumentsAs<FeeReceiptDoc>(
+                Constants.Firestore.FEE_RECEIPTS
+            ) { ref ->
+                ref.whereEqualTo("schoolId", schoolCode)
+                    .whereEqualTo("session", session)
+                    .whereEqualTo("className", Constants.classKey(className))
+                    .whereEqualTo("section", Constants.sectionKey(section))
+            }
+            Result.success(receipts)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Fetch carry-forward dues for students in a class/section.
+     */
+    suspend fun getClassCarryForward(
+        className: String,
+        section: String
+    ): Result<List<FeeCarryForwardDoc>> {
+        val schoolCode = getSchoolCode()
+            ?: return Result.failure(Exception("School code not available"))
+        val session = getSession()
+            ?: return Result.failure(Exception("Session not available"))
+        return try {
+            val docs = firestoreService.queryDocumentsAs<FeeCarryForwardDoc>(
+                Constants.Firestore.FEE_CARRY_FORWARD
+            ) { ref ->
+                ref.whereEqualTo("schoolId", schoolCode)
+                    .whereEqualTo("session", session)
+            }
+            Result.success(docs)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Real-time listeners — push-based reads that auto-update the UI
+    // when admin/parent writes change the underlying Firestore docs.
+    // Used by StudentsViewModel and FeesTeacherViewModel to keep the
+    // teacher app in sync with parent payments without manual refresh.
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Observe the defaulter status for a single student.
+     * Doc ID: `{schoolId}_{session}_{studentId}` (canonical).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeStudentDefaulterStatus(studentId: String): Flow<FeeDefaulterDoc?> {
+        return tokenManagerPair()
+            .flatMapLatest { pair ->
+                if (pair == null) flowOf(null)
+                else {
+                    val (schoolCode, session) = pair
+                    val docId = "${schoolCode}_${session}_${studentId}"
+                    firestoreService.observeDocument(
+                        Constants.Firestore.FEE_DEFAULTERS, docId
+                    ).map { snap -> snap?.toObject(FeeDefaulterDoc::class.java) }
+                }
+            }
+    }
+
+    /**
+     * Observe all fee demands for a student (drives the per-student
+     * monthly paid/unpaid chips on StudentsScreen — without this the
+     * `monthFee` map on the student doc stays stale until the next
+     * roster reload).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeStudentFeeDemands(studentId: String): Flow<List<FeeDemandDoc>> {
+        return tokenManagerPair()
+            .flatMapLatest { pair ->
+                if (pair == null) flowOf(emptyList())
+                else {
+                    val (schoolCode, session) = pair
+                    firestoreService.observeQuery(
+                        Constants.Firestore.FEE_DEMANDS
+                    ) { ref ->
+                        ref.whereEqualTo("schoolId", schoolCode)
+                            .whereEqualTo("session", session)
+                            .whereEqualTo("studentId", studentId)
+                    }.map { snap ->
+                        snap.documents.mapNotNull {
+                            try { it.toObject(FeeDemandDoc::class.java) } catch (_: Exception) { null }
+                        }
+                    }
+                }
+            }
+            .onStart { emit(emptyList()) }
+            .catch { e ->
+                android.util.Log.w("FeeRepo", "observeStudentFeeDemands failed — falling back to empty", e)
+                emit(emptyList())
+            }
+    }
+
+    /**
+     * Observe all fee defaulters for a class/section. Drives the
+     * "X of Y students paid" summary on FeesTeacherScreen so it
+     * recomputes the moment any parent in the class pays.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeClassDefaulters(
+        className: String,
+        section: String
+    ): Flow<List<FeeDefaulterDoc>> {
+        return tokenManagerPair()
+            .flatMapLatest { pair ->
+                if (pair == null) flowOf(emptyList())
+                else {
+                    val (schoolCode, session) = pair
+                    firestoreService.observeQuery(
+                        Constants.Firestore.FEE_DEFAULTERS
+                    ) { ref ->
+                        ref.whereEqualTo("schoolId", schoolCode)
+                            .whereEqualTo("session", session)
+                            .whereEqualTo("className", Constants.classKey(className))
+                            .whereEqualTo("section", Constants.sectionKey(section))
+                    }.map { snap ->
+                        snap.documents.mapNotNull {
+                            try { it.toObject(FeeDefaulterDoc::class.java) } catch (_: Exception) { null }
+                        }
+                    }
+                }
+            }
+            .onStart { emit(emptyList()) }
+            .catch { e ->
+                android.util.Log.w("FeeRepo", "observeClassDefaulters failed — falling back to empty", e)
+                emit(emptyList())
+            }
+    }
+
+    /**
+     * Observe all fee demands for a class/section. Drives the monthly
+     * breakdown row on the class summary card (Apr 28/30 · May 25/30…).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeClassFeeDemands(
+        className: String,
+        section: String
+    ): Flow<List<FeeDemandDoc>> {
+        return tokenManagerPair()
+            .flatMapLatest { pair ->
+                if (pair == null) flowOf(emptyList())
+                else {
+                    val (schoolCode, session) = pair
+                    firestoreService.observeQuery(
+                        Constants.Firestore.FEE_DEMANDS
+                    ) { ref ->
+                        ref.whereEqualTo("schoolId", schoolCode)
+                            .whereEqualTo("session", session)
+                            .whereEqualTo("className", Constants.classKey(className))
+                            .whereEqualTo("section", Constants.sectionKey(section))
+                    }.map { snap ->
+                        snap.documents.mapNotNull {
+                            try { it.toObject(FeeDemandDoc::class.java) } catch (_: Exception) { null }
+                        }
+                    }
+                }
+            }
+            .onStart { emit(emptyList()) }
+            .catch { e ->
+                android.util.Log.w("FeeRepo", "observeClassFeeDemands failed — falling back to empty", e)
+                emit(emptyList())
+            }
+    }
+
+    /**
+     * Observe the feeReminderLog collection for a given set of studentIds
+     * (typically the teacher's class). Returns a map of studentId →
+     * latest-reminder timestamp (ISO string), so the DefaulterCard can
+     * show a "Reminded Xh ago" badge without a second round-trip.
+     *
+     * Returns all reminders for the school+session and filters by the
+     * caller's student list client-side; Firestore's whereIn supports at
+     * most 30 values, so for a large class we'd blow the limit. The full
+     * read is modest (one write per reminder, usually <= few hundred per
+     * session).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeReminderLog(): Flow<Map<String, String>> {
+        return tokenManagerPair()
+            .flatMapLatest { pair ->
+                if (pair == null) flowOf(emptyMap())
+                else {
+                    val (schoolCode, session) = pair
+                    firestoreService.observeQuery(
+                        Constants.Firestore.FEE_REMINDER_LOG
+                    ) { ref ->
+                        ref.whereEqualTo("schoolId", schoolCode)
+                            .whereEqualTo("session", session)
+                    }.map { snap ->
+                        val latest = mutableMapOf<String, String>()
+                        snap.documents.forEach { d ->
+                            val sid  = d.getString("student_id") ?: return@forEach
+                            val sent = d.getString("sent_date")
+                                    ?: d.getString("deliveredAt")
+                                    ?: return@forEach
+                            val prev = latest[sid]
+                            if (prev == null || sent > prev) latest[sid] = sent
+                        }
+                        latest
+                    }
+                }
+            }
+            .onStart { emit(emptyMap()) }
+            .catch { e ->
+                android.util.Log.w("FeeRepo", "observeReminderLog failed — falling back to empty", e)
+                emit(emptyMap())
+            }
+    }
+
+    private fun tokenManagerSchool(): Flow<String?> =
+        tokenManager.schoolId.map { sid -> sid?.takeIf { it.isNotBlank() } }
+
+    private fun tokenManagerPair(): Flow<Pair<String, String>?> =
+        combine(tokenManager.schoolId, tokenManager.session) { sid, sess ->
+            val s = sid?.takeIf { it.isNotBlank() }
+            val y = sess?.takeIf { it.isNotBlank() }
+            if (s != null && y != null) Pair(s, y) else null
+        }
+
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getSession(): String? {

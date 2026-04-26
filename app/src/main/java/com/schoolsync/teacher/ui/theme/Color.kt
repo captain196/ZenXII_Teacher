@@ -1,5 +1,7 @@
 package com.schoolsync.teacher.ui.theme
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
@@ -81,202 +83,206 @@ data class AppColors(
     val lightStatusBar: Boolean,
 )
 
-// ---- DARK PALETTE ----
+// ---- DARK PALETTE — Corporate Navy + Gold ----
 val TeacherDarkColors = AppColors(
     isDark = true,
 
-    bgStart = Color(0xFF0E1822),
-    bgMid = Color(0xFF162030),
-    bgEnd = Color(0xFF1A2838),
+    bgStart = Color(0xFF0A1428),
+    bgMid = Color(0xFF0F1F3A),
+    bgEnd = Color(0xFF13294B),
 
-    glass = Color(0x801E2A3A),
-    glassBorder = Color(0x80324155),
-    glassLight = Color(0x401E2A3A),
+    glass = Color(0x801E3352),
+    glassBorder = Color(0x80445A7A),
+    glassLight = Color(0x401E3352),
 
-    slateBluePrimary = Color(0xFF3D4F5F),
-    slateBlueLight = Color(0xFF4E6373),
-    slateBlueDark = Color(0xFF2C3E4E),
+    slateBluePrimary = Color(0xFF2A4266),
+    slateBlueLight = Color(0xFF3D5B82),
+    slateBlueDark = Color(0xFF152744),
 
-    accent = Color(0xFF6FB3B2),
-    accentSecondary = Color(0xFF3D8B8A),
-    accentSurface = Color(0x1A6FB3B2),
+    accent = Color(0xFFD4AF37),
+    accentSecondary = Color(0xFFB8941F),
+    accentSurface = Color(0x1AD4AF37),
 
-    textPrimary = Color(0xFFE4ECF4),
-    textSecondary = Color(0xFF8AA0B8),
-    textTertiary = Color(0xFF5A7A96),
-    textOnAccent = Color(0xFF0E1822),
+    textPrimary = Color(0xFFF5EEDB),
+    textSecondary = Color(0xFFA8B5C8),
+    textTertiary = Color(0xFF5A6A80),
+    textOnAccent = Color(0xFF0A1428),
 
-    success = Color(0xFF4ADE80),
-    successSurface = Color(0x1A4ADE80),
-    warning = Color(0xFFF5C842),
-    warningSurface = Color(0x14F5C842),
-    error = Color(0xFFF87171),
-    errorSurface = Color(0x14F87171),
+    success = Color(0xFF3FBE6D),
+    successSurface = Color(0x1A3FBE6D),
+    warning = Color(0xFFF59E0B),
+    warningSurface = Color(0x14F59E0B),
+    error = Color(0xFFE74C3C),
+    errorSurface = Color(0x14E74C3C),
     info = Color(0xFF3B82F6),
     infoSurface = Color(0x1A3B82F6),
 
-    attPresent = Color(0xFF22C55E),
-    attAbsent = Color(0xFFEF4444),
+    attPresent = Color(0xFF3FBE6D),
+    attAbsent = Color(0xFFE74C3C),
     attLeave = Color(0xFFF59E0B),
-    attHoliday = Color(0xFF8B5CF6),
-    attTardy = Color(0xFFFF6B35),
-    attVacation = Color(0xFF06B6D4),
+    attHoliday = Color(0xFF9B7ED8),
+    attTardy = Color(0xFFFF8C42),
+    attVacation = Color(0xFF4FC3A1),
 
-    surfaceDark = Color(0xFF121E2B),
-    surfaceCard = Color(0xFF1A2838),
-    surfaceElevated = Color(0xFF223344),
+    surfaceDark = Color(0xFF0D1A30),
+    surfaceCard = Color(0xFF16263F),
+    surfaceElevated = Color(0xFF22365A),
     divider = Color(0xFF2A3A4A),
 
-    navRailBg = Color(0xFF0B1420),
-    navSelected = Color(0xFF6FB3B2),
-    navUnselected = Color(0xFF5A7A96),
+    navRailBg = Color(0xFF0A1222),
+    navSelected = Color(0xFFD4AF37),
+    navUnselected = Color(0xFF5A6A80),
 
-    subjectMath = Color(0xFF3B82F6),
-    subjectScience = Color(0xFF22C55E),
-    subjectEnglish = Color(0xFFF59E0B),
-    subjectHindi = Color(0xFFEF4444),
-    subjectSocial = Color(0xFF8B5CF6),
-    subjectComputer = Color(0xFF06B6D4),
-    subjectPhysEd = Color(0xFFFF6B35),
+    subjectMath = Color(0xFF4A90D9),
+    subjectScience = Color(0xFF3FBE6D),
+    subjectEnglish = Color(0xFFD4AF37),
+    subjectHindi = Color(0xFFE74C3C),
+    subjectSocial = Color(0xFF9B7ED8),
+    subjectComputer = Color(0xFF4FC3A1),
+    subjectPhysEd = Color(0xFFFF8C42),
     subjectArt = Color(0xFFEC4899),
-    subjectDefault = Color(0xFF3D4F5F),
+    subjectDefault = Color(0xFF2A4266),
 
-    statusBarColor = Color(0xFF0E1822),
+    statusBarColor = Color(0xFF0A1428),
     lightStatusBar = false,
 )
 
-// ---- LIGHT PALETTE ----
+// ---- LIGHT PALETTE — Corporate Navy + Gold ----
 val TeacherLightColors = AppColors(
     isDark = false,
 
-    bgStart = Color(0xFFC8D8E8),
-    bgMid = Color(0xFFE8EEF4),
-    bgEnd = Color(0xFFD4DEE8),
+    bgStart = Color(0xFFF7F4ED),
+    bgMid = Color(0xFFFBFAF5),
+    bgEnd = Color(0xFFF0EAD8),
 
-    glass = Color(0x73FFFFFF),           // rgba(255,255,255,0.45)
-    glassBorder = Color(0xA6FFFFFF),     // rgba(255,255,255,0.65)
+    glass = Color(0xCCFFFFFF),
+    glassBorder = Color(0xA6E8DDB8),
     glassLight = Color(0x40FFFFFF),
 
-    slateBluePrimary = Color(0xFF3D4F5F),
-    slateBlueLight = Color(0xFF4E6373),
-    slateBlueDark = Color(0xFF2C3E4E),
+    slateBluePrimary = Color(0xFF0F2949),
+    slateBlueLight = Color(0xFF1E4372),
+    slateBlueDark = Color(0xFF0A1C35),
 
-    accent = Color(0xFF3D8B8A),
-    accentSecondary = Color(0xFF6FB3B2),
-    accentSurface = Color(0x1A3D8B8A),
+    accent = Color(0xFF0F2949),
+    accentSecondary = Color(0xFFB8941F),
+    accentSurface = Color(0x1A0F2949),
 
-    textPrimary = Color(0xFF1A2A3A),
-    textSecondary = Color(0xFF5A6A7A),
-    textTertiary = Color(0xFF8A9AAA),
+    textPrimary = Color(0xFF0A1428),
+    textSecondary = Color(0xFF4A5568),
+    textTertiary = Color(0xFF8A95A5),
     textOnAccent = Color(0xFFFFFFFF),
 
-    success = Color(0xFF2D9D5A),
-    successSurface = Color(0x1E2D9D5A),
-    warning = Color(0xFFD4880A),
-    warningSurface = Color(0x14D4880A),
-    error = Color(0xFFCC3333),
-    errorSurface = Color(0x14CC3333),
-    info = Color(0xFF2563EB),
-    infoSurface = Color(0x1A2563EB),
+    success = Color(0xFF1B8742),
+    successSurface = Color(0x1E1B8742),
+    warning = Color(0xFFB8740A),
+    warningSurface = Color(0x14B8740A),
+    error = Color(0xFFB82D25),
+    errorSurface = Color(0x14B82D25),
+    info = Color(0xFF1E4B9E),
+    infoSurface = Color(0x1A1E4B9E),
 
-    attPresent = Color(0xFF2D9D5A),
-    attAbsent = Color(0xFFCC3333),
-    attLeave = Color(0xFFD4880A),
-    attHoliday = Color(0xFF6B52C4),
-    attTardy = Color(0xFFD4725C),
-    attVacation = Color(0xFF1D9E8F),
+    attPresent = Color(0xFF1B8742),
+    attAbsent = Color(0xFFB82D25),
+    attLeave = Color(0xFFB8740A),
+    attHoliday = Color(0xFF5A3FA8),
+    attTardy = Color(0xFFC25C3E),
+    attVacation = Color(0xFF1A8570),
 
-    surfaceDark = Color(0xFFF0EFED),
+    surfaceDark = Color(0xFFEDE6D0),
     surfaceCard = Color(0xFFFFFFFF),
     surfaceElevated = Color(0xFFFFFFFF),
     divider = Color(0x0D000000),
 
     navRailBg = Color(0x59FFFFFF),
-    navSelected = Color(0xFF3D8B8A),
-    navUnselected = Color(0xFF8A9AAA),
+    navSelected = Color(0xFF0F2949),
+    navUnselected = Color(0xFF8A95A5),
 
-    subjectMath = Color(0xFF2563EB),
-    subjectScience = Color(0xFF2D9D5A),
-    subjectEnglish = Color(0xFFD4880A),
-    subjectHindi = Color(0xFFCC3333),
-    subjectSocial = Color(0xFF6B52C4),
-    subjectComputer = Color(0xFF1D9E8F),
-    subjectPhysEd = Color(0xFFD4725C),
-    subjectArt = Color(0xFFD4509E),
-    subjectDefault = Color(0xFF3D4F5F),
+    subjectMath = Color(0xFF1E4B9E),
+    subjectScience = Color(0xFF1B8742),
+    subjectEnglish = Color(0xFFB8740A),
+    subjectHindi = Color(0xFFB82D25),
+    subjectSocial = Color(0xFF5A3FA8),
+    subjectComputer = Color(0xFF1A8570),
+    subjectPhysEd = Color(0xFFC25C3E),
+    subjectArt = Color(0xFFC2185B),
+    subjectDefault = Color(0xFF0F2949),
 
-    statusBarColor = Color(0xFFC8D8E8),
+    statusBarColor = Color(0xFFF7F4ED),
     lightStatusBar = true,
 )
 
 val LocalAppColors = staticCompositionLocalOf { TeacherDarkColors }
 
-// ---- Backward-compatible top-level aliases ----
-// These point to the DARK palette so existing screens keep compiling.
-// New screens should use LocalAppColors.current instead.
+// ─── Backward-compatible theme-aware aliases ────────────────────────────────
+// These used to be plain `val`s pinned to the DARK palette, which made every
+// screen importing them break in light mode. They are now @Composable property
+// getters that read the active palette via [LocalAppColors], so any existing
+// screen that imports e.g. `Teal` automatically light/dark switches with no
+// per-screen edits required. Callers must invoke them inside @Composable
+// scope, which all `*Screen.kt` files already do.
 
 // Background gradient
-val BgStart = TeacherDarkColors.bgStart
-val BgEnd = TeacherDarkColors.bgEnd
+val BgStart: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.bgStart
+val BgEnd: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.bgEnd
 
 // Glass morphism
-val Glass = TeacherDarkColors.glass
-val GlassBorder = TeacherDarkColors.glassBorder
-val GlassLight = TeacherDarkColors.glassLight
+val Glass: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.glass
+val GlassBorder: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.glassBorder
+val GlassLight: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.glassLight
 
 // Primary palette
-val SlateBluePrimary = TeacherDarkColors.slateBluePrimary
-val SlateBlueLight = TeacherDarkColors.slateBlueLight
-val SlateBlueDark = TeacherDarkColors.slateBlueDark
+val SlateBluePrimary: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.slateBluePrimary
+val SlateBlueLight: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.slateBlueLight
+val SlateBlueDark: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.slateBlueDark
 
 // Accent -- Teal
-val Teal = TeacherDarkColors.accent
-val TealLight = TeacherDarkColors.accentSecondary
-val TealDark = TeacherDarkColors.accentSecondary
-val TealSurface = TeacherDarkColors.accentSurface
+val Teal: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.accent
+val TealLight: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.accentSecondary
+val TealDark: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.accentSecondary
+val TealSurface: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.accentSurface
 
 // Text
-val TextPrimary = TeacherDarkColors.textPrimary
-val TextSecondary = TeacherDarkColors.textSecondary
-val TextTertiary = TeacherDarkColors.textTertiary
-val TextOnAccent = TeacherDarkColors.textOnAccent
+val TextPrimary: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.textPrimary
+val TextSecondary: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.textSecondary
+val TextTertiary: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.textTertiary
+val TextOnAccent: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.textOnAccent
 
 // Status
-val SuccessGreen = TeacherDarkColors.success
-val SuccessGreenSurface = TeacherDarkColors.successSurface
-val WarningAmber = TeacherDarkColors.warning
-val WarningAmberSurface = TeacherDarkColors.warningSurface
-val ErrorRed = TeacherDarkColors.error
-val ErrorRedSurface = TeacherDarkColors.errorSurface
-val InfoBlue = TeacherDarkColors.info
-val InfoBlueSurface = TeacherDarkColors.infoSurface
+val SuccessGreen: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.success
+val SuccessGreenSurface: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.successSurface
+val WarningAmber: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.warning
+val WarningAmberSurface: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.warningSurface
+val ErrorRed: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.error
+val ErrorRedSurface: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.errorSurface
+val InfoBlue: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.info
+val InfoBlueSurface: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.infoSurface
 
 // Attendance status colors
-val AttendancePresent = TeacherDarkColors.attPresent
-val AttendanceAbsent = TeacherDarkColors.attAbsent
-val AttendanceLeave = TeacherDarkColors.attLeave
-val AttendanceHoliday = TeacherDarkColors.attHoliday
-val AttendanceTardy = TeacherDarkColors.attTardy
-val AttendanceVacation = TeacherDarkColors.attVacation
+val AttendancePresent: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.attPresent
+val AttendanceAbsent: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.attAbsent
+val AttendanceLeave: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.attLeave
+val AttendanceHoliday: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.attHoliday
+val AttendanceTardy: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.attTardy
+val AttendanceVacation: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.attVacation
 
 // Surface & Containers
-val SurfaceDark = TeacherDarkColors.surfaceDark
-val SurfaceCard = TeacherDarkColors.surfaceCard
-val SurfaceElevated = TeacherDarkColors.surfaceElevated
-val Divider = TeacherDarkColors.divider
+val SurfaceDark: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.surfaceDark
+val SurfaceCard: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.surfaceCard
+val SurfaceElevated: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.surfaceElevated
+val Divider: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.divider
 
 // Navigation
-val NavRailBg = TeacherDarkColors.navRailBg
-val NavSelected = TeacherDarkColors.navSelected
-val NavUnselected = TeacherDarkColors.navUnselected
+val NavRailBg: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.navRailBg
+val NavSelected: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.navSelected
+val NavUnselected: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.navUnselected
 
 // Subject colors for timetable
-val SubjectMath = TeacherDarkColors.subjectMath
-val SubjectScience = TeacherDarkColors.subjectScience
-val SubjectEnglish = TeacherDarkColors.subjectEnglish
-val SubjectHindi = TeacherDarkColors.subjectHindi
-val SubjectSocial = TeacherDarkColors.subjectSocial
-val SubjectComputer = TeacherDarkColors.subjectComputer
-val SubjectPhysEd = TeacherDarkColors.subjectPhysEd
-val SubjectArt = TeacherDarkColors.subjectArt
-val SubjectDefault = TeacherDarkColors.subjectDefault
+val SubjectMath: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectMath
+val SubjectScience: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectScience
+val SubjectEnglish: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectEnglish
+val SubjectHindi: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectHindi
+val SubjectSocial: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectSocial
+val SubjectComputer: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectComputer
+val SubjectPhysEd: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectPhysEd
+val SubjectArt: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectArt
+val SubjectDefault: Color @Composable @ReadOnlyComposable get() = LocalAppColors.current.subjectDefault

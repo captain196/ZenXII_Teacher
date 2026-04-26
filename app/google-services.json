@@ -1,52 +1,14 @@
 {
   "project_info": {
-    "project_number": "156538689307",
-    "firebase_url": "https://graders-1c047-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "project_id": "graders-1c047",
-    "storage_bucket": "graders-1c047.appspot.com"
+    "project_number": "726043246907",
+    "firebase_url": "https://graderadmin-default-rtdb.firebaseio.com",
+    "project_id": "graderadmin",
+    "storage_bucket": "graderadmin.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:156538689307:android:5fc89dec03a2543c5aa5be",
-        "android_client_info": {
-          "package_name": "com.Grader.grader_s"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBRrK6YLZbOgZUIkmUxWggY99KoGKQO44Y"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:156538689307:android:a6650f09aeac0d2a5aa5be",
-        "android_client_info": {
-          "package_name": "com.Teacher.grader_teacher"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBRrK6YLZbOgZUIkmUxWggY99KoGKQO44Y"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:156538689307:android:95094810044b0b505aa5be",
+        "mobilesdk_app_id": "1:726043246907:android:a3f69601ed8eae913d371e",
         "android_client_info": {
           "package_name": "com.schoolsync.parent"
         }
@@ -54,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBRrK6YLZbOgZUIkmUxWggY99KoGKQO44Y"
+          "current_key": "AIzaSyDK0gfLhV_WJGxEzxvH61KAXVtasZcc8Zs"
         }
       ],
       "services": {
@@ -65,7 +27,7 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:156538689307:android:d4b79c1f87f740145aa5be",
+        "mobilesdk_app_id": "1:726043246907:android:8f30b045948def133d371e",
         "android_client_info": {
           "package_name": "com.schoolsync.teacher"
         }
@@ -73,7 +35,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBRrK6YLZbOgZUIkmUxWggY99KoGKQO44Y"
+          "current_key": "AIzaSyDK0gfLhV_WJGxEzxvH61KAXVtasZcc8Zs"
         }
       ],
       "services": {

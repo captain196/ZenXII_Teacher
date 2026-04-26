@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class TrainingDoc(
     @DocumentId
@@ -18,6 +16,5 @@ data class TrainingDoc(
     val registeredCount: Int = 0,
     val category: String = "",
     val status: String = "upcoming",       // upcoming, ongoing, completed, cancelled
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )

@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class DashboardDoc(
     @DocumentId
@@ -11,6 +9,5 @@ data class DashboardDoc(
     val role: String = "",
     val entityId: String = "",
     val data: Map<String, Any> = emptyMap(),
-    @ServerTimestamp
-    val updatedAt: Timestamp? = null
+    val updatedAt: Any? = null
 )

@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class SurveyDoc(
     @DocumentId
@@ -17,8 +15,7 @@ data class SurveyDoc(
     val deadline: String = "",
     val totalResponses: Int = 0,
     val status: String = "draft",          // draft, active, closed
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )
 
 data class SurveyQuestionDoc(

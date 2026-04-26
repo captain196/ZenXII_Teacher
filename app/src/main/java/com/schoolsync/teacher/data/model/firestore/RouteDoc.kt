@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class RouteDoc(
     @DocumentId
@@ -19,8 +17,7 @@ data class RouteDoc(
     val totalDistance: Double = 0.0,
     val estimatedDuration: Int = 0,
     val active: Boolean = true,
-    @ServerTimestamp
-    val updatedAt: Timestamp? = null
+    val updatedAt: Any? = null
 )
 
 data class RouteStopDoc(

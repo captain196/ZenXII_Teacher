@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class PtmConfigDoc(
     @DocumentId
@@ -19,6 +17,5 @@ data class PtmConfigDoc(
     val status: String = "draft",     // draft, booking_open, closed, completed
     val totalSlots: Int = 0,
     val bookedSlots: Int = 0,
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )

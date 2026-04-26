@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 /**
  * Represents a fee payment receipt for a student.
@@ -26,6 +24,5 @@ data class FeeReceiptDoc(
     val feeBreakdown: Map<String, Double> = emptyMap(),
     val remarks: String = "",
     val collectedBy: String = "",
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )

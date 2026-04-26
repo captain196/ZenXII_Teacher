@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class SosAlertDoc(
     @DocumentId
@@ -18,9 +16,7 @@ data class SosAlertDoc(
     val message: String = "",
     val status: String = "active",         // active, responded, resolved
     val respondedBy: String = "",
-    @ServerTimestamp
-    val resolvedAt: Timestamp? = null,
+    val resolvedAt: Any? = null,
     val notifiedParents: Int = 0,
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )

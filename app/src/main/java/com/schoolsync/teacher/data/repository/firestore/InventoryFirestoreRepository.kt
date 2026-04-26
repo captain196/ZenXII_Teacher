@@ -103,7 +103,7 @@ class InventoryFirestoreRepository @Inject constructor(
                 Constants.Firestore.EVENTS
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
-                    .orderBy("eventDate", Query.Direction.ASCENDING)
+                    .orderBy("startDate", Query.Direction.ASCENDING)
                     .limit(50)
             }
             val events = snapshot.documents.mapNotNull { doc ->
@@ -220,7 +220,7 @@ class InventoryFirestoreRepository @Inject constructor(
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getTeacherId(): String? {

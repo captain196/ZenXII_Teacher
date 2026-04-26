@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 /**
  * Represents a full day timetable for a class/section.
@@ -22,8 +20,7 @@ data class TimetableDoc(
     val sectionKey: String = "",     // "Class 8th/Section A"
     val day: String = "",            // "Monday", "Tuesday", etc.
     val periods: List<PeriodDoc> = emptyList(),
-    @ServerTimestamp
-    val updatedAt: Timestamp? = null
+    val updatedAt: Any? = null
 )
 
 /**

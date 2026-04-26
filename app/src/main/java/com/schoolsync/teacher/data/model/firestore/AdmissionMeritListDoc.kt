@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class AdmissionMeritListDoc(
     @DocumentId
@@ -11,8 +9,7 @@ data class AdmissionMeritListDoc(
     val session: String = "",
     val classKey: String = "",
     val rankedApplicants: List<RankedApplicantDoc> = emptyList(),
-    @ServerTimestamp
-    val computedAt: Timestamp? = null
+    val computedAt: Any? = null
 )
 
 data class RankedApplicantDoc(

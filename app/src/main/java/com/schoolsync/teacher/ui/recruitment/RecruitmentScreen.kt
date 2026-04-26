@@ -125,15 +125,11 @@ private fun TopBar(onRefresh: () -> Unit, isLoading: Boolean, count: Int) {
 
 @Composable
 private fun EmptyState() {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Filled.WorkOutline, null, tint = TextTertiary, modifier = Modifier.size(48.dp))
-            Spacer(Modifier.height(12.dp))
-            Text("No open positions", color = TextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.height(4.dp))
-            Text("New job postings from HR will appear here.", color = TextTertiary, fontSize = 12.sp)
-        }
-    }
+    com.schoolsync.teacher.ui.components.EmptyStatePro(
+        icon = Icons.Filled.WorkOutline,
+        title = "No open positions",
+        description = "New job postings from HR will appear here.",
+    )
 }
 
 @Composable

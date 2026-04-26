@@ -264,10 +264,15 @@ private fun TimetableCell(
     width: androidx.compose.ui.unit.Dp,
     height: androidx.compose.ui.unit.Dp
 ) {
-    val subjectColor = if (entry != null) getSubjectColor(entry.subject) else SubjectDefault
+    val isBreakEntry = entry?.isBreak == true
+    val subjectColor = if (entry != null && !isBreakEntry) getSubjectColor(entry.subject) else SubjectDefault
+    // Warm amber tone for breaks, distinct from subject colors.
+    val breakTint = androidx.compose.ui.graphics.Color(0xFFD97706)
     val bgColor by animateColorAsState(
         targetValue = when {
+            isCurrent && isBreakEntry -> breakTint.copy(alpha = 0.22f)
             isCurrent -> Teal.copy(alpha = 0.15f)
+            isBreakEntry -> breakTint.copy(alpha = 0.12f)
             entry != null -> subjectColor.copy(alpha = 0.08f)
             else -> Glass.copy(alpha = 0.15f)
         },
@@ -275,7 +280,9 @@ private fun TimetableCell(
     )
     val borderColor by animateColorAsState(
         targetValue = when {
+            isCurrent && isBreakEntry -> breakTint.copy(alpha = 0.6f)
             isCurrent -> Teal.copy(alpha = 0.5f)
+            isBreakEntry -> breakTint.copy(alpha = 0.3f)
             entry != null -> subjectColor.copy(alpha = 0.2f)
             else -> Divider
         },
@@ -290,7 +297,44 @@ private fun TimetableCell(
             .border(0.5.dp, borderColor),
         contentAlignment = Alignment.Center
     ) {
-        if (entry != null) {
+        if (isBreakEntry && entry != null) {
+            // Break / Lunch row — same cell size, distinct styling.
+            val label = if (entry.isLunch) "Lunch" else entry.subject.ifBlank { "Break" }
+            val icon = if (entry.isLunch) "🍱" else "☕"
+            Column(
+                modifier = Modifier.padding(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = icon,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = breakTint,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (entry.startTime.isNotBlank() && entry.endTime.isNotBlank()) {
+                    Text(
+                        text = "${entry.startTime}-${entry.endTime}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = breakTint.copy(alpha = 0.8f),
+                        fontSize = 9.sp
+                    )
+                }
+            }
+        } else if (entry != null) {
+            val subjectText = entry.subject
+            val teacherText = entry.teacher
+            val classText = entry.className.removePrefix("Class ") + " " + entry.section.removePrefix("Section ")
+            val roomText = entry.room
+            val isSub = teacherText.startsWith("Covered by") || subjectText.contains("(Sub)")
             Column(
                 modifier = Modifier.padding(4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -302,28 +346,31 @@ private fun TimetableCell(
                         modifier = Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(subjectColor)
+                            .background(if (isSub) Teal else subjectColor)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = entry.subject,
+                        text = subjectText,
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (isCurrent) Teal else TextPrimary,
+                        color = if (isSub) Teal else if (isCurrent) Teal else TextPrimary,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontSize = 11.sp
                     )
                 }
+                // Show substitute info OR class label (not both — cell is only 64dp)
                 Text(
-                    text = "${entry.className}-${entry.section}",
+                    text = if (isSub && teacherText.isNotBlank()) teacherText else classText.trim(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary,
-                    fontSize = 10.sp
+                    color = if (isSub) Teal else TextSecondary,
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (entry.room.isNotEmpty()) {
+                if (roomText.isNotEmpty()) {
                     Text(
-                        text = entry.room,
+                        text = roomText,
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         fontSize = 9.sp
@@ -340,6 +387,8 @@ private fun TimetableCell(
     }
 }
 
+@androidx.compose.runtime.Composable
+@androidx.compose.runtime.ReadOnlyComposable
 private fun getSubjectColor(subject: String): androidx.compose.ui.graphics.Color {
     val lower = subject.lowercase()
     return when {

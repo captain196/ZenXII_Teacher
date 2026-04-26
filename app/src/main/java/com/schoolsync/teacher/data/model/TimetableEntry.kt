@@ -17,10 +17,17 @@ data class TimetableEntry(
     val endTime: String = "",
     val room: String = "",
     val className: String = "",
-    val section: String = ""
+    val section: String = "",
+    /** Period type from Firestore PeriodDoc.type: "class" | "break" | "lunch" */
+    val type: String = "class",
+    /** Derived flag — any non-class period (break, lunch, assembly, etc.). */
+    val isBreak: Boolean = false
 ) {
     /** No-arg constructor for Firebase deserialization */
     constructor() : this(day = "")
+
+    val isLunch: Boolean get() = type.equals("lunch", ignoreCase = true) ||
+        subject.equals("Lunch", ignoreCase = true)
 
     val timeSlot: String
         get() = if (startTime.isNotBlank() && endTime.isNotBlank()) {
@@ -30,7 +37,11 @@ data class TimetableEntry(
         }
 
     val displayLabel: String
-        get() = "$subject ($className-$section)"
+        get() = if (isBreak) {
+            if (isLunch) "Lunch Break" else (subject.ifBlank { "Break" })
+        } else {
+            "$subject ($className-$section)"
+        }
 }
 
 /**

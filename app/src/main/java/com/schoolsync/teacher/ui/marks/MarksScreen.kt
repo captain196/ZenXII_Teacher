@@ -218,7 +218,7 @@ fun MarksScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Class ${state.selectedClassName} - ${state.selectedSection} | Max: ${state.selectedSubject?.maxTotal}",
+                                    text = "${state.selectedClassName} - ${state.selectedSection} | Max: ${state.selectedSubject?.maxTotal}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary
                                 )

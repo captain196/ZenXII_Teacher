@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class HostelComplaintDoc(
     @DocumentId
@@ -18,8 +16,6 @@ data class HostelComplaintDoc(
     val status: String = "open",           // open, in_progress, resolved
     val assignedTo: String = "",
     val resolution: String = "",
-    @ServerTimestamp
-    val createdAt: Timestamp? = null,
-    @ServerTimestamp
-    val resolvedAt: Timestamp? = null
+    val createdAt: Any? = null,
+    val resolvedAt: Any? = null
 )

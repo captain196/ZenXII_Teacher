@@ -1,8 +1,6 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 
 data class IncidentDoc(
     @DocumentId
@@ -24,6 +22,5 @@ data class IncidentDoc(
     val action: String = "",
     val parentNotified: Boolean = false,
     val status: String = "open",
-    @ServerTimestamp
-    val createdAt: Timestamp? = null
+    val createdAt: Any? = null
 )

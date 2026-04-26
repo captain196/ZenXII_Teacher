@@ -11,8 +11,10 @@ import com.schoolsync.teacher.data.model.StudentInfo
 import com.schoolsync.teacher.data.repository.StudentRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.HomeworkFirestoreRepository
+import com.schoolsync.teacher.util.toEpochMillisOrNull
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,7 +59,9 @@ data class HomeworkUiState(
     val showDetailSheet: Boolean = false,
     val isLoadingSubmissions: Boolean = false,
     // Subjects available for the selected class (from assignments)
-    val subjectsForClass: List<String> = emptyList()
+    val subjectsForClass: List<String> = emptyList(),
+    // Phase HW: delete confirmation
+    val homeworkToDelete: HomeworkTeacher? = null
 )
 
 sealed class HomeworkEvent {
@@ -170,8 +174,8 @@ class HomeworkTeacherViewModel @Inject constructor(
 
     fun selectSubjectFilter(subject: String?) {
         _uiState.update { it.copy(selectedSubjectFilter = subject) }
-        // Don't restart listener — the collect{} block already checks selectedSubjectFilter
-        // Just trigger a re-emission by updating state; listener will re-filter on next emit
+        // Fix #3: re-filter immediately since loadHomework is a one-shot call
+        loadHomework()
     }
 
     fun loadHomework() {
@@ -195,7 +199,7 @@ class HomeworkTeacherViewModel @Inject constructor(
                                 teacherId = doc.teacherId,
                                 teacherName = doc.teacherName,
                                 dueDate = doc.dueDate,
-                                createdAt = doc.createdAt?.toDate()?.time ?: 0L,
+                                createdAt = doc.createdAt.toEpochMillisOrNull() ?: 0L,
                                 status = doc.status,
                                 className = doc.className,
                                 section = doc.section
@@ -320,13 +324,30 @@ class HomeworkTeacherViewModel @Inject constructor(
 
     // --- Delete homework ---
 
-    fun deleteHomework(hw: HomeworkTeacher) {
+    /** Set to non-null to show delete confirmation dialog. */
+    fun confirmDelete(hw: HomeworkTeacher?) {
+        _uiState.update { it.copy(
+            homeworkToDelete = hw
+        )}
+    }
+
+    fun executeDelete() {
+        val hw = _uiState.value.homeworkToDelete ?: return
+        _uiState.update { it.copy(homeworkToDelete = null) }
+
         viewModelScope.launch {
             try {
+                // Fix #7: delete all related submissions first
+                val submissions = homeworkFirestoreRepo.getSubmissions(hw.hwId).getOrNull() ?: emptyList()
+                val fs = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                for (sub in submissions) {
+                    try { fs.collection("submissions").document(sub.id).delete().await() } catch (_: Exception) {}
+                }
+
                 homeworkFirestoreRepo.deleteHomework(hw.hwId).fold(
                     onSuccess = {
-                        Log.d(TAG, "Homework deleted: ${hw.hwId}")
-                        _events.emit(HomeworkEvent.Success("Homework deleted"))
+                        Log.d(TAG, "Homework + ${submissions.size} submissions deleted: ${hw.hwId}")
+                        _events.emit(HomeworkEvent.Success("Homework and ${submissions.size} submission(s) deleted"))
                         _uiState.update { it.copy(selectedHomework = null, showDetailSheet = false) }
                         loadHomework()
                     },
@@ -380,11 +401,25 @@ class HomeworkTeacherViewModel @Inject constructor(
                         studentId = doc.studentId,
                         studentName = doc.studentName,
                         status = doc.status,
-                        remark = doc.remark
+                        remark = doc.remark,
+                        text = doc.text,
+                        files = doc.files,
+                        score = doc.score,
+                        maxMarks = doc.maxMarks
                     )
                 } ?: emptyList()
 
                 Log.d(TAG, "Submissions loaded: ${submissions.size} entries")
+
+                // Fix submissionCount: teacher is staff, rules allow update
+                val submittedCount = submissions.size
+                try {
+                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                        .collection("homework").document(hw.hwId)
+                        .update("submissionCount", submittedCount)
+                        .addOnSuccessListener { Log.d(TAG, "submissionCount updated to $submittedCount") }
+                } catch (_: Exception) {}
+
                 _uiState.update {
                     it.copy(
                         students = students,
@@ -405,28 +440,68 @@ class HomeworkTeacherViewModel @Inject constructor(
         studentId: String,
         studentName: String,
         status: String,
-        remark: String = ""
+        remark: String = "",
+        score: Int = -1
     ) {
         val hw = _uiState.value.selectedHomework ?: return
 
         viewModelScope.launch {
             try {
                 val teacherId = tokenManager.userId.firstOrNull() ?: ""
-                // submissionId is typically "{hwId}_{studentId}"
+                val teacherName = tokenManager.userName.firstOrNull() ?: teacherId
                 val submissionId = "${hw.hwId}_${studentId}"
-                homeworkFirestoreRepo.reviewSubmission(
-                    submissionId = submissionId,
-                    remark = "$status: $remark".trim(),
-                    score = -1,
-                    reviewedBy = teacherId
-                ).fold(
-                    onSuccess = {
-                        loadSubmissions(hw)
-                    },
-                    onFailure = { e ->
-                        _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update status"))
-                    }
-                )
+                val schoolCode = tokenManager.schoolId.firstOrNull() ?: ""
+                val classSection = _uiState.value.selectedClass
+
+                // Fix #2: If submission doc doesn't exist (student hasn't
+                // submitted), create it first so reviewSubmission doesn't
+                // fail with "doc not found".
+                val existing = homeworkFirestoreRepo.getSubmissions(hw.hwId)
+                    .getOrNull()?.find { it.studentId == studentId }
+
+                if (existing == null) {
+                    // Create the submission doc first
+                    val sectionKey = if (classSection != null) {
+                        "${com.schoolsync.teacher.util.Constants.classKey(classSection.className)}/${com.schoolsync.teacher.util.Constants.sectionKey(classSection.section)}"
+                    } else ""
+
+                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                        .collection("submissions").document(submissionId)
+                        .set(mapOf(
+                            "schoolId" to schoolCode,
+                            "homeworkId" to hw.hwId,
+                            "studentId" to studentId,
+                            "studentName" to studentName,
+                            "sectionKey" to sectionKey,
+                            "status" to status,
+                            "text" to "",
+                            "files" to emptyList<String>(),
+                            "remark" to remark,
+                            "score" to score,
+                            "maxMarks" to 0,
+                            "reviewedBy" to teacherName,
+                            "reviewedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                            "submittedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                        ))
+                        .await()
+                    loadSubmissions(hw)
+                } else {
+                    // Fix #5 + #6: remark without status prefix, actual score
+                    homeworkFirestoreRepo.reviewSubmission(
+                        submissionId = submissionId,
+                        remark = remark.trim(),
+                        score = score,
+                        reviewedBy = teacherName
+                    ).fold(
+                        onSuccess = {
+                            loadSubmissions(hw)
+                            loadHomework() // Fix #10: refresh homework list too
+                        },
+                        onFailure = { e ->
+                            _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update"))
+                        }
+                    )
+                }
             } catch (e: Exception) {
                 _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update status"))
             }

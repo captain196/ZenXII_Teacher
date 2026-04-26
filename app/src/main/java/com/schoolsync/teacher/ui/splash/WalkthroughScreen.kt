@@ -63,7 +63,9 @@ data class WalkthroughPage(
     val description: String
 )
 
-val teacherPages = listOf(
+@androidx.compose.runtime.Composable
+@androidx.compose.runtime.ReadOnlyComposable
+private fun teacherPages(): List<WalkthroughPage> = listOf(
     WalkthroughPage(
         icon = Icons.Filled.CheckCircle,
         iconBg = listOf(Teal, TealDark),
@@ -88,9 +90,10 @@ val teacherPages = listOf(
 fun WalkthroughScreen(
     onFinished: () -> Unit
 ) {
-    val pagerState = rememberPagerState(pageCount = { teacherPages.size })
+    val pages = teacherPages()
+    val pagerState = rememberPagerState(pageCount = { pages.size })
     val coroutineScope = rememberCoroutineScope()
-    val isLastPage = pagerState.currentPage == teacherPages.size - 1
+    val isLastPage = pagerState.currentPage == pages.size - 1
 
     Box(
         modifier = Modifier
@@ -108,7 +111,7 @@ fun WalkthroughScreen(
                 .fillMaxSize()
                 .padding(bottom = 80.dp)
         ) { page ->
-            WalkthroughPageContent(teacherPages[page])
+            WalkthroughPageContent(pages[page])
         }
 
         // Bottom bar with indicators and buttons
@@ -134,7 +137,7 @@ fun WalkthroughScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                repeat(teacherPages.size) { index ->
+                repeat(pages.size) { index ->
                     val isActive = pagerState.currentPage == index
                     val color by animateColorAsState(
                         targetValue = if (isActive) Teal else TextTertiary.copy(alpha = 0.4f),

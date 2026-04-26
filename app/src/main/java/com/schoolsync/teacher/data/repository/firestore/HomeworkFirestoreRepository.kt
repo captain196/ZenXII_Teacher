@@ -75,6 +75,31 @@ class HomeworkFirestoreRepository @Inject constructor(
                 hwId,
                 data
             )
+
+            // HW-1: Write a push request so parents get notified
+            try {
+                val reqId = "${schoolCode}_hw_${hwId}"
+                firestoreService.setDocument("pushRequests", reqId, mapOf(
+                    "schoolId"    to schoolCode,
+                    "studentId"   to "",
+                    "mark"        to "HOMEWORK_CREATED",
+                    "class"       to cls,
+                    "section"     to sec,
+                    "day"         to 0,
+                    "month"       to "",
+                    "date"        to "",
+                    "source"      to "homework_created",
+                    "markedBy"    to teacherName,
+                    "status"      to "pending",
+                    "homeworkId"  to hwId,
+                    "title"       to title,
+                    "subject"     to subject,
+                    "dueDate"     to dueDate,
+                    "sectionKey"  to sectionKey,
+                    "createdAt"   to com.google.firebase.Timestamp.now()
+                ), merge = false)
+            } catch (_: Exception) { /* push is best-effort */ }
+
             Result.success(hwId)
         } catch (e: Exception) {
             Result.failure(e)
@@ -83,7 +108,12 @@ class HomeworkFirestoreRepository @Inject constructor(
 
     /**
      * Fetch all homework for a section, ordered by creation date descending.
-     * Query: schoolId + sectionKey, ordered by createdAt desc.
+     *
+     * Primary query: `schoolId + sectionKey + orderBy(createdAt desc)`. This
+     * needs a composite index in Firestore. If the index isn't deployed yet
+     * (FAILED_PRECONDITION), we automatically retry without the orderBy and
+     * sort the result client-side so the screen still works during local
+     * testing. The fallback path is logged so it stays visible in logcat.
      */
     suspend fun getHomework(sectionKey: String): Result<List<HomeworkDoc>> {
         val schoolCode = getSchoolCode()
@@ -98,6 +128,38 @@ class HomeworkFirestoreRepository @Inject constructor(
                     .orderBy("createdAt", Query.Direction.DESCENDING)
             }
             Result.success(homework)
+        } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+            if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION) {
+                android.util.Log.w(
+                    "HomeworkRepo",
+                    "Composite index missing for homework(schoolId+sectionKey+createdAt) — falling back to client-side sort"
+                )
+                runCatching {
+                    val rows = firestoreService.queryDocumentsAs<HomeworkDoc>(
+                        Constants.Firestore.HOMEWORK
+                    ) { ref ->
+                        ref.whereEqualTo("schoolId", schoolCode)
+                            .whereEqualTo("sectionKey", sectionKey)
+                    }
+                    rows.sortedByDescending { row ->
+                        // createdAt is Any? — could be a Firestore Timestamp,
+                        // Long ms, or null if just written. Fall back to the
+                        // doc id which embeds System.currentTimeMillis().
+                        when (val ts = row.createdAt) {
+                            is com.google.firebase.Timestamp -> ts.seconds
+                            is Long -> ts / 1000
+                            is Number -> ts.toLong() / 1000
+                            else -> row.id.substringAfterLast('_', "0")
+                                .toLongOrNull() ?: 0L
+                        }
+                    }
+                }.fold(
+                    onSuccess = { Result.success(it) },
+                    onFailure = { Result.failure(it) }
+                )
+            } else {
+                Result.failure(e)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -108,14 +170,22 @@ class HomeworkFirestoreRepository @Inject constructor(
      * Query: homeworkId match.
      */
     suspend fun getSubmissions(homeworkId: String): Result<List<SubmissionDoc>> {
+        val schoolCode = getSchoolCode()
+            ?: return Result.failure(Exception("School code not available"))
+
         return try {
+            // Must include schoolId in query — Firestore rules require
+            // isSameSchool() which checks resource.data.schoolId matches
+            // the auth token. Queries without it get PERMISSION_DENIED.
             val submissions = firestoreService.queryDocumentsAs<SubmissionDoc>(
                 Constants.Firestore.SUBMISSIONS
             ) { ref ->
-                ref.whereEqualTo("homeworkId", homeworkId)
+                ref.whereEqualTo("schoolId", schoolCode)
+                    .whereEqualTo("homeworkId", homeworkId)
             }
             Result.success(submissions)
         } catch (e: Exception) {
+            android.util.Log.e("HomeworkRepo", "getSubmissions failed for $homeworkId", e)
             Result.failure(e)
         }
     }
@@ -129,7 +199,14 @@ class HomeworkFirestoreRepository @Inject constructor(
         score: Int,
         reviewedBy: String
     ): Result<Unit> {
+        val schoolCode = getSchoolCode() ?: ""
+
         return try {
+            // Read the submission first to get student info
+            val submission = firestoreService.getDocumentAs<SubmissionDoc>(
+                Constants.Firestore.SUBMISSIONS, submissionId
+            )
+
             firestoreService.updateDocument(
                 Constants.Firestore.SUBMISSIONS,
                 submissionId,
@@ -141,6 +218,32 @@ class HomeworkFirestoreRepository @Inject constructor(
                     "reviewedAt" to firestoreService.serverTimestamp()
                 )
             )
+
+            // HW-2: Push to parent when homework is graded
+            if (submission != null && submission.studentId.isNotBlank()) {
+                try {
+                    val reqId = "${schoolCode}_hw_review_${submissionId}"
+                    firestoreService.setDocument("pushRequests", reqId, mapOf(
+                        "schoolId"     to schoolCode,
+                        "studentId"    to submission.studentId,
+                        "mark"         to "HOMEWORK_REVIEWED",
+                        "class"        to "",
+                        "section"      to "",
+                        "day"          to 0,
+                        "month"        to "",
+                        "date"         to "",
+                        "source"       to "homework_reviewed",
+                        "markedBy"     to reviewedBy,
+                        "status"       to "pending",
+                        "homeworkId"   to submission.homeworkId,
+                        "studentName"  to submission.studentName,
+                        "score"        to score,
+                        "remark"       to remark,
+                        "createdAt"    to com.google.firebase.Timestamp.now()
+                    ), merge = false)
+                } catch (_: Exception) { /* push is best-effort */ }
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -179,7 +282,7 @@ class HomeworkFirestoreRepository @Inject constructor(
     }
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getSession(): String? {

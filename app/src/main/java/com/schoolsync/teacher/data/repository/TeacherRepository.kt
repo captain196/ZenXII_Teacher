@@ -1,11 +1,13 @@
 package com.schoolsync.teacher.data.repository
 
+import android.util.Log
+import com.google.firebase.firestore.Query
 import com.schoolsync.teacher.data.firebase.FirebaseService
+import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.ClassAssignment
-import com.schoolsync.teacher.data.model.DayTimetable
-import com.schoolsync.teacher.data.model.TimetableEntry
 import com.schoolsync.teacher.data.model.User
+import com.schoolsync.teacher.data.model.firestore.SubjectAssignmentDoc
 import com.schoolsync.teacher.util.Constants
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -19,8 +21,12 @@ import javax.inject.Singleton
 @Singleton
 class TeacherRepository @Inject constructor(
     private val firebaseService: FirebaseService,
+    private val firestoreService: FirestoreService,
     private val tokenManager: TokenManager
 ) {
+    companion object {
+        private const val TAG = "TeacherRepo"
+    }
     /**
      * Fetch teacher profile from Firebase.
      * Path: Users/Teachers/{schoolCode}/{teacherId}/
@@ -59,52 +65,169 @@ class TeacherRepository @Inject constructor(
 
     /**
      * Fetch classes assigned to this teacher.
-     * Path: Schools/{schoolCode}/{session}/Academic/Subject_Assignments/
-     * Filter by teacherId to get this teacher's assignments.
+     * Phase 5: Reads from Firestore subjectAssignments collection (single source of truth),
+     *          falls back to legacy RTDB Academic/Subject_Assignments if Firestore is empty.
      */
     suspend fun getAssignedClasses(): Result<List<ClassAssignment>> {
         return try {
-            val schoolCode = tokenManager.schoolCode.firstOrNull()
-                ?: return Result.failure(Exception("School code not available"))
+            val schoolId = tokenManager.schoolId.firstOrNull()
+                ?: return Result.failure(Exception("School ID not available"))
             val session = tokenManager.session.firstOrNull()
                 ?: return Result.failure(Exception("Session not available"))
             val teacherId = tokenManager.userId.firstOrNull()
                 ?: return Result.failure(Exception("User ID not available"))
 
+            // ── 1. Try Firestore subjectAssignments first ──
+            try {
+                // Query by schoolId + teacherId (schoolId required by security rules)
+                // Filter session client-side to avoid 3-field composite index
+                val allDocs = firestoreService.queryDocumentsAs<SubjectAssignmentDoc>(
+                    Constants.Firestore.SUBJECT_ASSIGNMENTS
+                ) { ref ->
+                    ref.whereEqualTo("schoolId", schoolId)
+                        .whereEqualTo("teacherId", teacherId)
+                }
+                val docs = allDocs.filter { it.session == session }
+
+                if (docs.isNotEmpty()) {
+                    // Expand each Firestore doc into one or more ClassAssignment
+                    // entries. A doc with section="" is "class-wide" and means
+                    // the teacher is allocated to *all* sections of that class —
+                    // we resolve those by reading the sections collection so the
+                    // rest of the app code (dashboard, students, attendance) can
+                    // treat every assignment as a concrete (class, section) pair.
+                    val assignments = mutableListOf<ClassAssignment>()
+                    for (doc in docs) {
+                        val ck = Constants.classKey(doc.className)
+                        if (doc.section.isNotBlank()) {
+                            assignments.add(
+                                ClassAssignment(
+                                    assignmentId = doc.id,
+                                    teacherId = doc.teacherId,
+                                    teacherName = doc.teacherName,
+                                    className = ck,
+                                    section = Constants.sectionKey(doc.section),
+                                    subject = doc.subjectName.ifBlank { doc.subjectCode },
+                                    classTeacher = doc.isClassTeacher
+                                )
+                            )
+                        } else {
+                            // Class-wide → expand across every section that exists
+                            // for this class in the sections collection.
+                            val sectionLetters = try {
+                                // Query by schoolId + className (schoolId required by security rules)
+                                firestoreService.queryDocumentsAs<com.schoolsync.teacher.data.model.firestore.SectionDoc>(
+                                    Constants.Firestore.SECTIONS
+                                ) { ref ->
+                                    ref.whereEqualTo("schoolId", schoolId)
+                                        .whereEqualTo("className", ck)
+                                }.filter { it.session == session }
+                                .map { it.section }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "class-wide expand: sections query failed for $ck", e)
+                                emptyList()
+                            }
+                            if (sectionLetters.isEmpty()) {
+                                // Fall back to a single placeholder so the user still
+                                // sees the class even if no sections exist yet.
+                                assignments.add(
+                                    ClassAssignment(
+                                        assignmentId = doc.id,
+                                        teacherId = doc.teacherId,
+                                        teacherName = doc.teacherName,
+                                        className = ck,
+                                        section = "",
+                                        subject = doc.subjectName.ifBlank { doc.subjectCode },
+                                        classTeacher = doc.isClassTeacher
+                                    )
+                                )
+                            } else {
+                                for (sec in sectionLetters) {
+                                    assignments.add(
+                                        ClassAssignment(
+                                            assignmentId = "${doc.id}_$sec",
+                                            teacherId = doc.teacherId,
+                                            teacherName = doc.teacherName,
+                                            className = ck,
+                                            section = Constants.sectionKey(sec),
+                                            subject = doc.subjectName.ifBlank { doc.subjectCode },
+                                            classTeacher = doc.isClassTeacher
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Log.d(TAG, "getAssignedClasses: Loaded ${assignments.size} from Firestore (after class-wide expand)")
+                    return Result.success(assignments)
+                }
+                Log.d(TAG, "getAssignedClasses: Firestore empty, falling back to RTDB")
+            } catch (e: Exception) {
+                Log.w(TAG, "getAssignedClasses: Firestore failed, falling back to RTDB", e)
+            }
+
+            // ── 2. RTDB fallback (legacy path) ──
+            val schoolCode = tokenManager.schoolCode.firstOrNull()
+                ?: return Result.failure(Exception("School code not available"))
+
             val path = "${Constants.Firebase.SCHOOLS}/$schoolCode/$session/${Constants.Firebase.SUBJECT_ASSIGNMENTS}"
             val snapshot = firebaseService.readSnapshot(path)
 
             val assignments = mutableListOf<ClassAssignment>()
-            for (child in snapshot.children) {
-                val assignment = child.getValue(ClassAssignment::class.java)
-                if (assignment != null && assignment.teacherId == teacherId) {
-                    assignments.add(assignment.copy(assignmentId = child.key ?: ""))
+            for (classChild in snapshot.children) {
+                val classKey = classChild.key ?: continue
+                for (subjectChild in classChild.children) {
+                    val subjectCode = subjectChild.key ?: continue
+                    val data = subjectChild.value as? Map<*, *> ?: continue
+                    val tId = (data["teacher_id"] as? String) ?: ""
+                    if (tId != teacherId) continue
+                    assignments.add(
+                        ClassAssignment(
+                            assignmentId = "${classKey}_${subjectCode}",
+                            teacherId = tId,
+                            teacherName = (data["teacher_name"] as? String) ?: "",
+                            className = Constants.classKey(classKey),
+                            section = "",  // RTDB legacy is class-wide
+                            subject = (data["name"] as? String) ?: subjectCode,
+                            classTeacher = false
+                        )
+                    )
                 }
             }
-
+            Log.d(TAG, "getAssignedClasses: Loaded ${assignments.size} from RTDB fallback")
             Result.success(assignments)
         } catch (e: Exception) {
+            Log.e(TAG, "getAssignedClasses failed", e)
             Result.failure(e)
         }
     }
 
     /**
      * Listen to assigned classes in real-time.
+     * Phase 5: Uses Firestore subjectAssignments listener.
      */
     fun observeAssignedClasses(): Flow<List<ClassAssignment>> {
         return kotlinx.coroutines.flow.flow {
-            val schoolCode = tokenManager.schoolCode.firstOrNull() ?: return@flow
+            val schoolId = tokenManager.schoolId.firstOrNull() ?: return@flow
             val session = tokenManager.session.firstOrNull() ?: return@flow
             val teacherId = tokenManager.userId.firstOrNull() ?: return@flow
 
-            val path = "${Constants.Firebase.SCHOOLS}/$schoolCode/$session/${Constants.Firebase.SUBJECT_ASSIGNMENTS}"
-            firebaseService.listen(path).collect { snapshot ->
-                val assignments = mutableListOf<ClassAssignment>()
-                for (child in snapshot.children) {
-                    val assignment = child.getValue(ClassAssignment::class.java)
-                    if (assignment != null && assignment.teacherId == teacherId) {
-                        assignments.add(assignment.copy(assignmentId = child.key ?: ""))
-                    }
+            firestoreService.observeQuery(Constants.Firestore.SUBJECT_ASSIGNMENTS) { ref ->
+                ref.whereEqualTo("schoolId", schoolId)
+                    .whereEqualTo("session", session)
+                    .whereEqualTo("teacherId", teacherId)
+            }.collect { snapshot ->
+                val assignments = snapshot.documents.mapNotNull { doc ->
+                    val obj = doc.toObject(SubjectAssignmentDoc::class.java) ?: return@mapNotNull null
+                    ClassAssignment(
+                        assignmentId = doc.id,
+                        teacherId = obj.teacherId,
+                        teacherName = obj.teacherName,
+                        className = Constants.classKey(obj.className),
+                        section = Constants.sectionKey(obj.section),
+                        subject = obj.subjectName.ifBlank { obj.subjectCode },
+                        classTeacher = obj.isClassTeacher
+                    )
                 }
                 emit(assignments)
             }
@@ -112,94 +235,8 @@ class TeacherRepository @Inject constructor(
     }
 
     /**
-     * Fetch timetable for a specific class/section.
-     * Path: Schools/{schoolCode}/{session}/{class}/{section}/Time_table/
-     *
-     * Returns a list of DayTimetable grouped by day.
+     * (removed) RTDB Time_table reads — superseded by TimetableFirestoreRepository
+     * in Phase C-1 (2026-04-25). Callers go through TimetableFirestoreRepository.
      */
-    suspend fun getTimetable(
-        className: String,
-        section: String
-    ): Result<List<DayTimetable>> {
-        return try {
-            val schoolCode = tokenManager.schoolCode.firstOrNull()
-                ?: return Result.failure(Exception("School code not available"))
-            val session = tokenManager.session.firstOrNull()
-                ?: return Result.failure(Exception("Session not available"))
 
-            val path = "${Constants.Firebase.SCHOOLS}/$schoolCode/$session/${Constants.classKey(className)}/${Constants.sectionKey(section)}/${Constants.Firebase.TIMETABLE}"
-            val snapshot = firebaseService.readSnapshot(path)
-
-            val dayTimetables = mutableListOf<DayTimetable>()
-            for (daySnapshot in snapshot.children) {
-                val day = daySnapshot.key ?: continue
-                val periods = mutableListOf<TimetableEntry>()
-
-                for (periodSnapshot in daySnapshot.children) {
-                    val entry = periodSnapshot.getValue(TimetableEntry::class.java)
-                    if (entry != null) {
-                        periods.add(
-                            entry.copy(
-                                day = day,
-                                periodNumber = periodSnapshot.key?.toIntOrNull() ?: 0,
-                                className = className,
-                                section = section
-                            )
-                        )
-                    }
-                }
-
-                periods.sortBy { it.periodNumber }
-                dayTimetables.add(DayTimetable(day = day, periods = periods))
-            }
-
-            Result.success(dayTimetables)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Get this teacher's timetable across all assigned classes.
-     * Filters all class timetables for periods where this teacher is assigned.
-     */
-    suspend fun getMyTimetable(): Result<List<DayTimetable>> {
-        return try {
-            val teacherId = tokenManager.userId.firstOrNull()
-                ?: return Result.failure(Exception("User ID not available"))
-
-            val assignmentsResult = getAssignedClasses()
-            val assignments = assignmentsResult.getOrNull()
-                ?: return Result.failure(
-                    assignmentsResult.exceptionOrNull() ?: Exception("Failed to get assignments")
-                )
-
-            // Get unique class/section combinations
-            val classSections = assignments.map { it.className to it.section }.distinct()
-
-            val allPeriods = mutableListOf<TimetableEntry>()
-            for ((className, section) in classSections) {
-                val timetableResult = getTimetable(className, section)
-                val dayTimetables = timetableResult.getOrNull() ?: continue
-
-                for (dayTimetable in dayTimetables) {
-                    for (period in dayTimetable.periods) {
-                        if (period.teacherId == teacherId || period.teacher == teacherId) {
-                            allPeriods.add(period)
-                        }
-                    }
-                }
-            }
-
-            // Group by day
-            val grouped = allPeriods.groupBy { it.day }
-            val result = grouped.map { (day, periods) ->
-                DayTimetable(day = day, periods = periods.sortedBy { it.periodNumber })
-            }
-
-            Result.success(result)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
 }

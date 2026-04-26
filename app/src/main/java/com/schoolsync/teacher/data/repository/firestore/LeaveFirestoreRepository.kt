@@ -86,15 +86,17 @@ class LeaveFirestoreRepository @Inject constructor(
             ?: return Result.failure(Exception("Teacher ID not available"))
 
         return try {
+            // Query without orderBy to avoid composite index requirement.
+            // Sort client-side instead.
             val leaves = firestoreService.queryDocumentsAs<LeaveApplicationDoc>(
                 Constants.Firestore.LEAVE_APPLICATIONS
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("applicantId", teacherId)
                     .whereEqualTo("applicantType", "staff")
-                    .orderBy("appliedAt", Query.Direction.DESCENDING)
             }
-            Result.success(leaves)
+            // Sort by startDate descending (most recent first)
+            Result.success(leaves.sortedByDescending { it.startDate })
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -141,6 +143,56 @@ class LeaveFirestoreRepository @Inject constructor(
         )
     }
 
+    /**
+     * Fetch leave types from the schools document → leaveTypes map.
+     * Returns the raw map of typeId → {name, code, paid, days_per_year, ...} or null.
+     */
+    suspend fun getSchoolLeaveTypes(schoolId: String): Map<String, Any>? {
+        return try {
+            val doc = firestoreService.getDocumentMap(
+                Constants.Firestore.SCHOOLS,
+                schoolId
+            )
+            @Suppress("UNCHECKED_CAST")
+            doc?.get("leaveTypes") as? Map<String, Any>
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Fetch the leave balance document for the given doc ID.
+     * Returns the raw map of type → {allocated, used, balance, carried} or null.
+     */
+    /**
+     * Fetch the teacher's gender from staff doc for filtering gender-specific leave types.
+     */
+    suspend fun getStaffGender(staffDocId: String): String? {
+        return try {
+            val doc = firestoreService.getDocumentMap(
+                Constants.Firestore.STAFF,
+                staffDocId
+            )
+            doc?.get("gender")?.toString() ?: doc?.get("Gender")?.toString()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun getBalanceDoc(docId: String): Map<String, Any>? {
+        return try {
+            val doc = firestoreService.getDocumentMap(
+                Constants.Firestore.LEAVE_APPLICATIONS,
+                docId
+            )
+            @Suppress("UNCHECKED_CAST")
+            val balances = doc?.get("balances") as? Map<String, Any>
+            balances
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     // ── Student Leave Approval (teacher as approver) ────────────────────────
 
     /**
@@ -158,13 +210,10 @@ class LeaveFirestoreRepository @Inject constructor(
             val leaves = firestoreService.queryDocumentsAs<LeaveApplicationDoc>(
                 Constants.Firestore.LEAVE_APPLICATIONS
             ) { ref ->
-                var query = ref
-                    .whereEqualTo("schoolId", schoolCode)
+                ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("applicantType", "student")
                     .whereEqualTo("status", "pending")
-                    .orderBy("appliedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                query
-            }
+            }.sortedByDescending { it.startDate }
             Result.success(leaves)
         } catch (e: Exception) {
             Result.failure(e)
@@ -177,18 +226,51 @@ class LeaveFirestoreRepository @Inject constructor(
     suspend fun approveStudentLeave(leaveId: String, remarks: String = ""): Result<Unit> {
         val teacherId = getTeacherId()
             ?: return Result.failure(Exception("Teacher ID not available"))
+        val teacherName = getTeacherName() ?: teacherId
+        val schoolCode = getSchoolCode() ?: ""
 
         return try {
+            // Read the leave doc first to get student info
+            val leave = firestoreService.getDocumentAs<LeaveApplicationDoc>(
+                Constants.Firestore.LEAVE_APPLICATIONS, leaveId
+            )
+
             firestoreService.updateDocument(
                 Constants.Firestore.LEAVE_APPLICATIONS,
                 leaveId,
                 mapOf(
                     "status" to "approved",
-                    "approvedBy" to teacherId,
+                    "approvedBy" to teacherName,
                     "approvedAt" to firestoreService.serverTimestamp(),
-                    "remarks" to remarks
+                    "remarks" to remarks,
+                    "attendanceStamped" to false
                 )
             )
+
+            // Write a pushRequest so admin fires push + stamps attendance
+            if (leave != null) {
+                try {
+                    val reqId = "${schoolCode}_leave_approve_${leaveId}"
+                    firestoreService.setDocument("pushRequests", reqId, mapOf(
+                        "schoolId"  to schoolCode,
+                        "studentId" to leave.applicantId,
+                        "mark"      to "LEAVE_APPROVED",
+                        "class"     to leave.className,
+                        "section"   to leave.section,
+                        "day"       to 0,
+                        "month"     to "",
+                        "date"      to "",
+                        "source"    to "teacher_leave_approve",
+                        "markedBy"  to teacherName,
+                        "status"    to "pending",
+                        "leaveId"   to leaveId,
+                        "startDate" to leave.startDate,
+                        "endDate"   to leave.endDate,
+                        "createdAt" to com.google.firebase.Timestamp.now()
+                    ), merge = false)
+                } catch (_: Exception) { /* push is best-effort */ }
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -201,18 +283,51 @@ class LeaveFirestoreRepository @Inject constructor(
     suspend fun rejectStudentLeave(leaveId: String, remarks: String): Result<Unit> {
         val teacherId = getTeacherId()
             ?: return Result.failure(Exception("Teacher ID not available"))
+        val teacherName = getTeacherName() ?: teacherId
+        val schoolCode = getSchoolCode() ?: ""
 
         return try {
+            // Read the leave doc first to get student info for the push
+            val leave = firestoreService.getDocumentAs<LeaveApplicationDoc>(
+                Constants.Firestore.LEAVE_APPLICATIONS, leaveId
+            )
+
             firestoreService.updateDocument(
                 Constants.Firestore.LEAVE_APPLICATIONS,
                 leaveId,
                 mapOf(
                     "status" to "rejected",
-                    "approvedBy" to teacherId,
+                    "approvedBy" to teacherName,
                     "approvedAt" to firestoreService.serverTimestamp(),
                     "remarks" to remarks
                 )
             )
+
+            // Fire push to parent via pushRequests (admin processes it)
+            if (leave != null) {
+                try {
+                    val reqId = "${schoolCode}_leave_reject_${leaveId}"
+                    firestoreService.setDocument("pushRequests", reqId, mapOf(
+                        "schoolId"  to schoolCode,
+                        "studentId" to leave.applicantId,
+                        "mark"      to "LEAVE_REJECTED",
+                        "class"     to leave.className,
+                        "section"   to leave.section,
+                        "day"       to 0,
+                        "month"     to "",
+                        "date"      to "",
+                        "source"    to "teacher_leave_reject",
+                        "markedBy"  to teacherName,
+                        "status"    to "pending",
+                        "leaveId"   to leaveId,
+                        "remarks"   to remarks,
+                        "startDate" to leave.startDate,
+                        "endDate"   to leave.endDate,
+                        "createdAt" to com.google.firebase.Timestamp.now()
+                    ), merge = false)
+                } catch (_: Exception) { /* push is best-effort */ }
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -222,7 +337,7 @@ class LeaveFirestoreRepository @Inject constructor(
     // ── Private helpers ───────────────────────────────────────────────────
 
     private suspend fun getSchoolCode(): String? {
-        return tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getTeacherId(): String? {
