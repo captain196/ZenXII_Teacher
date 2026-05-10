@@ -37,7 +37,6 @@ import com.schoolsync.teacher.data.repository.firestore.TransportFirestoreReposi
 import com.schoolsync.teacher.data.repository.firestore.CampusLifeFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.LibraryFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.HRFirestoreRepository
-import com.schoolsync.teacher.data.repository.firestore.AdmissionFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.InventoryFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.AnalyticsFirestoreRepository
 import com.schoolsync.teacher.data.local.OfflineQueueManager
@@ -153,10 +152,9 @@ object AppModule {
     @Provides
     @Singleton
     fun provideStudentRepository(
-        firebaseService: FirebaseService,
         firestoreService: FirestoreService,
         tokenManager: TokenManager
-    ): StudentRepository = StudentRepository(firebaseService, firestoreService, tokenManager)
+    ): StudentRepository = StudentRepository(firestoreService, tokenManager)
 
     @Provides
     @Singleton
@@ -206,9 +204,9 @@ object AppModule {
     @Provides
     @Singleton
     fun provideHomeworkTeacherRepository(
-        firebaseService: FirebaseService,
+        firestoreService: FirestoreService,
         tokenManager: TokenManager
-    ): HomeworkTeacherRepository = HomeworkTeacherRepository(firebaseService, tokenManager)
+    ): HomeworkTeacherRepository = HomeworkTeacherRepository(firestoreService, tokenManager)
 
     // ── Firestore Repositories ─────────────────────────────────────────
 
@@ -335,14 +333,6 @@ object AppModule {
         tokenManager: TokenManager
     ): HRFirestoreRepository =
         HRFirestoreRepository(firestoreService, tokenManager)
-
-    @Provides
-    @Singleton
-    fun provideAdmissionFirestoreRepository(
-        firestoreService: FirestoreService,
-        tokenManager: TokenManager
-    ): AdmissionFirestoreRepository =
-        AdmissionFirestoreRepository(firestoreService, tokenManager)
 
     @Provides
     @Singleton

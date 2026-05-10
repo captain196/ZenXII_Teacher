@@ -2,6 +2,7 @@ package com.schoolsync.teacher.ui.students
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Phone
@@ -55,6 +57,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,6 +75,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.schoolsync.teacher.data.model.StudentInfo as ModelStudentInfo
+import com.schoolsync.teacher.ui.redflags.QuickFlagSheet
+import com.schoolsync.teacher.ui.redflags.QuickFlagUndoBanner
+import com.schoolsync.teacher.ui.redflags.QuickFlagViewModel
+import com.schoolsync.teacher.ui.redflags.rememberQuickFlagSheetState
 import com.schoolsync.teacher.ui.theme.Divider as DividerColor
 import com.schoolsync.teacher.ui.theme.ErrorRed
 import com.schoolsync.teacher.ui.theme.ErrorRedSurface
@@ -93,101 +101,181 @@ import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.glassCard
+import kotlinx.coroutines.delay
 
 @Composable
 fun StudentsScreen(
-    viewModel: StudentsViewModel = hiltViewModel()
+    viewModel: StudentsViewModel = hiltViewModel(),
+    quickFlagVm: QuickFlagViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val quickFlagState = rememberQuickFlagSheetState()
+    val quickFlagVmState by quickFlagVm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // Surface QuickFlagViewModel events as toasts. The screen has no
+    // SnackbarHost yet; toasts are the lightest-touch addition.
+    LaunchedEffect(Unit) {
+        quickFlagVm.events.collect { event ->
+            val msg = when (event) {
+                is QuickFlagViewModel.Event.Success -> event.message
+                is QuickFlagViewModel.Event.Error   -> event.message
+            }
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 5-second auto-dismiss for the Undo banner. Re-keys whenever a new
+    // flag is raised so the timer restarts cleanly per submission.
+    LaunchedEffect(quickFlagVmState.lastCreatedFlagId) {
+        if (quickFlagVmState.lastCreatedFlagId != null) {
+            delay(5000)
+            quickFlagVm.clearUndoWindow()
+        }
+    }
 
     GradientBackground {
-        Row(modifier = Modifier.fillMaxSize()) {
-            // Main student list
-            Column(
-                modifier = Modifier
-                    .weight(if (state.selectedStudent != null) 0.55f else 1f)
-                    .fillMaxHeight()
-                    .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp)
-            ) {
-                // Header row
-                StudentsHeader(
-                    state = state,
-                    onClassSelected = viewModel::selectClass,
-                    onSearchChanged = viewModel::onSearchQueryChange,
-                    onRefresh = viewModel::refresh
-                )
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Undo banner sits at the top of the screen so it is reachable
+            // from any side panel state without overlapping the grid.
+            QuickFlagUndoBanner(
+                visible = quickFlagVmState.lastCreatedFlagId != null,
+                onUndo = quickFlagVm::undo
+            )
 
-                Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxSize()) {
+                // Main student list
+                Column(
+                    modifier = Modifier
+                        .weight(if (state.selectedStudent != null) 0.55f else 1f)
+                        .fillMaxHeight()
+                        .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp)
+                ) {
+                    // Header row
+                    StudentsHeader(
+                        state = state,
+                        onClassSelected = viewModel::selectClass,
+                        onSearchChanged = viewModel::onSearchQueryChange,
+                        onRefresh = viewModel::refresh
+                    )
 
-                // Student grid
-                if (state.isLoading) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = Teal)
-                    }
-                } else if (state.filteredStudents.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Filled.PersonSearch,
-                                contentDescription = null,
-                                tint = TextTertiary,
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "No students found",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = TextSecondary
-                            )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Student grid
+                    if (state.isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Teal)
                         }
-                    }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 200.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(4.dp)
-                    ) {
-                        items(
-                            state.filteredStudents,
-                            key = { it.studentId }
-                        ) { student ->
-                            StudentCard(
-                                student = student,
-                                isSelected = state.selectedStudent?.studentId == student.studentId,
-                                onClick = { viewModel.selectStudent(student) }
-                            )
+                    } else if (state.filteredStudents.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Filled.PersonSearch,
+                                    contentDescription = null,
+                                    tint = TextTertiary,
+                                    modifier = Modifier.size(64.dp)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "No students found",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 200.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(4.dp)
+                        ) {
+                            items(
+                                state.filteredStudents,
+                                key = { it.studentId }
+                            ) { student ->
+                                StudentCard(
+                                    student = student,
+                                    isSelected = state.selectedStudent?.studentId == student.studentId,
+                                    onClick = { viewModel.selectStudent(student) },
+                                    onFlagClick = {
+                                        // Students screen is a no-subject context per
+                                        // phase_6a_design.md: forced subject pick from
+                                        // the teacher's subjectAssignments for the
+                                        // currently-selected class+section. The sheet
+                                        // refuses submission when the list is empty.
+                                        quickFlagState.showFor(
+                                            student          = student.toModelStudentInfo(),
+                                            classKey         = state.selectedClassName,
+                                            sectionKey       = state.selectedSection,
+                                            forceSubjectPick = true,
+                                            subjectsForClass = state.assignedSubjects
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // Detail panel (shows when a student is selected)
-            AnimatedVisibility(
-                visible = state.selectedStudent != null,
-                enter = fadeIn() + slideInHorizontally { it / 2 },
-                exit = fadeOut() + slideOutHorizontally { it / 2 }
-            ) {
-                state.selectedStudent?.let { student ->
-                    StudentDetailPanel(
-                        student = student,
-                        onClose = { viewModel.selectStudent(null) },
-                        modifier = Modifier
-                            .weight(0.45f)
-                            .fillMaxHeight()
-                            .padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 16.dp)
-                    )
+                // Detail panel (shows when a student is selected)
+                AnimatedVisibility(
+                    visible = state.selectedStudent != null,
+                    enter = fadeIn() + slideInHorizontally { it / 2 },
+                    exit = fadeOut() + slideOutHorizontally { it / 2 }
+                ) {
+                    state.selectedStudent?.let { student ->
+                        StudentDetailPanel(
+                            student = student,
+                            onClose = { viewModel.selectStudent(null) },
+                            modifier = Modifier
+                                .weight(0.45f)
+                                .fillMaxHeight()
+                                .padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 16.dp)
+                        )
+                    }
                 }
             }
         }
+
+        // Sheet renders on top of the gradient when triggered.
+        QuickFlagSheet(
+            state = quickFlagState,
+            onSubmit = quickFlagVm::submit
+        )
     }
 }
+
+/**
+ * Adapts the screen's local [StudentInfo] to the canonical
+ * [data.model.StudentInfo][ModelStudentInfo] shape that the QuickFlagSheet
+ * + RedFlagRepository expect. `rollNo` is widened to String, profile pic
+ * passes through, and `parentDbKey` is left blank — the repository
+ * resolves school/teacher/session from TokenManager, so the only fields
+ * the sheet needs from here are the per-student denorm fields.
+ */
+private fun StudentInfo.toModelStudentInfo(): ModelStudentInfo = ModelStudentInfo(
+    studentId    = studentId,
+    name         = name,
+    fatherName   = fatherName,
+    motherName   = motherName,
+    rollNo       = rollNo.toString(),
+    className    = className,
+    section      = section,
+    gender       = gender,
+    dob          = dob,
+    profilePic   = profilePicUrl,
+    parentDbKey  = "",
+    phone        = phone,
+    admissionDate = admissionDate,
+    email        = email
+)
 
 @Composable
 private fun StudentsHeader(
@@ -325,7 +413,8 @@ private fun StudentsHeader(
 private fun StudentCard(
     student: StudentInfo,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFlagClick: () -> Unit
 ) {
     val context = LocalContext.current
     Box(
@@ -394,6 +483,22 @@ private fun StudentCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
+
+            // 🚩 Flag — primary action, placed before Call (which is
+            // secondary). One-tap opens the QuickFlagSheet pinned to
+            // this student. Submission is gated on a subjectAssignments
+            // pick by the sheet itself.
+            IconButton(
+                onClick = onFlagClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Flag,
+                    contentDescription = "Flag ${student.name}",
+                    tint = ErrorRed,
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
             if (student.phone.isNotEmpty()) {

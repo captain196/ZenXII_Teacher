@@ -34,7 +34,10 @@ class LeaveFirestoreRepository @Inject constructor(
         endDate: String,
         numberOfDays: Int,
         reason: String,
-        attachments: List<String> = emptyList()
+        attachments: List<String> = emptyList(),
+        typePaid: Boolean? = null,           // CR-3 cross-system: snapshot at submit time
+        halfDay: Boolean = false,            // Phase 4 cross-system
+        halfDayPeriod: String = ""           // 'AM' | 'PM'
     ): Result<String> {
         val schoolCode = getSchoolCode()
             ?: return Result.failure(Exception("School code not available"))
@@ -45,7 +48,7 @@ class LeaveFirestoreRepository @Inject constructor(
 
         val leaveId = "${schoolCode}_${teacherId}_${System.currentTimeMillis()}"
 
-        val data = hashMapOf(
+        val data = hashMapOf<String, Any?>(
             "schoolId" to schoolCode,
             "applicantType" to "staff",
             "applicantId" to teacherId,
@@ -60,7 +63,18 @@ class LeaveFirestoreRepository @Inject constructor(
             "status" to "pending",
             "appliedAt" to firestoreService.serverTimestamp(),
             "approvedBy" to "",
-            "remarks" to ""
+            "remarks" to "",
+            // CR-3 fallback data: snapshot the type's paid status at submission
+            // time so payroll can still classify correctly even if the school
+            // later deletes this leave type from config.
+            "typePaid" to (typePaid ?: true),
+            "type_paid" to (typePaid ?: true),
+            // Phase 4 half-day support — payroll skips attendance 'L' marking
+            // when halfDay=true and applies a 0.5-day deduction (if unpaid).
+            "halfDay" to halfDay,
+            "half_day" to halfDay,
+            "halfDayPeriod" to halfDayPeriod,
+            "half_day_period" to halfDayPeriod
         )
 
         return try {
@@ -105,17 +119,31 @@ class LeaveFirestoreRepository @Inject constructor(
     /**
      * Cancel a leave application. Only allowed when the current status is "pending".
      *
+     * Approved-leave cancellation is intentionally rejected here — those go
+     * through the admin-side cancel handler, which knows how to undo the
+     * attendance stamp + payroll-day adjustments. We only own the
+     * Pending → Cancelled transition.
+     *
+     * On Pending cancel we also try to restore the BAL doc's `used` counter
+     * for the leave type. The current submission flow does not auto-deduct
+     * on submit (admin's `decide_leave` is the only `used`-incrementer),
+     * so this restore is a no-op in the typical flow — but it's correct if
+     * a future change deducts on submit, and harmless either way (clamped
+     * to a non-negative value).
+     *
      * @throws IllegalStateException if the leave is not in "pending" status
      */
     suspend fun cancelLeave(leaveId: String): Result<Unit> {
         return try {
-            // Verify the leave is still pending before cancelling
+            // Verify the leave is still pending before cancelling.
+            // Case-insensitive compare so docs written by older/legacy
+            // writers in CapitalCase are still cancellable.
             val doc = firestoreService.getDocumentAs<LeaveApplicationDoc>(
                 Constants.Firestore.LEAVE_APPLICATIONS,
                 leaveId
             ) ?: return Result.failure(Exception("Leave application not found: $leaveId"))
 
-            if (doc.status != "pending") {
+            if (!doc.status.equals("pending", ignoreCase = true)) {
                 return Result.failure(
                     IllegalStateException("Cannot cancel leave with status '${doc.status}'. Only pending leaves can be cancelled.")
                 )
@@ -126,10 +154,67 @@ class LeaveFirestoreRepository @Inject constructor(
                 leaveId,
                 mapOf("status" to "cancelled")
             )
+
+            // Restore BAL.used for this leave type (best-effort; never
+            // fails the cancel itself if the BAL doc / type mapping is
+            // missing). Safe under the current model — see method KDoc.
+            try {
+                restoreBalanceForCancelledLeave(doc)
+            } catch (_: Exception) { /* best-effort */ }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Decrement the matching BAL doc's `used` counter by [LeaveApplicationDoc.numberOfDays].
+     * Looks up the leave type by name in the school's `leaveTypes` map to
+     * resolve the typeId (the BAL doc keys by typeId). Clamped to a
+     * non-negative value so a stray cancel doesn't make `used` go negative
+     * if the original submit never deducted.
+     */
+    private suspend fun restoreBalanceForCancelledLeave(doc: LeaveApplicationDoc) {
+        val schoolCode = getSchoolCode() ?: return
+        val teacherId = doc.applicantId.takeIf { it.isNotBlank() }
+            ?: getTeacherId()
+            ?: return
+        val days = doc.numberOfDays
+        if (days <= 0) return
+
+        // Year picked from startDate; falls back to current year so cancels
+        // of a no-startDate doc still target the right BAL.
+        val year = doc.startDate.take(4).toIntOrNull()
+            ?: java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+
+        // Resolve typeId from the school's leaveTypes map by matching name
+        // (case-insensitive). doc.leaveType holds the human name.
+        val leaveTypes = getSchoolLeaveTypes(schoolCode) ?: return
+        val typeId = leaveTypes.entries.firstOrNull { (_, v) ->
+            (v as? Map<*, *>)?.get("name")?.toString()
+                ?.equals(doc.leaveType, ignoreCase = true) == true
+        }?.key ?: return
+
+        val balDocId = "${schoolCode}_BAL_${teacherId}_$year"
+        val balDoc = firestoreService.getDocumentMap(
+            Constants.Firestore.LEAVE_APPLICATIONS,
+            balDocId
+        ) ?: return
+
+        @Suppress("UNCHECKED_CAST")
+        val balances = balDoc["balances"] as? Map<String, Any> ?: return
+        @Suppress("UNCHECKED_CAST")
+        val typeEntry = balances[typeId] as? Map<String, Any> ?: return
+        val currentUsed = (typeEntry["used"] as? Number)?.toInt() ?: 0
+        val newUsed = (currentUsed - days).coerceAtLeast(0)
+        if (newUsed == currentUsed) return // already at zero — nothing to restore
+
+        firestoreService.updateDocument(
+            Constants.Firestore.LEAVE_APPLICATIONS,
+            balDocId,
+            mapOf("balances.$typeId.used" to newUsed)
+        )
     }
 
     /**

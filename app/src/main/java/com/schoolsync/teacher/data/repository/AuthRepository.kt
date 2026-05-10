@@ -66,6 +66,19 @@ class AuthRepository @Inject constructor(
             //     never written by the admin panel — it was always missing.)
             val staffData = readStaffProfile(schoolId, parentDbKey, userId)
 
+            // Belt-and-braces: explicit status gate. Firebase Auth's
+            // `disabled=true` covers the normal deactivation path, but if
+            // `_disable_firebase_user` failed admin-side (network blip, no
+            // service-account creds, legacy non-Auth account) the staff is
+            // Inactive in Firestore yet Auth still accepts the password.
+            // Reject here so a single source of truth wins.
+            val rawStatus = (staffData["status"] ?: staffData["Status"] ?: "Active") as? String ?: "Active"
+            if (!rawStatus.equals("Active", ignoreCase = true)) {
+                Log.w(TAG, "login: staff $userId status=$rawStatus, refusing login")
+                firebaseAuthManager.signOut()
+                return Result.failure(Exception("Your account has been deactivated. Please contact the school office."))
+            }
+
             val loginUser = LoginUser(
                 userId = userId,
                 name = (staffData["Name"] ?: staffData["name"] ?: userId).toString(),

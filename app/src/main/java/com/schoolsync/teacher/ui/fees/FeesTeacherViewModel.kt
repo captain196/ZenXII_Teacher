@@ -22,14 +22,46 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Per-month payment summary for a class — drives the "Apr 28/30 ·
- * May 25/30 …" breakdown chips on the class summary card.
+ * Per-month payment summary for a class — drives the vertical "Monthly
+ * Collection" list with progress bars on the Fees screen.
+ *
+ * Yearly demands are split into [FeesUiState.annualFee] so the monthly
+ * list never mixes "April" with "Yearly Fees" (those carry different
+ * meanings and used to confuse the count).
  */
 data class MonthlyClassBreakdown(
     val month: String,
     val paidStudents: Int,
     val totalStudents: Int
+) {
+    val percent: Int get() = if (totalStudents > 0) (paidStudents * 100) / totalStudents else 0
+}
+
+/**
+ * Class-level roll-up of standalone yearly demands (Pattern B billing —
+ * see forensic doc). Pattern A students (annual fee bundled into April)
+ * never appear here. Each entry has the per-student status so the UI
+ * can surface "who owes the yearly fee" rather than just an aggregate
+ * percentage.
+ */
+data class AnnualFeeInfo(
+    val totalStudents: Int,
+    val paidStudents: Int,
+    val students: List<AnnualFeeStudent>
 )
+
+data class AnnualFeeStudent(
+    val studentId: String,
+    val studentName: String,
+    val isPaid: Boolean,
+    val balance: Double
+)
+
+/**
+ * Unified student filter modes. Replaces the old Overview/Defaulters
+ * toggle + All/Clear/Dues chips with one consistent filter row.
+ */
+enum class StudentFilter { ALL, CLEAR, DUES, BLOCKED }
 
 data class FeesUiState(
     val isLoading: Boolean = false,
@@ -38,14 +70,24 @@ data class FeesUiState(
     val classOverview: ClassFeeOverview? = null,
     val studentStatuses: List<StudentFeeStatus> = emptyList(),
     val defaulters: List<FeeDefaulter> = emptyList(),
+    /**
+     * Per-month rollup, MONTHLY demands only. The server stores
+     * "Yearly Fees" as a `month` value on annual demands — we filter
+     * that out here so the monthly list never carries a phantom
+     * "Yearly" row alongside April / May / etc.
+     */
     val monthlyBreakdown: List<MonthlyClassBreakdown> = emptyList(),
-    val selectedView: String = "summary", // "summary" or "defaulters"
+    /**
+     * Standalone yearly demands rolled up separately, with per-student
+     * detail so the Fees screen can list WHO needs to pay (rather than
+     * just an aggregate progress bar). Null when no Pattern B students
+     * exist in the class — the Annual Fee card then doesn't mount.
+     */
+    val annualFee: AnnualFeeInfo? = null,
+    val selectedFilter: StudentFilter = StudentFilter.ALL,
     /**
      * Phase 8B: studentId → latest fee-reminder sent_date (ISO) for the
-     * school/session. Populated from feeReminderLog and merged into the
-     * DefaulterCard as a "Reminded 2h ago" badge. Empty map when no
-     * reminders have ever been sent (pre-Phase-8A) or the listener hasn't
-     * emitted yet.
+     * school/session. Drives the "Reminded 2h ago" badge on student rows.
      */
     val lastReminderByStudent: Map<String, String> = emptyMap(),
     val errorMessage: String? = null
@@ -60,6 +102,14 @@ class FeesTeacherViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "FeesTeacherVM"
+        /**
+         * Server-side `month` value used for any annual / one-time
+         * demand. `Fee_firestore_txn::periodToMonth` strips a trailing
+         * year suffix — "Yearly Fees 2026-27" → "Yearly Fees" — so the
+         * raw demand doc carries this exact string. Anything that's
+         * NOT this label (and is non-blank) is a real monthly demand.
+         */
+        private const val YEARLY_MONTH_LABEL = "Yearly Fees"
     }
 
     private val _uiState = MutableStateFlow(FeesUiState())
@@ -117,7 +167,9 @@ class FeesTeacherViewModel @Inject constructor(
 
     fun selectClass(classSection: ClassSection) {
         if (_uiState.value.selectedClass == classSection) return
-        _uiState.update { it.copy(selectedClass = classSection) }
+        // Reset filter to All when switching classes — previous filter
+        // (e.g. "Blocked 3") may not apply to the new class.
+        _uiState.update { it.copy(selectedClass = classSection, selectedFilter = StudentFilter.ALL) }
         classSwitchJob?.cancel()
         classSwitchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(350)
@@ -126,6 +178,10 @@ class FeesTeacherViewModel @Inject constructor(
             loadFees(classSection.className, classSection.section)
             attachClassListeners(classSection.className, classSection.section)
         }
+    }
+
+    fun setFilter(filter: StudentFilter) {
+        _uiState.update { it.copy(selectedFilter = filter) }
     }
 
     /**
@@ -178,14 +234,14 @@ class FeesTeacherViewModel @Inject constructor(
      * in sync with parent payments without manual refresh:
      *
      *   • Defaulters listener — every change re-runs `loadFees` so the
-     *     "X of Y paid" count, defaulter list, and total-pending amount
-     *     all recompute. `.drop(1)` skips the initial snapshot (the
+     *     class snapshot, defaulter list, and total-pending amount all
+     *     recompute. `.drop(1)` skips the initial snapshot (the
      *     `loadFees` call from selectClass already covered it) so we
      *     don't double-load.
      *
-     *   • Demands listener — derives the per-month "Apr 28/30 · May 25/30"
-     *     breakdown reactively. Each demand has a `month` field; we
-     *     group, count per-student paid status, then publish.
+     *   • Demands listener — derives the per-month vertical breakdown
+     *     reactively. Yearly demands are split into a separate
+     *     `annualBreakdown` so the monthly list stays clean.
      */
     private fun attachClassListeners(className: String, section: String) {
         defaultersListenerJob?.cancel()
@@ -221,15 +277,24 @@ class FeesTeacherViewModel @Inject constructor(
                     val current = _uiState.value.selectedClass ?: return@collect
                     if (current.className != className || current.section != section) return@collect
 
+                    // Split demands by periodicity. Yearly fees can't be
+                    // meaningfully grouped alongside April / May / etc.,
+                    // so they get their own roll-up card on the screen.
+                    val (yearlyDemands, monthlyDemands) = demands.partition {
+                        it.month == YEARLY_MONTH_LABEL
+                    }
+
                     val academicOrder = listOf(
                         "April","May","June","July","August","September",
                         "October","November","December","January","February","March"
                     )
-                    val perMonth = demands
+                    val perMonth = monthlyDemands
                         .groupBy { it.month.ifBlank { "Unknown" } }
                         .map { (month, monthDemands) ->
-                            // A student in this month is "paid" if every demand
-                            // doc for them in that month is status="paid".
+                            // A student in this month is "paid" iff every
+                            // demand doc for them in that month has
+                            // status="paid". Server writes lowercase per
+                            // FeeCollectionService; we trust that contract.
                             val byStudent = monthDemands.groupBy { it.studentId }
                             val total = byStudent.size
                             val paid = byStudent.count { (_, list) ->
@@ -246,13 +311,34 @@ class FeesTeacherViewModel @Inject constructor(
                             if (idx >= 0) idx else 99
                         }
 
-                    _uiState.update { it.copy(monthlyBreakdown = perMonth) }
+                    val annual = if (yearlyDemands.isEmpty()) null else {
+                        val byStudent = yearlyDemands.groupBy { it.studentId }
+                        val list = byStudent.map { (sid, list) ->
+                            AnnualFeeStudent(
+                                studentId = sid,
+                                studentName = list.firstOrNull()?.studentName.orEmpty(),
+                                // Per-student paid iff every yearly demand
+                                // for them is status="paid". Mirrors the
+                                // monthly aggregator's contract.
+                                isPaid = list.isNotEmpty() && list.all { it.status == "paid" },
+                                balance = list.sumOf { d -> d.balance }
+                            )
+                        }.sortedBy { it.studentId }
+                        AnnualFeeInfo(
+                            totalStudents = list.size,
+                            paidStudents = list.count { it.isPaid },
+                            students = list
+                        )
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            monthlyBreakdown = perMonth,
+                            annualFee = annual
+                        )
+                    }
                 }
         }
-    }
-
-    fun switchView(view: String) {
-        _uiState.update { it.copy(selectedView = view) }
     }
 
     fun refresh() {

@@ -138,6 +138,7 @@ import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.Teal
 import com.schoolsync.teacher.ui.theme.TealSurface
 import com.schoolsync.teacher.ui.timetable.TimetableScreen
+import com.schoolsync.teacher.ui.lessonplan.TodayLessonsScreen
 import kotlinx.coroutines.flow.collectLatest
 
 /** All navigation routes in the app. */
@@ -169,6 +170,7 @@ sealed class Route(val route: String) {
     data object Ptm : Route("ptm")
     data object More : Route("more")
     data object Profile : Route("profile")
+    data object LessonPlan : Route("lesson_plan")
 }
 
 data class NavRailItem(
@@ -194,6 +196,7 @@ val moreSubItems = listOf(
     NavRailItem(Route.RedFlags, "Flags", Icons.Filled.Flag, Icons.Outlined.Flag),
     NavRailItem(Route.Stories, "Stories", Icons.Filled.CameraAlt, Icons.Outlined.CameraAlt),
     NavRailItem(Route.Timetable, "Time", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+    NavRailItem(Route.LessonPlan, "Plans", Icons.Filled.EventNote, Icons.Outlined.EventNote),
     NavRailItem(Route.Notices, "Notices", Icons.Filled.Campaign, Icons.Outlined.Campaign),
     NavRailItem(Route.Events, "Events", Icons.Filled.Event, Icons.Outlined.Event),
     NavRailItem(Route.Ptm, "PTM", Icons.Filled.Groups, Icons.Outlined.Groups),
@@ -518,6 +521,7 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.Attendance.route) { AttendanceScreen() }
             composable(Route.Marks.route) { MarksScreen() }
             composable(Route.Timetable.route) { TimetableScreen() }
+            composable(Route.LessonPlan.route) { TodayLessonsScreen() }
             composable(Route.Students.route) { StudentsScreen() }
             composable(Route.Messages.route) { MessagesScreen() }
             composable(Route.Notices.route) { NoticesScreen() }

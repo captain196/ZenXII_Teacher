@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -165,17 +166,25 @@ fun HomeworkTeacherScreen(
             ) {
                 // Main content: either list or detail
                 if (state.showDetailSheet && state.selectedHomework != null) {
-                    // Two-panel: list on left, detail on right
+                    // Two-panel: list on left, detail on right.
+                    // 0.38 / 0.62 — list pane is wide enough to keep the
+                    // homework cards readable (avoiding the cramped 0.32
+                    // experiment) while still giving the detail pane the
+                    // majority of the screen since that's where the
+                    // student-roster + status work happens. A thin
+                    // vertical divider between panes makes the boundary
+                    // read as deliberate, not accidental whitespace.
                     Column(
                         modifier = Modifier
-                            .weight(0.4f)
+                            .weight(0.38f)
                             .fillMaxHeight()
                     ) {
                         HomeworkTopBar(
                             state = state,
                             onClassSelected = viewModel::selectClass,
                             onSubjectFilter = viewModel::selectSubjectFilter,
-                            onRefresh = viewModel::refresh
+                            onRefresh = viewModel::refresh,
+                            compact = true   // sticky two-row header in two-panel view
                         )
                         HomeworkListContent(
                             state = state,
@@ -184,17 +193,26 @@ fun HomeworkTeacherScreen(
                         )
                     }
 
+                    // Vertical separator between list + detail panes.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(1.dp)
+                            .background(GlassBorder)
+                    )
+
                     // Detail panel
                     HomeworkDetailPanel(
                         homework = state.selectedHomework!!,
                         students = state.students,
                         submissions = state.submissions,
+                        teacherMarks = state.teacherMarks,
                         isLoading = state.isLoadingSubmissions,
                         onMarkStatus = viewModel::markStudentStatus,
                         onDelete = { viewModel.confirmDelete(it) },
                         onClose = viewModel::hideDetailSheet,
                         modifier = Modifier
-                            .weight(0.6f)
+                            .weight(0.62f)
                             .fillMaxHeight()
                     )
                 } else {
@@ -279,30 +297,49 @@ private fun HomeworkTopBar(
     state: HomeworkUiState,
     onClassSelected: (HomeworkClassSection) -> Unit,
     onSubjectFilter: (String?) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    compact: Boolean = false
 ) {
+    if (compact) {
+        // ── Two-panel mode: sticky two-row header with proper hierarchy ──
+        // Row 1: page title + count + refresh icon (chrome).
+        // Row 2: class chip + subject filter chip (context).
+        // Divider underneath so the cards visibly belong to a section.
+        // Was previously a single SpaceBetween row with the class pill
+        // floating in negative space — read as wasted whitespace.
+        CompactHomeworkTopBar(
+            state = state,
+            onClassSelected = onClassSelected,
+            onSubjectFilter = onSubjectFilter,
+            onRefresh = onRefresh
+        )
+        return
+    }
+
     var classDropdownExpanded by remember { mutableStateOf(false) }
     var subjectDropdownExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Title
+        // Title — kept as titleLarge (was headlineSmall) to free up
+        // vertical space; left pane was wasting ~80dp before the first
+        // homework card on standard phones in landscape.
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Filled.MenuBook,
                 contentDescription = null,
                 tint = Teal,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Homework",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
             )
@@ -421,6 +458,214 @@ private fun HomeworkTopBar(
     }
 }
 
+/**
+ * Compact two-row sticky header used in the two-pane layout. Built from
+ * scratch (rather than reusing the wide top bar's SpaceBetween row) because
+ * at narrow widths that layout left a noticeable gap between the title and
+ * the class pill — looked like wasted whitespace, not deliberate spacing.
+ *
+ * Row 1 (chrome): app icon + "Homework" title + count badge + refresh.
+ * Row 2 (context): class chip + subject filter chip.
+ * Bottom-edge divider: visually anchors the cards below as belonging to
+ * "this class's homework", not floating in space.
+ */
+@Composable
+private fun CompactHomeworkTopBar(
+    state: HomeworkUiState,
+    onClassSelected: (HomeworkClassSection) -> Unit,
+    onSubjectFilter: (String?) -> Unit,
+    onRefresh: () -> Unit
+) {
+    var classDropdownExpanded by remember { mutableStateOf(false) }
+    var subjectDropdownExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(BgStart.copy(alpha = 0.2f))
+    ) {
+        // Row 1 — chrome
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.MenuBook,
+                contentDescription = null,
+                tint = Teal,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Homework",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            // Count badge — surfaces "how much homework am I looking at"
+            // without making the user count cards.
+            if (state.homeworkList.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Teal.copy(alpha = 0.15f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${state.homeworkList.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Teal,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = "Refresh",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        // Row 2 — context chips (class + subject filter)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Class chip — uses the same OutlinedButton pattern as the wide
+            // top bar but with smaller padding/typography so it reads as a
+            // pill, not a button.
+            Box {
+                OutlinedButton(
+                    onClick = { classDropdownExpanded = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = SolidColor(GlassBorder)
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = state.selectedClass?.displayName ?: "Select Class",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    )
+                    Icon(
+                        Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = classDropdownExpanded,
+                    onDismissRequest = { classDropdownExpanded = false },
+                    modifier = Modifier.background(SurfaceDark)
+                ) {
+                    state.availableClasses.forEach { cs ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    cs.displayName,
+                                    color = if (cs == state.selectedClass) Teal else TextPrimary
+                                )
+                            },
+                            onClick = {
+                                onClassSelected(cs)
+                                classDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Subject filter — collapses to a small chip showing either the
+            // selected subject (highlighted teal) or the icon for "no filter".
+            Box {
+                OutlinedButton(
+                    onClick = { subjectDropdownExpanded = true },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (state.selectedSubjectFilter != null) Teal else TextSecondary
+                    ),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = SolidColor(
+                            if (state.selectedSubjectFilter != null) Teal.copy(alpha = 0.4f)
+                            else GlassBorder
+                        )
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.FilterList,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = state.selectedSubjectFilter ?: "All Subjects",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
+                }
+                DropdownMenu(
+                    expanded = subjectDropdownExpanded,
+                    onDismissRequest = { subjectDropdownExpanded = false },
+                    modifier = Modifier.background(SurfaceDark)
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                "All Subjects",
+                                color = if (state.selectedSubjectFilter == null) Teal else TextPrimary
+                            )
+                        },
+                        onClick = {
+                            onSubjectFilter(null)
+                            subjectDropdownExpanded = false
+                        }
+                    )
+                    state.subjectsForClass.forEach { subject ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    subject,
+                                    color = if (subject == state.selectedSubjectFilter) Teal else TextPrimary
+                                )
+                            },
+                            onClick = {
+                                onSubjectFilter(subject)
+                                subjectDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Bottom-edge separator under the header so the cards visibly belong
+        // to a section rather than floating below empty space.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(GlassBorder.copy(alpha = 0.6f))
+        )
+    }
+}
+
 @Composable
 private fun HomeworkListContent(
     state: HomeworkUiState,
@@ -460,8 +705,8 @@ private fun HomeworkListContent(
     } else {
         LazyColumn(
             modifier = modifier.padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(vertical = 8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
         ) {
             itemsIndexed(
                 items = state.homeworkList,
@@ -487,99 +732,114 @@ private fun HomeworkCard(
 ) {
     val subjectColor = getSubjectColor(homework.subject)
 
+    // Vertical card layout — the previous horizontal "title left, due-date
+    // column right" was eating ~150dp of the narrow list pane just to show
+    // "Due tomorrow, 11:59 PM IST", which truncated titles to "Test ..."
+    // and forced the subject chip to wrap character-by-character. The new
+    // layout gives the title the full card width, then puts the subject
+    // chip + due date together on a single meta row underneath.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) subjectColor.copy(alpha = 0.08f) else Glass)
+            .background(if (isSelected) subjectColor.copy(alpha = 0.10f) else Glass)
             .border(
                 1.dp,
-                if (isSelected) subjectColor.copy(alpha = 0.3f) else GlassBorder,
+                if (isSelected) subjectColor.copy(alpha = 0.40f) else GlassBorder,
                 RoundedCornerShape(14.dp)
             )
             .bouncyClickable(onClick = onClick)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(start = 0.dp, top = 10.dp, end = 12.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        // Subject color bar
+        // Subject-coloured side bar — full card height via IntrinsicSize.Max
+        // so the bar doesn't go shorter than the content (looked detached).
         Box(
             modifier = Modifier
-                .width(4.dp)
-                .height(48.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .width(3.dp)
+                .height(IntrinsicSize.Max)
                 .background(subjectColor)
         )
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(10.dp))
 
         Column(modifier = Modifier.weight(1f)) {
+            // Title — gets the full card width now. Allow up to 2 lines so
+            // long titles ("Test Case 22 - Real numbers") aren't clipped.
             Text(
                 text = homework.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 18.sp
             )
-            Spacer(modifier = Modifier.height(2.dp))
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Meta row — subject chip + due date on the same line. Both get
+            // their natural width; the chip never wraps because the row is
+            // not weight-constrained.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Subject chip
+                // Subject pill — single-line, capped at sensible width so a
+                // ridiculous subject name doesn't push the date off-screen.
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(subjectColor.copy(alpha = 0.12f))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(subjectColor.copy(alpha = 0.14f))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = homework.subject,
                         style = MaterialTheme.typography.labelSmall,
                         color = subjectColor,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 10.sp
-                    )
-                }
-
-                if (homework.description.isNotBlank()) {
-                    Text(
-                        text = homework.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        fontSize = 10.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Due date — calendar icon + compact label. Truncates if the
+                // pane is somehow even narrower than expected, instead of
+                // forcing the row to break.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Icon(
+                        Icons.Filled.CalendarToday,
+                        contentDescription = null,
+                        tint = TextTertiary,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = formatDueDateIST(homework.dueDate),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.width(12.dp))
-
-        // Due date and time
-        Column(horizontalAlignment = Alignment.End) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.CalendarToday,
-                    contentDescription = null,
-                    tint = TextTertiary,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = homework.dueDate.ifBlank { "No due date" },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary,
-                    fontSize = 10.sp
-                )
-            }
+            // Relative-time hint goes on its own thin row when present —
+            // moved here from the right column so it doesn't fight the
+            // due-date for horizontal space.
             if (homework.createdAt > 0) {
                 Text(
-                    text = homework.createdAt.toRelativeTime(),
+                    text = "Created ${homework.createdAt.toRelativeTime()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
-                    fontSize = 9.sp
+                    fontSize = 9.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                    maxLines = 1
                 )
             }
         }
@@ -591,6 +851,7 @@ private fun HomeworkDetailPanel(
     homework: HomeworkTeacher,
     students: List<StudentInfo>,
     submissions: List<HomeworkStatusEntry>,
+    teacherMarks: Map<String, com.schoolsync.teacher.data.repository.firestore.TeacherMarkEntry>,
     isLoading: Boolean,
     onMarkStatus: (studentId: String, studentName: String, status: String, remark: String, score: Int) -> Unit,
     onDelete: (HomeworkTeacher) -> Unit,
@@ -600,12 +861,33 @@ private fun HomeworkDetailPanel(
     val subjectColor = getSubjectColor(homework.subject)
     val submissionMap = submissions.associateBy { it.studentId }
 
-    // Counts
-    val totalStudents = students.size
-    val completedCount = submissions.count { it.status == "complete" }
-    val submittedCount = submissions.count { it.status == "submitted" }
-    val incompleteCount = submissions.count { it.status == "incomplete" }
-    val pendingCount = totalStudents - submissions.size
+    // ── Status counts ─────────────────────────────────────────────
+    // Each student lands in EXACTLY ONE chip. Source of truth per student:
+    //   1. Submission doc (if exists) — read its `status` field
+    //   2. Else teacherMark doc (if exists) — read its `status` field
+    //      (added 2026-05-06; previously every mark counted as Done
+    //      regardless of what the teacher actually selected)
+    //   3. Else Pending
+    //
+    // Done = reviewed OR complete (both mean "teacher signed off"),
+    // Submitted = parent has turned in but teacher hasn't signed off,
+    // Incomplete = teacher explicitly flagged as not enough,
+    // Pending = no record OR submission/mark with status "pending".
+    var doneCount = 0
+    var submittedCount = 0
+    var incompleteCount = 0
+    var pendingCount = 0
+    for (student in students) {
+        val sub = submissionMap[student.studentId]
+        val mark = if (sub == null) teacherMarks[student.studentId] else null
+        val effectiveStatus = sub?.status ?: mark?.status ?: "pending"
+        when (effectiveStatus.lowercase()) {
+            "complete", "reviewed" -> doneCount++
+            "submitted"            -> submittedCount++
+            "incomplete"           -> incompleteCount++
+            else                   -> pendingCount++   // "pending" + any unknown
+        }
+    }
 
     Column(
         modifier = modifier
@@ -654,7 +936,7 @@ private fun HomeworkDetailPanel(
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
-                        text = "Due: ${homework.dueDate}",
+                        text = formatDueDateIST(homework.dueDate),
                         style = MaterialTheme.typography.labelMedium,
                         color = TextSecondary
                     )
@@ -678,12 +960,15 @@ private fun HomeworkDetailPanel(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Status summary chips
+        // Status summary chips. "Done" merges Reviewed + Complete +
+        // teacher marks (the three end-states where the teacher has
+        // actioned the row); previously Reviewed had no chip and the
+        // students with that status disappeared from the totals.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            StatusChip("Complete", completedCount.toString(), SuccessGreen, SuccessGreenSurface, Modifier.weight(1f))
+            StatusChip("Done", doneCount.toString(), SuccessGreen, SuccessGreenSurface, Modifier.weight(1f))
             StatusChip("Submitted", submittedCount.toString(), InfoBlue, InfoBlueSurface, Modifier.weight(1f))
             StatusChip("Incomplete", incompleteCount.toString(), WarningAmber, WarningAmberSurface, Modifier.weight(1f))
             StatusChip("Pending", pendingCount.toString(), ErrorRed, ErrorRedSurface, Modifier.weight(1f))
@@ -707,9 +992,11 @@ private fun HomeworkDetailPanel(
             ) {
                 items(students, key = { it.studentId }) { student ->
                     val entry = submissionMap[student.studentId]
+                    val mark  = if (entry == null) teacherMarks[student.studentId] else null
                     StudentSubmissionRow(
                         student = student,
                         entry = entry,
+                        teacherMark = mark,
                         onStatusChange = { newStatus, remark, score ->
                             onMarkStatus(student.studentId, student.displayName, newStatus, remark, score)
                         }
@@ -755,9 +1042,14 @@ private fun StatusChip(
 private fun StudentSubmissionRow(
     student: StudentInfo,
     entry: HomeworkStatusEntry?,
+    teacherMark: com.schoolsync.teacher.data.repository.firestore.TeacherMarkEntry? = null,
     onStatusChange: (status: String, remark: String, score: Int) -> Unit
 ) {
-    val currentStatus = entry?.status ?: "pending"
+    // Effective status priority: submission → teacherMark → pending. The
+    // teacherMark fallback was missing, so a non-submitter the teacher had
+    // marked "Incomplete" still rendered as "Pending" in the row pill while
+    // being counted as something else in the chip totals — confusing.
+    val currentStatus = entry?.status ?: teacherMark?.status ?: "pending"
     val (statusColor, statusIcon) = when (currentStatus) {
         "complete" -> SuccessGreen to Icons.Filled.CheckCircle
         "reviewed" -> SuccessGreen to Icons.Filled.CheckCircle
@@ -817,12 +1109,36 @@ private fun StudentSubmissionRow(
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
+            // IST submission time — sourced directly from Firestore submittedAt.
+            if (entry != null && entry.submittedAt > 0L) {
+                Text(
+                    text = formatSubmittedAtIST(entry.submittedAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
             // Show score if graded
             if (entry != null && entry.score >= 0) {
                 Text(
                     text = "Score: ${entry.score}" + if (entry.remark.isNotBlank()) " — ${entry.remark}" else "",
                     style = MaterialTheme.typography.labelSmall,
                     color = SuccessGreen,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            // Phase HW: teacher recorded an evaluation for this student even
+            // though they didn't submit (lives in teacherMarks collection).
+            // Score only shown when actually graded (>=0); the status itself
+            // already conveys "Incomplete" / "Pending" without a number.
+            if (entry == null && teacherMark != null) {
+                val scoreSuffix = if (teacherMark.score >= 0) " · score: ${teacherMark.score}" else ""
+                val remarkSuffix = if (teacherMark.remark.isNotBlank()) " — ${teacherMark.remark}" else ""
+                Text(
+                    text = "Marked (no submission)$scoreSuffix$remarkSuffix",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = WarningAmber,
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
@@ -879,6 +1195,12 @@ private fun StudentSubmissionRow(
     if (showReviewDialog) {
         var scoreText by remember { mutableStateOf(if (entry != null && entry.score >= 0) entry.score.toString() else "") }
         var remarkText by remember { mutableStateOf(entry?.remark ?: "") }
+        // Score bounds: empty input ⇒ -1 sentinel ("ungraded"). Otherwise must
+        // parse to 0..200. 200 is generous (handles per-/200 papers) while
+        // still catching obvious typos like 999. Without a maxMarks field on
+        // HomeworkDoc this is a reasonable cap.
+        val parsedScore = scoreText.toIntOrNull()
+        val scoreValid = scoreText.isEmpty() || (parsedScore != null && parsedScore in 0..200)
 
         AlertDialog(
             onDismissRequest = { showReviewDialog = false },
@@ -899,6 +1221,13 @@ private fun StudentSubmissionRow(
                                 .background(Glass)
                                 .padding(10.dp)
                         )
+                        if (entry.submittedAt > 0L) {
+                            Text(
+                                formatSubmittedAtIST(entry.submittedAt),
+                                color = TextTertiary,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                     OutlinedTextField(
                         value = scoreText,
@@ -906,6 +1235,10 @@ private fun StudentSubmissionRow(
                         label = { Text("Score") },
                         placeholder = { Text("e.g. 8") },
                         singleLine = true,
+                        isError = !scoreValid,
+                        supportingText = if (!scoreValid) {
+                            { Text("Score must be 0–200", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                        } else null,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Teal,
                             unfocusedBorderColor = GlassBorder,
@@ -918,10 +1251,14 @@ private fun StudentSubmissionRow(
                     )
                     OutlinedTextField(
                         value = remarkText,
-                        onValueChange = { remarkText = it },
+                        // Cap at 500 chars at input time so paste of a large
+                        // body can't bloat the Firestore doc or push payload.
+                        // Visible counter keeps the limit obvious.
+                        onValueChange = { if (it.length <= 500) remarkText = it },
                         label = { Text("Remark") },
                         placeholder = { Text("e.g. Good work, keep it up!") },
                         maxLines = 3,
+                        supportingText = { Text("${remarkText.length} / 500", fontSize = 11.sp, color = TextSecondary) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Teal,
                             unfocusedBorderColor = GlassBorder,
@@ -935,12 +1272,20 @@ private fun StudentSubmissionRow(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val score = scoreText.toIntOrNull() ?: -1
-                    onStatusChange("reviewed", remarkText.trim(), score)
-                    showReviewDialog = false
-                }) {
-                    Text("Submit Review", color = Teal, fontWeight = FontWeight.Bold)
+                TextButton(
+                    onClick = {
+                        // Empty ⇒ -1 sentinel; otherwise the bounds-validated value.
+                        val score = if (scoreText.isEmpty()) -1 else (parsedScore ?: -1)
+                        onStatusChange("reviewed", remarkText.trim(), score)
+                        showReviewDialog = false
+                    },
+                    enabled = scoreValid
+                ) {
+                    Text(
+                        "Submit Review",
+                        color = if (scoreValid) Teal else TextSecondary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {
@@ -967,6 +1312,10 @@ private fun CreateHomeworkDialog(
     onDismiss: () -> Unit
 ) {
     var subjectDropdownExpanded by remember { mutableStateOf(false) }
+    // Hoisted out of the AlertDialog text slot — nesting a Dialog inside
+    // another Dialog clips the inner dialog's buttons on smaller screens
+    // (was causing the "DatePicker auto-closes with no OK option" bug).
+    var showDatePicker by remember { mutableStateOf(false) }
 
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
@@ -979,12 +1328,32 @@ private fun CreateHomeworkDialog(
     )
 
     AlertDialog(
-        onDismissRequest = { if (!formState.isSubmitting) onDismiss() },
+        // Outside-tap must NOT dismiss — teacher may tap the form's edge while
+        // typing and lose entered data. Only the X button or Cancel closes.
+        onDismissRequest = { },
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = null, tint = Teal, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Create Homework", color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text(
+                    "Create Homework",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = { if (!formState.isSubmitting) onDismiss() },
+                    enabled = !formState.isSubmitting
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = TextSecondary
+                    )
+                }
             }
         },
         text = {
@@ -1048,8 +1417,10 @@ private fun CreateHomeworkDialog(
                     }
                 }
 
-                // Fix #1: Due date with clickable field + DatePicker
-                var showDatePicker by remember { mutableStateOf(false) }
+                // Due date — tapping opens DatePickerDialog rendered as a
+                // sibling of this AlertDialog (see end of function). The
+                // dialog itself is NOT nested here, otherwise its OK/Cancel
+                // buttons get clipped on smaller screens.
                 OutlinedTextField(
                     value = formState.dueDate.ifBlank { "Tap to select date" },
                     onValueChange = {},
@@ -1062,31 +1433,6 @@ private fun CreateHomeworkDialog(
                     enabled = false, // makes entire field clickable
                     colors = textFieldColors
                 )
-
-                if (showDatePicker) {
-                    val datePickerState = rememberDatePickerState(
-                        initialSelectedDateMillis = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L // default: 1 week from now
-                    )
-                    DatePickerDialog(
-                        onDismissRequest = { showDatePicker = false },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                datePickerState.selectedDateMillis?.let { millis ->
-                                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                                    onDueDateChange(sdf.format(java.util.Date(millis)))
-                                }
-                                showDatePicker = false
-                            }) { Text("OK", color = Teal) }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showDatePicker = false }) {
-                                Text("Cancel", color = TextSecondary)
-                            }
-                        }
-                    ) {
-                        DatePicker(state = datePickerState)
-                    }
-                }
             }
         },
         confirmButton = {
@@ -1124,6 +1470,64 @@ private fun CreateHomeworkDialog(
         containerColor = SurfaceDark,
         shape = RoundedCornerShape(20.dp)
     )
+
+    // DatePickerDialog rendered as a sibling of the parent AlertDialog so it
+    // gets its own dialog window. Nesting it inside AlertDialog.text { } caused
+    // the OK/Cancel buttons to be clipped on the iQOO and similar devices —
+    // teacher would tap a date and the picker would auto-close with no
+    // confirm option.
+    if (showDatePicker) {
+        // Initialise the picker with the form's currently-set due date, if any,
+        // so re-opening the picker shows the existing pick instead of defaulting
+        // back to "+7 days from now". Falls back to +7 days when blank/invalid.
+        val initialMillis = remember(formState.dueDate) {
+            val parsed = try {
+                if (formState.dueDate.isNotBlank()) {
+                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                        .parse(formState.dueDate)?.time
+                } else null
+            } catch (e: Exception) { null }
+            parsed ?: (System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L)
+        }
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+
+        // Auto-fill + auto-close as soon as the user picks a date — was a UX
+        // complaint that the dialog wouldn't close until the OK button was
+        // tapped, and the field wouldn't update either. Compare against the
+        // initial value so the LaunchedEffect doesn't fire on the picker's
+        // own seed value.
+        androidx.compose.runtime.LaunchedEffect(datePickerState.selectedDateMillis) {
+            val ms = datePickerState.selectedDateMillis ?: return@LaunchedEffect
+            if (ms != initialMillis) {
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                onDueDateChange(sdf.format(java.util.Date(ms)))
+                showDatePicker = false
+            }
+        }
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            // OK + Cancel kept as a fallback for users who want to confirm the
+            // initial preselected value (auto-fill skips OK only when the
+            // user actually picks a *different* date).
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                        onDueDateChange(sdf.format(java.util.Date(millis)))
+                    }
+                    showDatePicker = false
+                }) { Text("OK", color = Teal) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 }
 
 /** Map subject names to theme colors. */
@@ -1139,5 +1543,88 @@ private fun getSubjectColor(subject: String): Color {
         "social" in lower || "history" in lower || "geography" in lower || "civics" in lower -> SubjectSocial
         "computer" in lower || "comp" in lower || "it" == lower -> InfoBlue
         else -> SubjectDefault
+    }
+}
+
+/**
+ * Format an ISO 8601 (or legacy YYYY-MM-DD) dueDate string into an
+ * IST-friendly label:
+ *   - same day  → "Due today (h:mm a)"
+ *   - next day  → "Due tomorrow"
+ *   - otherwise → "Due on dd MMM"
+ * Returns "No due date" for blank input and the raw string if unparseable.
+ */
+private fun formatDueDateIST(raw: String): String {
+    if (raw.isBlank()) return "No due date"
+    val tz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+    val patterns = listOf(
+        "yyyy-MM-dd'T'HH:mm:ssXXX",
+        "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        "yyyy-MM-dd",
+        "dd-MM-yyyy",
+        "dd/MM/yyyy"
+    )
+    var due: java.util.Date? = null
+    for (p in patterns) {
+        try {
+            val sdf = java.text.SimpleDateFormat(p, java.util.Locale.US)
+            if (p.endsWith("'Z'")) sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val d = sdf.parse(raw)
+            if (d != null) { due = d; break }
+        } catch (_: Exception) {}
+    }
+    if (due == null) return raw
+    fun istDay(d: java.util.Date): Long {
+        val c = java.util.Calendar.getInstance(tz).apply {
+            time = d
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }
+        return c.timeInMillis / 86_400_000L
+    }
+    val diff = istDay(due) - istDay(java.util.Date())
+    val timeFmt = java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).apply { timeZone = tz }
+    val dateFmtShort = java.text.SimpleDateFormat("dd MMM", java.util.Locale.US).apply { timeZone = tz }
+    val dateFmtLong  = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).apply { timeZone = tz }
+    val time = timeFmt.format(due)
+    return when {
+        diff == 0L  -> "Due today, $time IST"
+        diff == 1L  -> "Due tomorrow, $time IST"
+        diff in 2..6 -> "Due ${dateFmtShort.format(due)}, $time IST"
+        else        -> "Due ${dateFmtLong.format(due)}, $time IST"
+    }
+}
+
+/**
+ * Format a submission timestamp (Long millis) as IST date/time.
+ * "Submitted just now" / "Submitted 5m ago" / "Submitted today, 11:30 AM" /
+ * "Submitted 5 May, 11:30 AM IST" / "Submitted 5 May 2026, 11:30 AM IST".
+ * Returns empty string for 0 / negative input.
+ */
+private fun formatSubmittedAtIST(ms: Long): String {
+    if (ms <= 0L) return ""
+    val tz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+    val now = System.currentTimeMillis()
+    val diffMs = now - ms
+    if (diffMs in 0..59_000L) return "Submitted just now"
+    if (diffMs in 60_000L..3_599_000L) return "Submitted ${diffMs / 60_000}m ago"
+    val timeFmt = java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).apply { timeZone = tz }
+    val dateFmtShort = java.text.SimpleDateFormat("dd MMM", java.util.Locale.US).apply { timeZone = tz }
+    val dateFmtLong  = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).apply { timeZone = tz }
+    fun istDay(t: Long): Long {
+        val c = java.util.Calendar.getInstance(tz).apply {
+            timeInMillis = t
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }
+        return c.timeInMillis / 86_400_000L
+    }
+    val daysAgo = istDay(now) - istDay(ms)
+    val time = timeFmt.format(java.util.Date(ms))
+    return when {
+        daysAgo == 0L -> "Submitted today, $time"
+        daysAgo == 1L -> "Submitted yesterday, $time"
+        daysAgo in 2..6 -> "Submitted ${dateFmtShort.format(java.util.Date(ms))}, $time IST"
+        else -> "Submitted ${dateFmtLong.format(java.util.Date(ms))}, $time IST"
     }
 }

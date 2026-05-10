@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -102,6 +103,20 @@ fun RedFlagTeacherScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var lastEventWasError by remember { mutableStateOf(false) }
 
+    // Phase 6A — bottom-sheet state for the 1-tap quick flag flow.
+    // Hosted at the screen level so any row-level 🚩 trigger inside
+    // StudentFlagList can reuse a single sheet instance.
+    val quickFlagState = rememberQuickFlagSheetState()
+
+    // Auto-dismiss the Undo snackbar after 5s and drop the handle so
+    // the next quick flag starts a fresh undo window.
+    LaunchedEffect(state.lastCreatedFlagId) {
+        if (state.lastCreatedFlagId != null) {
+            kotlinx.coroutines.delay(5000)
+            viewModel.clearLastCreatedFlagId()
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
@@ -161,7 +176,30 @@ fun RedFlagTeacherScreen(
             },
             floatingActionButton = {
                 ExtendedFloatingActionButton(
-                    onClick = { viewModel.showCreateDialog() },
+                    onClick = {
+                        // Phase 6A — FAB now opens the quick flag sheet
+                        // for whichever student is currently selected.
+                        // No selection → emit a hint event so the user
+                        // knows to pick a row first (the inline 🚩 icon
+                        // on each row is the canonical entry point).
+                        val cs = state.selectedClass
+                        val sid = state.selectedStudentId
+                        val student = state.students.firstOrNull { it.studentId == sid }
+                        if (cs != null && student != null) {
+                            quickFlagState.showFor(
+                                student = student,
+                                classKey = cs.className,
+                                sectionKey = cs.section,
+                                defaultSubject = "",
+                                forceSubjectPick = true,
+                                subjectsForClass = state.subjectsForClass
+                            )
+                        } else {
+                            viewModel.showHint(
+                                "Tap the 🚩 next to a student to raise a flag"
+                            )
+                        }
+                    },
                     containerColor = ErrorRed,
                     contentColor = TextPrimary,
                     shape = RoundedCornerShape(16.dp)
@@ -206,8 +244,23 @@ fun RedFlagTeacherScreen(
                             flagsByStudent = state.flagsByStudent,
                             selectedStudentId = state.selectedStudentId,
                             onStudentSelected = viewModel::selectStudent,
+                            // Phase 6A — 🚩 trailing icon now opens the
+                            // quick flag sheet. Subject is forced (Red
+                            // Flags screen has no subject context); list
+                            // of valid subjects comes from the teacher's
+                            // assignments for this class+section.
                             onCreateFlag = { student ->
-                                viewModel.showCreateDialog(student.studentId, student.displayName)
+                                val cs = state.selectedClass
+                                if (cs != null) {
+                                    quickFlagState.showFor(
+                                        student          = student,
+                                        classKey         = cs.className,
+                                        sectionKey       = cs.section,
+                                        defaultSubject   = "",
+                                        forceSubjectPick = true,
+                                        subjectsForClass = state.subjectsForClass
+                                    )
+                                }
                             },
                             modifier = Modifier
                                 .weight(0.35f)
@@ -246,6 +299,20 @@ fun RedFlagTeacherScreen(
                 onDismiss = viewModel::hideCreateDialog
             )
         }
+
+        // Phase 6A — quick flag sheet, controlled by quickFlagState
+        QuickFlagSheet(
+            state = quickFlagState,
+            onSubmit = viewModel::submitQuickFlag
+        )
+
+        // Phase 6A — 5-second Undo banner, anchored bottom-center.
+        // Visible only while lastCreatedFlagId is non-null (auto-cleared
+        // by LaunchedEffect at the top of the composable).
+        QuickFlagUndoBanner(
+            visible = state.lastCreatedFlagId != null,
+            onUndo = viewModel::undoLastQuickFlag
+        )
 
         // Error dialog
         state.error?.let { error ->
@@ -435,7 +502,7 @@ private fun StudentFlagList(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(students, key = { it.studentId }) { student ->
+                itemsIndexed(students, key = { _, s -> s.studentId }) { index, student ->
                     val flags = flagsByStudent[student.studentId] ?: emptyList()
                     val activeFlags = flags.count { it.status == "active" }
                     val highFlags = flags.count { it.status == "active" && it.severity == "high" }
@@ -443,6 +510,10 @@ private fun StudentFlagList(
 
                     StudentFlagRow(
                         student = student,
+                        // Row index used as fallback when the student
+                        // record has no `rollNo` populated — "-" was
+                        // confusing teachers who expected a serial number.
+                        rowIndex = index + 1,
                         activeFlagCount = activeFlags,
                         highFlagCount = highFlags,
                         isSelected = isSelected,
@@ -458,6 +529,7 @@ private fun StudentFlagList(
 @Composable
 private fun StudentFlagRow(
     student: StudentInfo,
+    rowIndex: Int,
     activeFlagCount: Int,
     highFlagCount: Int,
     isSelected: Boolean,
@@ -496,7 +568,10 @@ private fun StudentFlagRow(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = student.rollNo.ifBlank { "-" },
+                // Show explicit roll number when populated; otherwise
+                // fall back to the row index so every student gets a
+                // visible serial number.
+                text = student.rollNo.ifBlank { rowIndex.toString() },
                 style = MaterialTheme.typography.labelSmall,
                 color = TextSecondary,
                 fontWeight = FontWeight.Bold,
@@ -643,9 +718,10 @@ private fun FlagDetailPanel(
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
                 items(displayFlags, key = { "${it.first}_${it.second.flagId}" }) { (studentId, flag) ->
-                    val canDelete = flag.createdByRole == "teacher"
-                        && flag.teacherId.isNotBlank()
-                        && flag.teacherId == currentTeacherUid
+                    // Soft-delete is open to any school staff (mirrors the
+                    // resolve permission). Hide for already-deleted flags
+                    // since you can't delete a deleted doc again.
+                    val canDelete = flag.status != "deleted"
                     FlagCard(
                         flag = flag,
                         showStudentName = selectedStudentId == null,
@@ -938,12 +1014,32 @@ private fun CreateFlagDialog(
     val severities = listOf("low", "medium", "high")
 
     AlertDialog(
-        onDismissRequest = { if (!formState.isSubmitting) onDismiss() },
+        // Outside-tap must NOT dismiss — teacher may tap the form's edge while
+        // typing and lose entered data. Only the X button or Cancel closes.
+        onDismissRequest = { },
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(Icons.Filled.Flag, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Create Red Flag", color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text(
+                    "Create Red Flag",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = { if (!formState.isSubmitting) onDismiss() },
+                    enabled = !formState.isSubmitting
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = TextSecondary
+                    )
+                }
             }
         },
         text = {

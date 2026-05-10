@@ -15,6 +15,9 @@ import com.schoolsync.teacher.data.repository.firestore.CommunicationFirestoreRe
 import com.schoolsync.teacher.data.repository.firestore.SectionFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.TimetableFirestoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -112,217 +115,163 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                // Load teacher name from local storage
+                // Teacher name + assignments are the gating prereqs — every
+                // other fetch needs the assigned class+section list. Run
+                // these first; the rest fans out in parallel below.
                 val name = tokenManager.userName.firstOrNull() ?: ""
                 _uiState.update { it.copy(teacherName = name) }
 
-                // Load assigned classes
-                var assignedClasses = emptyList<ClassAssignment>()
-                teacherRepository.getAssignedClasses().fold(
-                    onSuccess = { classes ->
-                        assignedClasses = classes
-                        val classLabels = classes.map { it.classKey }.distinct()
+                val assignedClasses = teacherRepository.getAssignedClasses()
+                    .getOrNull() ?: emptyList()
+                val classLabels = assignedClasses.map { it.classKey }.distinct()
+                val classTeacherOf = assignedClasses
+                    .filter { it.classTeacher }
+                    .map { "${it.className} — ${it.section}" }
+                    .distinct()
+                _uiState.update {
+                    it.copy(assignedClasses = classLabels, classTeacherOf = classTeacherOf)
+                }
 
-                        // Class-teacher sections — collected from any
-                        // assignment row with isClassTeacher=true. Same
-                        // teacher may be class teacher of multiple sections
-                        // in theory, so we keep a list and de-dupe.
-                        val classTeacherOf = classes
-                            .filter { it.classTeacher }
-                            .map { "${it.className} — ${it.section}" }
-                            .distinct()
-
-                        _uiState.update {
-                            it.copy(
-                                assignedClasses = classLabels,
-                                classTeacherOf = classTeacherOf,
-                            )
-                        }
-                    },
-                    onFailure = { /* non-critical */ }
-                )
-
-                // Phase 10f: Load today's attendance summary for class-teacher sections
-                val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-                val monthKey = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
+                val classSectionsDistinct = assignedClasses
+                    .map { it.className to it.section }
+                    .distinct()
                 val classTeacherSections = assignedClasses
                     .filter { it.classTeacher }
                     .map { it.className to it.section }
                     .distinct()
-                var attTotal = 0; var attP = 0; var attA = 0; var attT = 0; var attL = 0; var attUnmarked = 0
-                for ((cls, sec) in classTeacherSections) {
-                    try {
-                        val students = studentRepository.getStudentsForClass(cls, sec).getOrNull() ?: emptyList()
-                        for (student in students) {
-                            attTotal++
-                            val summary = attendanceFirestoreRepo.getStudentAttendanceSummary(student.studentId, monthKey).getOrNull()
-                            val dw = summary?.dayWise ?: ""
-                            if (dw.length >= today) {
-                                when (dw[today - 1]) {
-                                    'P' -> attP++
-                                    'A' -> attA++
-                                    'T' -> attT++
-                                    'L' -> attL++
-                                    else -> attUnmarked++
-                                }
-                            } else {
-                                attUnmarked++
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-                _uiState.update { it.copy(todayAttendance = TodayAttendanceSummary(
-                    totalStudents = attTotal, present = attP, absent = attA,
-                    tardy = attT, leave = attL, unmarked = attUnmarked
-                )) }
 
-                // Load today's timetable — Firestore canonical source (Phase C-1).
-                // Pre-compute class/section pairs from already-fetched assignments
-                // so we don't re-query them inside the repo.
-                val timetableClassSections = assignedClasses
-                    .map { it.className to it.section }
-                    .distinct()
-                timetableFirestoreRepo.getMyTimetable(timetableClassSections).fold(
-                    onSuccess = { dayTimetables ->
-                        val todayName = todayDayName()
-                        val todayPeriods = dayTimetables
-                            .filter { it.day.equals(todayName, ignoreCase = true) }
-                            .flatMap { it.periods }
-                            .sortedBy { it.periodNumber }
-
-                        val currentPeriod = calculateCurrentPeriod(todayPeriods)
-
-                        val schedule = todayPeriods.map { entry ->
-                            PeriodItem(
-                                periodNumber = entry.periodNumber,
-                                time = entry.timeSlot,
-                                subject = entry.subject,
-                                className = entry.className,
-                                section = entry.section,
-                                isCurrent = entry.periodNumber == currentPeriod
-                            )
-                        }
-                        _uiState.update { it.copy(todaySchedule = schedule) }
-                    },
-                    onFailure = { /* use empty list */ }
-                )
-
-                // Firestore: Load section data (student counts) for assigned classes
-                // TODO: Remove RTDB fallback after Firestore validation
-                val classSectionsDistinct = assignedClasses
-                    .map { it.className to it.section }
-                    .distinct()
-                var firestoreStudentCount = 0
-                for ((className, section) in classSectionsDistinct) {
-                    sectionFirestoreRepo.getSection(className, section).fold(
-                        onSuccess = { sectionDoc ->
-                            firestoreStudentCount += sectionDoc.studentCount
-                        },
-                        onFailure = { /* non-critical, use RTDB fallback data */ }
-                    )
-                }
-
-                // Firestore: Load circulars count for recent activity
-                // TODO: Remove RTDB fallback after Firestore validation
-                var recentCircularCount = 0
-                communicationFirestoreRepo.getCirculars(limit = 10).fold(
-                    onSuccess = { circulars ->
-                        recentCircularCount = circulars.size
-                    },
-                    onFailure = { /* non-critical */ }
-                )
-
-                // Build quick stats — start with classes/subjects/periods
-                val uniqueClasses = assignedClasses.map { it.classKey }.distinct().size
+                // Fan everything else out in parallel. Each block returns
+                // its own slice of the final state; we update the UI once
+                // at the end. coroutineScope ensures all children either
+                // succeed or surface a single failure to the outer try.
+                val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+                val monthKey = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
+                val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                 val todayDate = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
 
-                // Load homework due today + active flags across all assigned classes
-                var homeworkDueToday = 0
-                var activeFlagCount = 0
-                try {
-                    for ((className, section) in classSectionsDistinct) {
-                        homeworkDueToday += homeworkRepository.getHomeworkDueTodayCount(
-                            className, section, todayDate
-                        )
-                        val students = studentRepository.getStudentsForClass(className, section)
-                            .getOrNull() ?: emptyList()
-                        activeFlagCount += redFlagRepository.getTotalActiveFlagCount(students)
-                    }
-                } catch (_: Exception) { /* non-critical */ }
+                coroutineScope {
+                    // 1. Today's attendance — class-wide query, NOT per-student.
+                    //    One Firestore RPC per class-teacher section returns
+                    //    every student's monthly summary. We then read the
+                    //    today-th char of dayWise locally.
+                    val attendanceJob = async {
+                        var total = 0; var p = 0; var a = 0; var t = 0; var l = 0; var unmarked = 0
+                        for ((cls, sec) in classTeacherSections) {
+                            try {
+                                val students = studentRepository.getStudentsForClass(cls, sec)
+                                    .getOrNull() ?: emptyList()
+                                val sectionKey = "$cls/$sec"
+                                val summaries = attendanceFirestoreRepo
+                                    .getClassMonthlySummaries(sectionKey, monthKey)
+                                    .getOrNull().orEmpty()
+                                val byStudent = summaries.associateBy { it.studentId }
 
-                val stats = listOf(
-                    QuickStat("Classes", uniqueClasses.toString(), "assigned"),
-                    QuickStat("Today", _uiState.value.todaySchedule.size.toString(), "periods"),
-                    QuickStat("HW Due", homeworkDueToday.toString(), "today"),
-                    QuickStat("Flags", activeFlagCount.toString(), "active")
-                )
-
-                // Load substitute info for today
-                // Shows either "X is covering your P1" (if I'm absent)
-                // or "You are covering for X at P1" (if I'm the substitute)
-                var subInfo: String? = null
-                try {
-                    val myId = tokenManager.userId.firstOrNull() ?: ""
-                    val mySchool = tokenManager.schoolCode.firstOrNull()
-                        ?: tokenManager.schoolId.firstOrNull() ?: ""
-                    val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                    if (myId.isNotBlank() && mySchool.isNotBlank()) {
-                        val subSnapshot = firestoreService.queryDocuments("substitutes") { ref ->
-                            ref.whereEqualTo("date", todayStr)
-                        }
-                        if (!subSnapshot.isEmpty) {
-                            val parts = mutableListOf<String>()
-                            for (doc in subSnapshot.documents) {
-                                val data = doc.data ?: continue
-                                if ((data["schoolId"]?.toString() ?: "") != mySchool) continue
-                                if ((data["status"]?.toString() ?: "") == "cancelled") continue
-
-                                val absentId = data["absent_teacher_id"]?.toString() ?: ""
-                                val absentName = data["absent_teacher_name"]?.toString() ?: ""
-
-                                @Suppress("UNCHECKED_CAST")
-                                val assignments = data["assignments"] as? List<Map<String, Any>>
-
-                                if (absentId == myId) {
-                                    // I'm absent — show who is covering my classes
-                                    if (assignments != null && assignments.isNotEmpty()) {
-                                        for (a in assignments) {
-                                            val sName = a["substitute_teacher_name"]?.toString() ?: "Substitute"
-                                            val pn = (a["periodNumber"] as? Number)?.toInt() ?: continue
-                                            parts.add("$sName covering P$pn")
+                                for (student in students) {
+                                    total++
+                                    val dw = byStudent[student.studentId]?.dayWise.orEmpty()
+                                    if (dw.length >= today) {
+                                        when (dw[today - 1]) {
+                                            'P' -> p++
+                                            'A' -> a++
+                                            'T' -> t++
+                                            'L' -> l++
+                                            else -> unmarked++
                                         }
                                     } else {
-                                        val sName = data["substitute_teacher_name"]?.toString() ?: "Substitute"
-                                        @Suppress("UNCHECKED_CAST")
-                                        val periods = (data["periods"] as? List<*>)?.joinToString(", ") { "P$it" } ?: ""
-                                        parts.add("$sName covering $periods")
-                                    }
-                                } else if (assignments != null && assignments.isNotEmpty()) {
-                                    // Check if I'm a substitute in any assignment
-                                    for (a in assignments) {
-                                        val subTid = a["substitute_teacher_id"]?.toString() ?: ""
-                                        if (subTid == myId) {
-                                            val pn = (a["periodNumber"] as? Number)?.toInt() ?: continue
-                                            val subj = a["subject"]?.toString() ?: ""
-                                            parts.add("Covering for $absentName — P$pn $subj")
-                                        }
-                                    }
-                                } else {
-                                    // Legacy: check flat substitute_teacher_id
-                                    if ((data["substitute_teacher_id"]?.toString() ?: "") == myId) {
-                                        @Suppress("UNCHECKED_CAST")
-                                        val periods = (data["periods"] as? List<*>)?.joinToString(", ") { "P$it" } ?: ""
-                                        parts.add("Covering for $absentName — $periods")
+                                        unmarked++
                                     }
                                 }
-                            }
-                            if (parts.isNotEmpty()) subInfo = parts.joinToString(" | ")
+                            } catch (_: Exception) { /* non-critical */ }
+                        }
+                        TodayAttendanceSummary(
+                            totalStudents = total, present = p, absent = a,
+                            tardy = t, leave = l, unmarked = unmarked
+                        )
+                    }
+
+                    // 2. Timetable — independent.
+                    val timetableJob = async {
+                        timetableFirestoreRepo.getMyTimetable(classSectionsDistinct).fold(
+                            onSuccess = { dayTimetables ->
+                                val todayName = todayDayName()
+                                val todayPeriods = dayTimetables
+                                    .filter { it.day.equals(todayName, ignoreCase = true) }
+                                    .flatMap { it.periods }
+                                    .sortedBy { it.periodNumber }
+                                val currentPeriod = calculateCurrentPeriod(todayPeriods)
+                                todayPeriods.map { entry ->
+                                    PeriodItem(
+                                        periodNumber = entry.periodNumber,
+                                        time = entry.timeSlot,
+                                        subject = entry.subject,
+                                        className = entry.className,
+                                        section = entry.section,
+                                        isCurrent = entry.periodNumber == currentPeriod
+                                    )
+                                }
+                            },
+                            onFailure = { emptyList() }
+                        )
+                    }
+
+                    // 3. Homework due today — one class-wide query per section.
+                    val homeworkDueJobs = classSectionsDistinct.map { (cls, sec) ->
+                        async {
+                            try {
+                                homeworkRepository.getHomeworkDueTodayCount(cls, sec, todayDate)
+                            } catch (_: Exception) { 0 }
                         }
                     }
-                } catch (_: Exception) { /* non-critical */ }
 
-                _uiState.update {
-                    it.copy(quickStats = stats, substituteInfo = subInfo, isLoading = false)
+                    // 4. Active flags — one class-wide query per section.
+                    //    Reuses students fetched in (5), keyed below.
+                    //    We launch the students fetch first so flag job can
+                    //    await its result without a second RPC.
+                    val studentsBySection = classSectionsDistinct.associateWith { (cls, sec) ->
+                        async {
+                            try {
+                                studentRepository.getStudentsForClass(cls, sec)
+                                    .getOrNull() ?: emptyList()
+                            } catch (_: Exception) { emptyList() }
+                        }
+                    }
+                    val flagJobs = classSectionsDistinct.map { key ->
+                        async {
+                            try {
+                                val students = studentsBySection.getValue(key).await()
+                                redFlagRepository.getTotalActiveFlagCount(students)
+                            } catch (_: Exception) { 0 }
+                        }
+                    }
+
+                    // 5. Substitute info — independent.
+                    val subInfoJob = async { loadSubstituteInfo(todayIso) }
+
+                    // Await everything in parallel — total wall time is the
+                    // slowest single fetch, not the sum.
+                    val attendance = attendanceJob.await()
+                    val schedule = timetableJob.await()
+                    val homeworkDueToday = homeworkDueJobs.awaitAll().sum()
+                    val activeFlagCount = flagJobs.awaitAll().sum()
+                    val subInfo = subInfoJob.await()
+
+                    val uniqueClasses = classLabels.size
+                    val stats = listOf(
+                        QuickStat("Classes", uniqueClasses.toString(), "assigned"),
+                        QuickStat("Today", schedule.size.toString(), "periods"),
+                        QuickStat("HW Due", homeworkDueToday.toString(), "today"),
+                        QuickStat("Flags", activeFlagCount.toString(), "active")
+                    )
+
+                    _uiState.update {
+                        it.copy(
+                            todayAttendance = attendance,
+                            todaySchedule = schedule,
+                            quickStats = stats,
+                            substituteInfo = subInfo,
+                            isLoading = false
+                        )
+                    }
                 }
 
             } catch (e: Exception) {
@@ -331,6 +280,71 @@ class DashboardViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Today's substitute coverage — either someone covering my classes
+     * (I'm absent) or me covering someone else's. Single Firestore query.
+     */
+    private suspend fun loadSubstituteInfo(todayIso: String): String? {
+        return try {
+            val myId = tokenManager.userId.firstOrNull() ?: ""
+            val mySchool = tokenManager.schoolCode.firstOrNull()
+                ?: tokenManager.schoolId.firstOrNull() ?: ""
+            if (myId.isBlank() || mySchool.isBlank()) return null
+
+            val subSnapshot = firestoreService.queryDocuments("substitutes") { ref ->
+                ref.whereEqualTo("date", todayIso)
+            }
+            if (subSnapshot.isEmpty) return null
+
+            val parts = mutableListOf<String>()
+            for (doc in subSnapshot.documents) {
+                val data = doc.data ?: continue
+                if ((data["schoolId"]?.toString() ?: "") != mySchool) continue
+                if ((data["status"]?.toString() ?: "") == "cancelled") continue
+
+                val absentId = data["absent_teacher_id"]?.toString() ?: ""
+                val absentName = data["absent_teacher_name"]?.toString() ?: ""
+
+                @Suppress("UNCHECKED_CAST")
+                val assignments = data["assignments"] as? List<Map<String, Any>>
+
+                if (absentId == myId) {
+                    // I'm absent — who is covering my classes?
+                    if (!assignments.isNullOrEmpty()) {
+                        for (a in assignments) {
+                            val sName = a["substitute_teacher_name"]?.toString() ?: "Substitute"
+                            val pn = (a["periodNumber"] as? Number)?.toInt() ?: continue
+                            parts.add("$sName covering P$pn")
+                        }
+                    } else {
+                        val sName = data["substitute_teacher_name"]?.toString() ?: "Substitute"
+                        @Suppress("UNCHECKED_CAST")
+                        val periods = (data["periods"] as? List<*>)?.joinToString(", ") { "P$it" } ?: ""
+                        parts.add("$sName covering $periods")
+                    }
+                } else if (!assignments.isNullOrEmpty()) {
+                    // Am I a substitute in any assignment?
+                    for (a in assignments) {
+                        val subTid = a["substitute_teacher_id"]?.toString() ?: ""
+                        if (subTid == myId) {
+                            val pn = (a["periodNumber"] as? Number)?.toInt() ?: continue
+                            val subj = a["subject"]?.toString() ?: ""
+                            parts.add("Covering for $absentName — P$pn $subj")
+                        }
+                    }
+                } else {
+                    // Legacy flat substitute_teacher_id shape.
+                    if ((data["substitute_teacher_id"]?.toString() ?: "") == myId) {
+                        @Suppress("UNCHECKED_CAST")
+                        val periods = (data["periods"] as? List<*>)?.joinToString(", ") { "P$it" } ?: ""
+                        parts.add("Covering for $absentName — $periods")
+                    }
+                }
+            }
+            if (parts.isEmpty()) null else parts.joinToString(" | ")
+        } catch (_: Exception) { null }
     }
 
     private fun todayDayName(): String {

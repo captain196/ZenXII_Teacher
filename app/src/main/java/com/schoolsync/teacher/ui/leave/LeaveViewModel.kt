@@ -76,6 +76,8 @@ data class LeaveUiState(
     val applyStartDate: String = "",
     val applyEndDate: String = "",
     val applyReason: String = "",
+    val applyHalfDay: Boolean = false,
+    val applyHalfDayPeriod: String = "AM",   // "AM" | "PM"
     val isSubmitting: Boolean = false,
     val leaveTypes: List<String> = emptyList(),
     // Phase 10e: Student Leave tab
@@ -111,6 +113,10 @@ class LeaveViewModel @Inject constructor(
 
     private var cachedAssignments: List<ClassAssignment> = emptyList()
 
+    // CR-3 cross-system: name → paid map captured at loadLeaveData time so
+    // submitLeaveRequest can snapshot the paid flag on the leave doc.
+    private val leaveTypeNameToPaidCache = mutableMapOf<String, Boolean>()
+
     init {
         loadLeaveData()
         checkClassTeacherStatus()
@@ -120,21 +126,69 @@ class LeaveViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                // Load leave types from Firestore schools doc
+                // Resolve staff gender once up-front so we can use it
+                // for BOTH the Apply Leave type dropdown and the balances
+                // list. Previously the gender filter only applied to
+                // balances, so a male teacher still saw "Maternity Leave"
+                // in the Apply dialog.
+                val schoolCodeForLookup = tokenManager.schoolCode.firstOrNull()
+                    ?: tokenManager.schoolId.firstOrNull() ?: ""
+                val teacherIdForLookup = tokenManager.userId.firstOrNull() ?: ""
+                val staffGenderShared: String = try {
+                    if (schoolCodeForLookup.isNotBlank() && teacherIdForLookup.isNotBlank()) {
+                        leaveFirestoreRepo.getStaffGender("${schoolCodeForLookup}_${teacherIdForLookup}")
+                            ?.lowercase() ?: ""
+                    } else ""
+                } catch (_: Exception) { "" }
+
+                // Load leave types from Firestore schools doc.
+                //
+                // Two separate concerns here:
+                //   1. `leaveTypeIdToName` — used to resolve a typeId
+                //      (e.g. LT0004) into a display name on the Balance
+                //      list. Must include EVERY type the school has ever
+                //      defined, including currently-inactive ones, or a
+                //      legacy BAL entry against a retired type renders as
+                //      its raw ID ("LT0004") in the UI.
+                //   2. `leaveTypeNames` — used to populate the Apply
+                //      dialog's Type dropdown. Filtered to Active types
+                //      and the staff member's gender.
                 var leaveTypeNames = emptyList<String>()
-                var leaveTypeIdToName = mutableMapOf<String, String>() // LT0001 → "Casual Leave"
+                var leaveTypeIdToName = mutableMapOf<String, String>()
+                // CR-3 cross-system: re-populate class-level cache from fresh
+                // school config every loadLeaveData; submit reads it later.
+                leaveTypeNameToPaidCache.clear()
+                val leaveTypeNameToPaid = leaveTypeNameToPaidCache
                 try {
-                    val schoolCode = tokenManager.schoolCode.firstOrNull()
-                        ?: tokenManager.schoolId.firstOrNull() ?: ""
-                    if (schoolCode.isNotBlank()) {
-                        val schoolDoc = leaveFirestoreRepo.getSchoolLeaveTypes(schoolCode)
+                    if (schoolCodeForLookup.isNotBlank()) {
+                        val schoolDoc = leaveFirestoreRepo.getSchoolLeaveTypes(schoolCodeForLookup)
                         if (schoolDoc != null) {
-                            leaveTypeNames = schoolDoc.mapNotNull { (id, v) ->
+                            // Pass 1: build the FULL id → name map (no
+                            // status / gender filter) for balance lookup.
+                            for ((id, v) in schoolDoc) {
+                                if (v is Map<*, *>) {
+                                    val name = v["name"]?.toString() ?: v["code"]?.toString()
+                                    if (!name.isNullOrBlank()) {
+                                        leaveTypeIdToName[id] = name
+                                        // Read paid flag (accepts bool, "true", "1")
+                                        val paidRaw = v["paid"]
+                                        leaveTypeNameToPaid[name] = when (paidRaw) {
+                                            is Boolean -> paidRaw
+                                            is String  -> paidRaw == "true" || paidRaw == "1"
+                                            is Number  -> paidRaw.toInt() != 0
+                                            else       -> true   // safe default
+                                        }
+                                    }
+                                }
+                            }
+                            // Pass 2: pick the Apply-dropdown subset.
+                            leaveTypeNames = schoolDoc.mapNotNull { (_, v) ->
                                 if (v is Map<*, *>) {
                                     val name = v["name"]?.toString() ?: v["code"]?.toString()
                                     val status = v["status"]?.toString() ?: "Active"
-                                    if (status == "Active" && name != null) {
-                                        leaveTypeIdToName[id] = name
+                                    if (status.equals("Active", ignoreCase = true) && !name.isNullOrBlank()) {
+                                        if (staffGenderShared == "male" && name.contains("Maternity", true)) return@mapNotNull null
+                                        if (staffGenderShared == "female" && name.contains("Paternity", true)) return@mapNotNull null
                                         name
                                     } else null
                                 } else null
@@ -180,7 +234,14 @@ class LeaveViewModel @Inject constructor(
                                 if (data is Map<*, *>) {
                                     val alloc = (data["allocated"] as? Number)?.toInt() ?: 0
                                     if (alloc <= 0) return@mapNotNull null
-                                    val typeName = leaveTypeIdToName[typeId] ?: typeId
+                                    // Skip entries whose typeId no longer
+                                    // resolves to a name — surface "LT0004"
+                                    // raw to the user is worse than hiding
+                                    // a stale BAL row entirely. The pass-1
+                                    // map above includes inactive types,
+                                    // so we only land here when the type
+                                    // was outright deleted from the school.
+                                    val typeName = leaveTypeIdToName[typeId] ?: return@mapNotNull null
                                     // Hide gender-specific leaves
                                     if (staffGender == "male" && typeName.contains("Maternity", true)) return@mapNotNull null
                                     if (staffGender == "female" && typeName.contains("Paternity", true)) return@mapNotNull null
@@ -198,23 +259,35 @@ class LeaveViewModel @Inject constructor(
                     }
                 } catch (_: Exception) {}
 
-                // RTDB fallback if Firestore returned nothing
-                if (balances.isEmpty()) {
-                    leaveRepository.getLeaveBalance().fold(
-                        onSuccess = { modelBalances ->
-                            balances = modelBalances.map {
-                                LeaveBalance(
-                                    type = it.leaveType,
-                                    used = it.used,
-                                    total = it.total,
-                                    remaining = it.remaining
-                                )
-                            }
-                        },
-                        onFailure = { /* empty list */ }
+                // Firestore-only contract: empty result == no balances. The
+                // legacy RTDB fallback (`leaveRepository.getLeaveBalance()`)
+                // was removed because admin no longer writes that path —
+                // calling it would surface stale or seeded data and violate
+                // the absolute NO-RTDB rule. `LeaveRepository` itself stays
+                // as orphaned code per the prior "dead code stays" decision.
+                //
+                // Apply-dropdown alignment: the dropdown should only offer
+                // the leave types this teacher has been allocated. Earlier
+                // we surfaced every Active type from the school config,
+                // which produced 8 options against 5 balance rows and
+                // confused the user. Re-derive `leaveTypes` from the
+                // computed balances list so the two views always match.
+                // If balances is empty (no allocation) we keep the
+                // school-config list as a fallback so the dropdown isn't
+                // empty during initial setup.
+                val dropdownTypes = if (balances.isNotEmpty()) {
+                    balances.map { it.type }
+                } else {
+                    leaveTypeNames
+                }
+                _uiState.update { st ->
+                    st.copy(
+                        balances = balances,
+                        leaveTypes = dropdownTypes,
+                        applyLeaveType = if (st.applyLeaveType in dropdownTypes) st.applyLeaveType
+                            else (dropdownTypes.firstOrNull() ?: "")
                     )
                 }
-                _uiState.update { it.copy(balances = balances) }
 
                 // Load history — Firestore-first
                 leaveFirestoreRepo.getLeaveHistory().fold(
@@ -253,8 +326,38 @@ class LeaveViewModel @Inject constructor(
                 applyLeaveType = it.leaveTypes.firstOrNull() ?: "",
                 applyStartDate = "",
                 applyEndDate = "",
-                applyReason = ""
+                applyReason = "",
+                applyHalfDay = false,
+                applyHalfDayPeriod = "AM"
             )
+        }
+    }
+
+    fun setApplyHalfDay(half: Boolean) {
+        _uiState.update {
+            // Hardening rules:
+            //   • Toggle ON  → force end == start (single-date enforcement) and
+            //                  guarantee a valid period (default AM) so submit
+            //                  can never see a blank/invalid value.
+            //   • Toggle OFF → reset period to "AM" so a previous PM selection
+            //                  doesn't silently carry into the next ON cycle.
+            //                  End date is left as-is; the user re-picks via
+            //                  the now-restored picker.
+            it.copy(
+                applyHalfDay = half,
+                applyEndDate = if (half) it.applyStartDate else it.applyEndDate,
+                applyHalfDayPeriod = if (half) {
+                    if (it.applyHalfDayPeriod == "AM" || it.applyHalfDayPeriod == "PM") it.applyHalfDayPeriod
+                    else "AM"
+                } else "AM"
+            )
+        }
+    }
+
+    fun setApplyHalfDayPeriod(period: String) {
+        val p = period.uppercase()
+        if (p == "AM" || p == "PM") {
+            _uiState.update { it.copy(applyHalfDayPeriod = p) }
         }
     }
 
@@ -267,11 +370,22 @@ class LeaveViewModel @Inject constructor(
     }
 
     fun setStartDate(date: String) {
-        _uiState.update { it.copy(applyStartDate = date) }
+        _uiState.update {
+            // If half-day is on, keep end == start automatically.
+            if (it.applyHalfDay) it.copy(applyStartDate = date, applyEndDate = date)
+            else it.copy(applyStartDate = date)
+        }
     }
 
     fun setEndDate(date: String) {
-        _uiState.update { it.copy(applyEndDate = date) }
+        _uiState.update {
+            // Defense in depth: ignore any end-date write while half-day is
+            // active. The UI already disables the picker, but a stale tap
+            // event or programmatic call must not be allowed to break the
+            // single-date invariant.
+            if (it.applyHalfDay) it
+            else it.copy(applyEndDate = date)
+        }
     }
 
     fun setReason(reason: String) {
@@ -290,6 +404,21 @@ class LeaveViewModel @Inject constructor(
         }
         if (state.applyReason.isBlank()) {
             viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Reason is required")) }
+            return
+        }
+        // Phase 4 cross-system: half-day leave must be a single date. Backend
+        // rejects multi-day half-day requests; surface clearly here so the
+        // user sees the error before the round-trip.
+        if (state.applyHalfDay && state.applyStartDate != state.applyEndDate) {
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Half-day leave must be for a single date")) }
+            return
+        }
+        // Hardening: period must be present and valid when half-day is on.
+        // setApplyHalfDay normalises to AM/PM, but a defensive check here
+        // prevents a malformed payload reaching the backend if state ever
+        // drifts (e.g. process restoration with an old persisted value).
+        if (state.applyHalfDay && state.applyHalfDayPeriod !in listOf("AM", "PM")) {
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Select Morning (AM) or Afternoon (PM) for half-day leave")) }
             return
         }
         // Phase 9b: date validation
@@ -334,13 +463,20 @@ class LeaveViewModel @Inject constructor(
                     numberOfDays = days
                 )
 
+                // CR-3 cross-system: snapshot paid status from current school
+                // config so payroll classification survives type deletion.
+                val typePaidSnapshot = leaveTypeNameToPaidCache[state.applyLeaveType]
                 // Firestore-first: use LeaveFirestoreRepository
                 leaveFirestoreRepo.submitLeave(
                     leaveType = state.applyLeaveType,
                     startDate = state.applyStartDate,
                     endDate = state.applyEndDate,
-                    numberOfDays = days,
-                    reason = state.applyReason
+                    numberOfDays = if (state.applyHalfDay) 1 else days,
+                    reason = state.applyReason,
+                    typePaid = typePaidSnapshot,
+                    // Phase 4: half-day support now live in teacher UI.
+                    halfDay = state.applyHalfDay,
+                    halfDayPeriod = if (state.applyHalfDay) state.applyHalfDayPeriod else ""
                 ).fold(
                     onSuccess = {
                         _uiState.update { it.copy(isSubmitting = false, showApplyDialog = false) }

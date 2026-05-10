@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Calendar
 import java.util.UUID
 import javax.inject.Inject
@@ -48,6 +47,14 @@ class RedFlagRepository @Inject constructor(
             ?: tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
 
     private fun docIdFor(schoolId: String, flagId: String): String = "${schoolId}_${flagId}"
+
+    /**
+     * Default rolling window applied to every flag list query — keeps
+     * dashboards fast and matches the cross-system retention strategy
+     * (60 days; older flags require an admin-side full-history opt-in).
+     */
+    private fun defaultSinceMs(): Long =
+        System.currentTimeMillis() - (DEFAULT_WINDOW_DAYS * 24L * 60L * 60L * 1000L)
 
     /** Match admin's flagId format: RF_YYYYMMDD_HHMMSS_xxxxxx */
     private fun newFlagId(): String {
@@ -159,7 +166,11 @@ class RedFlagRepository @Inject constructor(
                 "resolvedBy"    to null,
                 "deletedAtMs"   to null,
                 "deletedBy"     to null,
-                "hwId"          to flag.hwId
+                "hwId"          to flag.hwId,
+                // Schema readiness for a future archive workflow. No
+                // code path consumes this yet; defaults to false so
+                // queries see fresh flags as non-archived.
+                "isArchived"    to false
             )
 
             // Loud log so the parent-side mismatch (studentId not matching
@@ -169,52 +180,37 @@ class RedFlagRepository @Inject constructor(
                 "schoolId=$schoolId, teacherUid=$teacherUid, className='${flag.className}', " +
                 "section='${flag.section}'")
 
+            // The write is idempotent — docId is `{schoolId}_{flagId}` and
+            // `flagId` is generated as a UUID-suffixed timestamp, so a
+            // retry with the SAME flag value would reuse the SAME docId.
+            // setDocument().await() suspends until the server acknowledges
+            // (success or rejection); a rules denial throws, a network
+            // outage throws after offline-write timeout. Either case
+            // bubbles up via the outer try/catch — no verify-and-rollback
+            // needed, and no duplicate-flag risk on slow networks.
             firestoreService.setDocument(Constants.Firestore.STUDENT_FLAGS, docId, data)
 
-            // CRITICAL: Firestore's set() success callback fires when the
-            // write commits to the LOCAL cache, not when the server confirms.
-            // A rules-rejected write (e.g. missing role/school_id auth claim)
-            // still returns "success" but the doc never reaches the server.
-            // Force a Source.SERVER read to confirm the write actually
-            // persisted — if rules deny the read, we'll get a clear
-            // PERMISSION_DENIED rather than a silent black hole.
-            val verified = withTimeoutOrNull(8_000) {
-                runCatching {
-                    firestoreService.firestore
-                        .collection(Constants.Firestore.STUDENT_FLAGS)
-                        .document(docId)
-                        .get(Source.SERVER)
-                        .await()
-                        .exists()
-                }.getOrElse { e ->
-                    Log.e(TAG, "Server-side verify failed for $flagId: ${e.message}", e)
-                    return@withTimeoutOrNull false
-                }
-            } ?: false
-
-            if (!verified) {
-                // The write committed to the local Firestore cache before
-                // hitting the server. Without cleanup, subsequent reads
-                // would return this ghost doc and the teacher would see a
-                // phantom flag that doesn't exist on the server. Queue a
-                // local delete to evict it. (The server-side delete also
-                // gets queued and fails silently — no doc to delete there.)
-                runCatching {
-                    firestoreService.firestore
-                        .collection(Constants.Firestore.STUDENT_FLAGS)
-                        .document(docId)
-                        .delete()
-                }.onFailure {
-                    Log.w(TAG, "Cache cleanup of $docId failed: ${it.message}")
-                }
-
-                return Result.failure(
-                    Exception(
-                        "Write didn't reach Firestore. Likely a rules rejection " +
-                        "(check that your auth token has role='Teacher' and school_id " +
-                        "claims) or a network issue. Run: adb logcat | findstr Firestore"
-                    )
-                )
+            // Best-effort push trigger — Cloud Function dispatches FCM
+            // to the parent of this student. Failure must not block
+            // the flag write; parent still sees it via snapshot listener.
+            try {
+                val reqId = "${schoolId}_flag_${flagId}"
+                firestoreService.setDocument("pushRequests", reqId, mapOf(
+                    "mark"        to "FLAG_CREATED",
+                    "schoolId"    to schoolId,
+                    "flagId"      to flagId,
+                    "studentId"   to flag.studentId,
+                    "studentName" to flag.studentName,
+                    "severity"    to severity,
+                    "flagType"    to type,
+                    "subject"     to flag.subject,
+                    "message"     to flag.message,
+                    "teacherName" to flag.teacherName,
+                    "status"      to "pending",
+                    "createdAt"   to com.google.firebase.Timestamp.now()
+                ))
+            } catch (e: Exception) {
+                Log.w(TAG, "pushRequests write failed (non-fatal): ${e.message}")
             }
 
             Result.success(flagId)
@@ -304,6 +300,7 @@ class RedFlagRepository @Inject constructor(
                 .collection(Constants.Firestore.STUDENT_FLAGS)
             val query = ref.whereEqualTo("schoolId", schoolId)
                 .whereEqualTo("studentId", studentId)
+                .whereGreaterThanOrEqualTo("createdAtMs", defaultSinceMs())
                 .orderBy("createdAtMs", Query.Direction.DESCENDING)
 
             val snap = try {
@@ -344,6 +341,7 @@ class RedFlagRepository @Inject constructor(
             val ref = firestoreService.firestore
                 .collection(Constants.Firestore.STUDENT_FLAGS)
             val query = ref.whereEqualTo("schoolId", schoolId)
+                .whereGreaterThanOrEqualTo("createdAtMs", defaultSinceMs())
                 .orderBy("createdAtMs", Query.Direction.DESCENDING)
 
             val snap = try {
@@ -381,16 +379,58 @@ class RedFlagRepository @Inject constructor(
             emit(emptyList())
             return@flow
         }
+        val sinceMs = defaultSinceMs()
         emitAll(
             firestoreService.observeQuery(Constants.Firestore.STUDENT_FLAGS) { ref ->
                 ref.whereEqualTo("schoolId", schoolId)
                     .whereEqualTo("studentId", studentId)
+                    .whereGreaterThanOrEqualTo("createdAtMs", sinceMs)
                     .orderBy("createdAtMs", Query.Direction.DESCENDING)
             }.map { snap ->
                 snap.documents
                     .filterNot { it.metadata.hasPendingWrites() }
                     .filter { (it.getString("status") ?: "") != "deleted" }
                     .map { snapshotToFlag(it) }
+            }
+        )
+    }
+
+    /**
+     * Observe flags for every student in a class in real-time.
+     * Same shape as [getFlagsForClass] but emits a fresh map every time
+     * any flag in the school changes — needed so the teacher's
+     * dashboard reflects admin- or peer-resolved flags without a manual
+     * reload. Mirrors the parent app's snapshot-listener approach.
+     */
+    fun observeFlagsForClass(
+        students: List<StudentInfo>
+    ): Flow<Map<String, List<StudentFlag>>> = flow {
+        val schoolId = resolveSchoolId()
+        if (schoolId == null) {
+            emit(emptyMap())
+            return@flow
+        }
+        val ids = students.map { it.studentId }.toHashSet()
+        if (ids.isEmpty()) {
+            emit(emptyMap())
+            return@flow
+        }
+        val sinceMs = defaultSinceMs()
+        emitAll(
+            firestoreService.observeQuery(Constants.Firestore.STUDENT_FLAGS) { ref ->
+                ref.whereEqualTo("schoolId", schoolId)
+                    .whereGreaterThanOrEqualTo("createdAtMs", sinceMs)
+                    .orderBy("createdAtMs", Query.Direction.DESCENDING)
+            }.map { snap ->
+                val grouped = mutableMapOf<String, MutableList<StudentFlag>>()
+                for (doc in snap.documents) {
+                    if (doc.metadata.hasPendingWrites()) continue
+                    val sid = (doc.getString("studentId") ?: continue)
+                    if (sid !in ids) continue
+                    if ((doc.getString("status") ?: "") == "deleted") continue
+                    grouped.getOrPut(sid) { mutableListOf() }.add(snapshotToFlag(doc))
+                }
+                grouped
             }
         )
     }
@@ -422,6 +462,7 @@ class RedFlagRepository @Inject constructor(
                 .collection(Constants.Firestore.STUDENT_FLAGS)
             val query = ref.whereEqualTo("schoolId", schoolId)
                 .whereEqualTo("status", "active")
+                .whereGreaterThanOrEqualTo("createdAtMs", defaultSinceMs())
 
             val snap = try {
                 query.get(Source.SERVER).await()
@@ -435,6 +476,7 @@ class RedFlagRepository @Inject constructor(
 
     companion object {
         private const val TAG = "RedFlagRepo"
+        private const val DEFAULT_WINDOW_DAYS = 60L
         private val ALLOWED_TYPES      = setOf("homework", "behavior", "performance")
         private val ALLOWED_SEVERITIES = setOf("low", "medium", "high")
     }

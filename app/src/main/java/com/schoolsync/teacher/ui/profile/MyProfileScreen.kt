@@ -67,10 +67,19 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val c = LocalAppColors.current
 
+    // Profile-screen palette override — rose tones to differentiate the
+    // teacher's "My Profile" page from the rest of the app's accent
+    // system. Scoped to this composable; helper composables (Chip /
+    // InfoCard / AssignmentsCard) remain accent-themed via their own
+    // `c: AppColors` parameter, so other screens that render them still
+    // pick up the global accent.
+    val profileAccent          = Color(0xFFE11D48)   // rose-600
+    val profileAccentSecondary = Color(0xFFF43F5E)   // rose-500
+
     GradientBackground {
         if (state.isLoading && state.staff == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = c.accent)
+                CircularProgressIndicator(color = profileAccent)
             }
         } else {
             Column(
@@ -101,7 +110,7 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(CircleShape)
-                                .border(2.dp, c.accent, CircleShape),
+                                .border(2.dp, profileAccent, CircleShape),
                             contentScale = ContentScale.Crop
                         )
                     } else {
@@ -109,7 +118,7 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(CircleShape)
-                                .background(Brush.linearGradient(listOf(c.accent, c.accentSecondary))),
+                                .background(Brush.linearGradient(listOf(profileAccent, profileAccentSecondary))),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(initials, color = c.textOnAccent,
@@ -139,7 +148,7 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                         }
                         Spacer(Modifier.height(6.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (state.cachedSchoolName.isNotEmpty()) Chip(state.cachedSchoolName, c.accent, c.accentSurface)
+                            if (state.cachedSchoolName.isNotEmpty()) Chip(state.cachedSchoolName, profileAccent, profileAccent.copy(alpha = 0.14f))
                             if ((doc?.status ?: "").isNotEmpty()) Chip(doc!!.status, c.success, c.successSurface)
                             if ((doc?.employmentType ?: "").isNotEmpty()) Chip(doc!!.employmentType, c.info, c.infoSurface)
                         }
@@ -157,17 +166,17 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(c.accent.copy(alpha = 0.10f))
-                            .border(1.dp, c.accent.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
+                            .background(profileAccent.copy(alpha = 0.10f))
+                            .border(1.dp, profileAccent.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Class, null, tint = c.accent, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Class, null, tint = profileAccent, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Class Teacher  \u00B7  " + state.classTeacherSections.joinToString(", "),
                             style = MaterialTheme.typography.labelMedium,
-                            color = c.accent,
+                            color = profileAccent,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.sp
                         )
@@ -189,7 +198,7 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                 ) {
                     // Left column
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        InfoCard("Personal", Icons.Filled.Person, c.accent, listOfNotNull(
+                        InfoCard("Personal", Icons.Filled.Person, profileAccent, listOfNotNull(
                             f("Name", state.cachedName),
                             f("Gender", doc?.gender),
                             f("DOB", doc?.dob),
@@ -247,7 +256,7 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
 
                         val qual = doc?.qualificationDetails
                         if (qual != null) {
-                            InfoCard("Qualification", Icons.Filled.School, c.accent, listOfNotNull(
+                            InfoCard("Qualification", Icons.Filled.School, profileAccent, listOfNotNull(
                                 f("Degree", qual["highestQualification"]?.toString()),
                                 f("University", qual["university"]?.toString()),
                                 f("Year", qual["yearOfPassing"]?.toString()),

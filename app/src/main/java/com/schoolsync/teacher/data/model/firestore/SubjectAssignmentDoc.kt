@@ -34,4 +34,5 @@ data class SubjectAssignmentDoc(
     @get:PropertyName("isClassTeacher")
     val isClassTeacher: Boolean = false,
     val updatedAt: String = "",
+    val archived: Boolean = false,
 )

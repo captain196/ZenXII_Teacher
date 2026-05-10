@@ -142,6 +142,36 @@ class AttendanceFirestoreRepository @Inject constructor(
     }
 
     /**
+     * Fetch every student's attendance summary for one class+month in a
+     * single query. Replaces the per-student N+1 pattern that used to
+     * dominate dashboard load time.
+     *
+     * @param sectionKey e.g. "Class 8th/Section A"
+     * @param month either "Month YYYY" (e.g. "April 2026") or
+     *              "YYYY-MM" (e.g. "2026-04") — both accepted.
+     */
+    suspend fun getClassMonthlySummaries(
+        sectionKey: String,
+        month: String
+    ): Result<List<AttendanceSummaryDoc>> {
+        val schoolCode = getSchoolCode()
+            ?: return Result.failure(Exception("School code not available"))
+        val monthKey = monthLabelToKey(month)
+        return try {
+            val docs = firestoreService.queryDocumentsAs<AttendanceSummaryDoc>(
+                Constants.Firestore.ATTENDANCE_SUMMARY
+            ) { ref ->
+                ref.whereEqualTo("schoolId", schoolCode)
+                    .whereEqualTo("sectionKey", sectionKey)
+                    .whereEqualTo("month", monthKey)
+            }
+            Result.success(docs)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Fetch a student's attendance summary for a specific month.
      *
      * Doc id format: `{schoolId}_{studentId}_{YYYY-MM}` — matches what

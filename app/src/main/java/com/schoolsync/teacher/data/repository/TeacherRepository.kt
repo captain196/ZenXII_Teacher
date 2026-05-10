@@ -87,7 +87,11 @@ class TeacherRepository @Inject constructor(
                     ref.whereEqualTo("schoolId", schoolId)
                         .whereEqualTo("teacherId", teacherId)
                 }
-                val docs = allDocs.filter { it.session == session }
+                // Drop archived rows — admin's deactivation cascade flips
+                // archived=true on every assignment owned by an Inactive
+                // staff. Without this filter a deactivated-then-reactivated
+                // teacher with manually-archived legacy rows still sees them.
+                val docs = allDocs.filter { it.session == session && !it.archived }
 
                 if (docs.isNotEmpty()) {
                     // Expand each Firestore doc into one or more ClassAssignment
@@ -219,6 +223,7 @@ class TeacherRepository @Inject constructor(
             }.collect { snapshot ->
                 val assignments = snapshot.documents.mapNotNull { doc ->
                     val obj = doc.toObject(SubjectAssignmentDoc::class.java) ?: return@mapNotNull null
+                    if (obj.archived) return@mapNotNull null
                     ClassAssignment(
                         assignmentId = doc.id,
                         teacherId = obj.teacherId,

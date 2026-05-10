@@ -121,6 +121,15 @@ fun AttendanceScreen(
                 is AttendanceEvent.SaveError -> {
                     snackbarHostState.showSnackbar("Error: ${event.message}")
                 }
+                is AttendanceEvent.Locked -> {
+                    snackbarHostState.showSnackbar("Attendance is locked. File a correction request.")
+                }
+                is AttendanceEvent.ReasonRequired -> {
+                    snackbarHostState.showSnackbar("A reason (10+ chars) is required after 10:30 AM.")
+                }
+                is AttendanceEvent.CorrectionSubmitted -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
             }
         }
     }
@@ -139,31 +148,53 @@ fun AttendanceScreen(
                 }
             },
             floatingActionButton = {
-                if (state.isClassTeacher && state.hasUnsavedChanges && !state.isSaving) {
-                    ExtendedFloatingActionButton(
-                        onClick = viewModel::saveAttendance,
-                        containerColor = Teal,
-                        contentColor = BgStart,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Filled.Save, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save Attendance", fontWeight = FontWeight.SemiBold)
+                when {
+                    state.isSaving -> {
+                        ExtendedFloatingActionButton(
+                            onClick = { },
+                            containerColor = Teal.copy(alpha = 0.7f),
+                            contentColor = BgStart,
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = BgStart,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Saving...", fontWeight = FontWeight.SemiBold)
+                        }
                     }
-                } else if (state.isSaving) {
-                    ExtendedFloatingActionButton(
-                        onClick = { },
-                        containerColor = Teal.copy(alpha = 0.7f),
-                        contentColor = BgStart,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = BgStart,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Saving...", fontWeight = FontWeight.SemiBold)
+                    // Locked: replace Save with "Request Correction" (opens dialog
+                    // for the first student with a current 'A' if any, else any student)
+                    state.isClassTeacher && state.stage == Stage.S3_LOCKED -> {
+                        ExtendedFloatingActionButton(
+                            onClick = {
+                                val firstStudent = state.students.firstOrNull()
+                                if (firstStudent != null) {
+                                    viewModel.openCorrectionDialog(firstStudent.studentId, state.todayDay)
+                                }
+                            },
+                            containerColor = ErrorRed,
+                            contentColor = BgStart,
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Filled.PersonOff, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Request Correction", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    state.isClassTeacher && state.hasUnsavedChanges -> {
+                        ExtendedFloatingActionButton(
+                            onClick = viewModel::saveAttendance,
+                            containerColor = Teal,
+                            contentColor = BgStart,
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Filled.Save, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Save Attendance", fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
@@ -183,6 +214,16 @@ fun AttendanceScreen(
                     onMarkAllAbsent = viewModel::markAllAbsentToday,
                     onRefresh = viewModel::refresh
                 )
+
+                // Stage banner — server-driven; never UI-decided.
+                if (state.selectedClass != null && state.stage != Stage.UNKNOWN) {
+                    StageBanner(
+                        stage = state.stage,
+                        lockedBy = state.lockedBy,
+                        editReason = state.editReason,
+                        onReasonChange = viewModel::setEditReason
+                    )
+                }
 
                 // Class teacher permission warning
                 if (!state.isClassTeacher && state.selectedClass != null) {
@@ -342,8 +383,191 @@ fun AttendanceScreen(
                 shape = RoundedCornerShape(16.dp)
             )
         }
+
+        // Correction Request dialog (locked-state path or past-day fixes)
+        if (state.showCorrectionDialog) {
+            AlertDialog(
+                onDismissRequest = viewModel::closeCorrectionDialog,
+                title = {
+                    Text("Request Correction", color = TextPrimary, fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "${state.correctionStudentName}  ·  ${state.correctionDate}",
+                            color = TextSecondary, fontSize = 12.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Currently: ${state.correctionCurrentStatus.label}",
+                            color = TextTertiary, fontSize = 12.sp
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text("Change to:", color = TextSecondary, fontSize = 12.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            listOf(
+                                AttendanceStatus.PRESENT,
+                                AttendanceStatus.ABSENT,
+                                AttendanceStatus.LEAVE,
+                                AttendanceStatus.TARDY
+                            ).forEach { st ->
+                                val sel = state.correctionRequestedStatus == st
+                                OutlinedButton(
+                                    onClick = { viewModel.setCorrectionRequestedStatus(st) },
+                                    modifier = Modifier
+                                        .padding(end = 6.dp)
+                                        .height(34.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (sel) Teal.copy(alpha = 0.2f) else Color.Transparent,
+                                        contentColor = if (sel) Teal else TextSecondary
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(st.label, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = state.correctionReason,
+                            onValueChange = viewModel::setCorrectionReason,
+                            placeholder = { Text("Reason (10+ chars)", fontSize = 12.sp) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Teal,
+                                unfocusedBorderColor = GlassBorder,
+                                cursorColor = Teal,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            maxLines = 3
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${state.correctionReason.trim().length} / 10+",
+                            color = if (state.correctionReason.trim().length >= 10) AttendancePresent else TextTertiary,
+                            fontSize = 11.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = viewModel::submitCorrectionRequest,
+                        enabled = !state.isSubmittingCorrection && state.correctionReason.trim().length >= 10
+                    ) {
+                        Text(
+                            if (state.isSubmittingCorrection) "Submitting…" else "Submit Request",
+                            color = if (state.isSubmittingCorrection || state.correctionReason.trim().length < 10) TextTertiary else Teal,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = viewModel::closeCorrectionDialog,
+                        enabled = !state.isSubmittingCorrection
+                    ) {
+                        Text("Cancel", color = TextTertiary)
+                    }
+                },
+                containerColor = SurfaceDark,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
     }
 }
+
+/* ── Stage banner (Phase 1+2 server-driven UI hint) ────────────── */
+
+@Composable
+private fun StageBanner(
+    stage: Stage,
+    lockedBy: String?,
+    editReason: String,
+    onReasonChange: (String) -> Unit
+) {
+    val spec = when (stage) {
+        Stage.S1_FREE -> StageBannerSpec(
+            bg = AttendancePresent.copy(alpha = 0.15f),
+            fg = AttendancePresent,
+            label = "Open",
+            message = "Free edit. No reason required."
+        )
+        Stage.S2_RESTRICTED -> StageBannerSpec(
+            bg = AttendanceTardy.copy(alpha = 0.15f),
+            fg = AttendanceTardy,
+            label = "Restricted",
+            message = "Reason required for edits (10+ chars)."
+        )
+        Stage.S3_LOCKED -> StageBannerSpec(
+            bg = ErrorRed.copy(alpha = 0.12f),
+            fg = ErrorRed,
+            label = "Locked",
+            message = lockedBy?.let { "Locked by $it. File a correction request." }
+                ?: "Locked. File a correction request to change marks."
+        )
+        Stage.UNKNOWN -> StageBannerSpec(
+            bg = Glass,
+            fg = TextSecondary,
+            label = "—",
+            message = "Loading…"
+        )
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .background(spec.bg, RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .background(spec.fg, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(spec.label, color = BgStart, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(spec.message, color = spec.fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        }
+        if (stage == Stage.S2_RESTRICTED) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editReason,
+                onValueChange = onReasonChange,
+                placeholder = { Text("Reason (e.g. 'Bus delay correction')", fontSize = 13.sp) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = false,
+                maxLines = 2,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = spec.fg,
+                    unfocusedBorderColor = spec.fg.copy(alpha = 0.4f),
+                    cursorColor = spec.fg,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                ),
+                shape = RoundedCornerShape(10.dp)
+            )
+            Text(
+                text = "${editReason.trim().length} / 10+",
+                color = if (editReason.trim().length >= 10) AttendancePresent else spec.fg.copy(alpha = 0.7f),
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+private data class StageBannerSpec(
+    val bg: Color,
+    val fg: Color,
+    val label: String,
+    val message: String
+)
 
 @Composable
 private fun AttendanceTopBar(

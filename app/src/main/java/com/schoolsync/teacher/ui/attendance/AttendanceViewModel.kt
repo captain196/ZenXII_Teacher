@@ -9,6 +9,9 @@ import com.schoolsync.teacher.data.model.ClassAssignment
 import com.schoolsync.teacher.data.model.StudentInfo
 import com.schoolsync.teacher.data.repository.StudentRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
+import com.schoolsync.teacher.data.repository.AttendanceApiError
+import com.schoolsync.teacher.data.repository.AttendanceApiRepository
+import com.schoolsync.teacher.data.repository.LateMark
 import com.schoolsync.teacher.data.repository.firestore.AttendanceFirestoreRepository
 import com.schoolsync.teacher.util.Constants
 import com.schoolsync.teacher.util.RoleHelper
@@ -71,6 +74,26 @@ enum class AttendanceStatus(val code: String, val label: String) {
     }
 }
 
+/**
+ * Mirror of the server's _stage() output. Drives the Save UI: free editing,
+ * editing with reason, or locked → correction-request flow.
+ */
+enum class Stage(val label: String) {
+    S1_FREE("Editable"),
+    S2_RESTRICTED("Editable with reason"),
+    S3_LOCKED("Locked"),
+    UNKNOWN("Loading…");
+
+    companion object {
+        fun fromServer(s: String?): Stage = when (s) {
+            "S1_FREE" -> S1_FREE
+            "S2_RESTRICTED" -> S2_RESTRICTED
+            "S3_LOCKED" -> S3_LOCKED
+            else -> UNKNOWN
+        }
+    }
+}
+
 data class StudentAttendanceRow(
     val studentId: String,
     val rollNo: Int,
@@ -102,19 +125,40 @@ data class AttendanceUiState(
     // Phase 10f: tardy time dialog
     val showTardyDialog: Boolean = false,
     val tardyStudentId: String = "",
-    val tardyDay: Int = 0
+    val tardyDay: Int = 0,
+    // Phase 1+2 stage gate (server-driven)
+    val stage: Stage = Stage.UNKNOWN,
+    val editReason: String = "",                       // required for S2 saves
+    val lockedBy: String? = null,
+    val lockReason: String? = null,
+    val pendingCorrectionIds: Set<String> = emptySet(),
+    // Correction-request dialog state (opened from S3 / locked rows)
+    val showCorrectionDialog: Boolean = false,
+    val correctionStudentId: String = "",
+    val correctionStudentName: String = "",
+    val correctionDate: String = "",
+    val correctionCurrentStatus: AttendanceStatus = AttendanceStatus.PRESENT,
+    val correctionRequestedStatus: AttendanceStatus = AttendanceStatus.PRESENT,
+    val correctionReason: String = "",
+    val isSubmittingCorrection: Boolean = false
 )
 
 sealed class AttendanceEvent {
     data class SaveSuccess(val message: String) : AttendanceEvent()
     data class SaveError(val message: String) : AttendanceEvent()
+    /** Server returned 423 — switch UI to correction-request mode. */
+    object Locked : AttendanceEvent()
+    /** Server returned 400 because S2 needed a reason. */
+    object ReasonRequired : AttendanceEvent()
+    data class CorrectionSubmitted(val message: String) : AttendanceEvent()
 }
 
 @HiltViewModel
 class AttendanceViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
     private val studentRepository: StudentRepository,
-    private val attendanceFirestoreRepo: AttendanceFirestoreRepository
+    private val attendanceFirestoreRepo: AttendanceFirestoreRepository,    // reads only
+    private val attendanceApiRepo: AttendanceApiRepository                  // ALL writes
 ) : ViewModel() {
 
     companion object {
@@ -184,10 +228,13 @@ class AttendanceViewModel @Inject constructor(
             it.copy(
                 selectedClass = classSection,
                 hasUnsavedChanges = false,
-                isClassTeacher = isClassTeacherForClass
+                isClassTeacher = isClassTeacherForClass,
+                stage = Stage.UNKNOWN,        // reset until refreshStage returns
+                editReason = ""
             )
         }
         loadAttendance()
+        refreshStage()
     }
 
     fun selectMonth(month: Int, year: Int) {
@@ -380,92 +427,242 @@ class AttendanceViewModel @Inject constructor(
      * Save attendance via Firestore (primary) with RTDB fallback.
      * For each student, builds the attendance string for the month and writes it.
      */
+    /**
+     * Save TODAY's attendance via the PHP API (Phase 1).
+     *
+     * The server enforces stage gate (S1/S2/S3), holiday block, admission
+     * date check, audit logging — none of which the legacy direct-Firestore
+     * write path checked. Past-day edits go through the correction flow
+     * (see submitCorrection / openCorrectionDialog).
+     */
     fun saveAttendance() {
         val state = _uiState.value
         val classSection = state.selectedClass ?: return
 
+        // Hard guard: locked → caller should be using Request Correction
+        if (state.stage == Stage.S3_LOCKED) {
+            viewModelScope.launch { _events.emit(AttendanceEvent.Locked) }
+            return
+        }
+
+        // Reason required for S2 — fail fast before HTTP round-trip
+        if (state.stage == Stage.S2_RESTRICTED && state.editReason.trim().length < 10) {
+            viewModelScope.launch { _events.emit(AttendanceEvent.ReasonRequired) }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
-            try {
-                val cal = Calendar.getInstance().apply {
-                    set(Calendar.YEAR, state.selectedYear)
-                    set(Calendar.MONTH, state.selectedMonth)
-                }
-                val monthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
-                val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-                val sectionKey = "${Constants.classKey(classSection.className)}/${Constants.sectionKey(classSection.section)}"
 
-                // Phase 9a: Write per-day docs for TODAY (the primary mark
-                // day). Future: could also write for changed past days,
-                // but for now the summary dayWise carries the full month.
-                val todayDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-                val now = Calendar.getInstance()
-                val isCurrentMonth = state.selectedMonth == now.get(Calendar.MONTH)
-                        && state.selectedYear == now.get(Calendar.YEAR)
-
-                if (isCurrentMonth) {
-                    val todayCal = Calendar.getInstance().apply {
-                        set(Calendar.YEAR, state.selectedYear)
-                        set(Calendar.MONTH, state.selectedMonth)
-                        set(Calendar.DAY_OF_MONTH, todayDay)
-                    }
-                    val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(todayCal.time)
-
-                    val todayStatuses = mutableMapOf<String, Pair<String, String>>()
-                    for (student in state.students) {
-                        val uiStatus = student.dayStatuses[todayDay] ?: continue
-                        val studentInfo = currentStudentInfos.find { it.studentId == student.studentId }
-                        todayStatuses[student.studentId] = Pair(uiStatus.code, studentInfo?.displayName ?: student.name)
-                    }
-
-                    if (todayStatuses.isNotEmpty()) {
-                        attendanceFirestoreRepo.markAttendance(
-                            sectionKey = sectionKey,
-                            date = todayIso,
-                            studentStatuses = todayStatuses
-                        ).fold(
-                            onSuccess = { count ->
-                                Log.d(TAG, "Firestore: wrote $count daily attendance records")
-                            },
-                            onFailure = { e ->
-                                Log.e(TAG, "Firestore daily attendance write failed: ${e.message}")
-                            }
-                        )
-                    }
-                }
-
-                // Firestore: Update attendance summaries with full month dayWise string
-                for (student in state.students) {
-                    val dayWise = buildString {
-                        for (day in 1..daysInMonth) {
-                            val status = student.dayStatuses[day]
-                            append(status?.code ?: "V")  // Phase 9a: "V" not "-" to match PHP canonical codes
-                        }
-                    }
-                    val studentInfo = currentStudentInfos.find { it.studentId == student.studentId }
-                    attendanceFirestoreRepo.updateAttendanceSummary(
-                        studentId = student.studentId,
-                        studentName = studentInfo?.displayName ?: student.name,
-                        sectionKey = sectionKey,
-                        month = monthName,
-                        dayWise = dayWise
-                    ).fold(
-                        onSuccess = {
-                            Log.d(TAG, "Firestore: summary updated for ${student.studentId}")
-                        },
-                        onFailure = { e ->
-                            Log.e(TAG, "Firestore summary update failed for ${student.studentId}: ${e.message}")
-                        }
-                    )
-                }
-
-                _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false) }
-                _events.emit(AttendanceEvent.SaveSuccess("Attendance saved successfully"))
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to save attendance", e)
+            // /save is today-only. If the user is viewing a non-current month,
+            // there's nothing for /save to act on; surface a clear message.
+            val now = Calendar.getInstance()
+            val isCurrentMonth = state.selectedMonth == now.get(Calendar.MONTH)
+                    && state.selectedYear == now.get(Calendar.YEAR)
+            if (!isCurrentMonth) {
                 _uiState.update { it.copy(isSaving = false) }
-                _events.emit(AttendanceEvent.SaveError(e.message ?: "Failed to save"))
+                _events.emit(AttendanceEvent.SaveError("Past-month edits require a correction request. Tap any locked cell to file one."))
+                return@launch
             }
+
+            val todayDay = now.get(Calendar.DAY_OF_MONTH)
+
+            // Bucket today's per-student marks into absent / leave / late lists.
+            // Server treats every active-roster student NOT in any list as Present.
+            val absent = mutableListOf<String>()
+            val leave  = mutableListOf<String>()
+            val late   = mutableListOf<LateMark>()
+            for (student in state.students) {
+                val st = student.dayStatuses[todayDay] ?: continue
+                when (st) {
+                    AttendanceStatus.ABSENT  -> absent.add(student.studentId)
+                    AttendanceStatus.LEAVE   -> leave.add(student.studentId)
+                    AttendanceStatus.TARDY   -> late.add(LateMark(student.studentId, lateMinutes = 0))
+                    AttendanceStatus.PRESENT -> {} // server default
+                    AttendanceStatus.HOLIDAY,
+                    AttendanceStatus.VACATION -> {} // not user-markable; ignore
+                }
+            }
+
+            attendanceApiRepo.save(
+                className = classSection.className,
+                section   = classSection.section,
+                absent    = absent,
+                leave     = leave,
+                late      = late,
+                reason    = state.editReason
+            ).fold(
+                onSuccess = { res ->
+                    Log.d(TAG, "save OK — updated=${res.updated.size} rejected=${res.rejected.size} stage=${res.stage}")
+                    _uiState.update { it.copy(
+                        isSaving = false,
+                        hasUnsavedChanges = false,
+                        editReason = "",
+                        stage = Stage.fromServer(res.stage)
+                    ) }
+                    val msg = if (res.rejected.isEmpty()) {
+                        "Saved ${res.updated.size} mark(s)."
+                    } else {
+                        "Saved ${res.updated.size} · ${res.rejected.size} rejected (see notes)."
+                    }
+                    _events.emit(AttendanceEvent.SaveSuccess(msg))
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "save failed: ${e.message}")
+                    _uiState.update { it.copy(isSaving = false) }
+                    when (e) {
+                        is AttendanceApiError.Locked -> {
+                            _uiState.update { it.copy(stage = Stage.S3_LOCKED) }
+                            _events.emit(AttendanceEvent.Locked)
+                        }
+                        is AttendanceApiError.ReasonRequired -> {
+                            _uiState.update { it.copy(stage = Stage.S2_RESTRICTED) }
+                            _events.emit(AttendanceEvent.ReasonRequired)
+                        }
+                        is AttendanceApiError.Forbidden -> {
+                            _events.emit(AttendanceEvent.SaveError(e.message ?: "Not authorized for this class."))
+                        }
+                        is AttendanceApiError.Holiday -> {
+                            _events.emit(AttendanceEvent.SaveError(e.message ?: "Today is a holiday — attendance cannot be marked."))
+                        }
+                        is AttendanceApiError.Conflict -> {
+                            _events.emit(AttendanceEvent.SaveError(e.message ?: "Conflict — refresh and retry."))
+                        }
+                        is AttendanceApiError.NotFound -> {
+                            _events.emit(AttendanceEvent.SaveError(e.message ?: "Not found."))
+                        }
+                        else -> _events.emit(AttendanceEvent.SaveError(e.message ?: "Save failed"))
+                    }
+                }
+            )
+        }
+    }
+
+    // ── Stage / lock state ────────────────────────────────────────
+
+    /** Pull current stage from server for the selected class (today's date). */
+    fun refreshStage() {
+        val state = _uiState.value
+        val cs = state.selectedClass ?: return
+        viewModelScope.launch {
+            attendanceApiRepo.fetchLock(
+                className = cs.className,
+                section   = cs.section
+            ).fold(
+                onSuccess = { ls ->
+                    _uiState.update { it.copy(
+                        stage      = Stage.fromServer(ls.stage),
+                        lockedBy   = ls.lockedBy,
+                        lockReason = null   // ls doesn't expose lockReason today; leave null
+                    ) }
+                },
+                onFailure = { e ->
+                    Log.w(TAG, "refreshStage failed: ${e.message}")
+                    // Keep last-good state; UI degrades to UNKNOWN if never loaded
+                }
+            )
+        }
+    }
+
+    fun setEditReason(reason: String) {
+        _uiState.update { it.copy(editReason = reason) }
+    }
+
+    // ── Correction request flow ───────────────────────────────────
+
+    /**
+     * Open the correction-request dialog for a single student/day.
+     * Used both when the run is locked and when a teacher wants to amend
+     * a past-day mark.
+     */
+    fun openCorrectionDialog(studentId: String, day: Int) {
+        val state = _uiState.value
+        val student = state.students.find { it.studentId == studentId } ?: return
+        val curStatus = student.dayStatuses[day] ?: AttendanceStatus.PRESENT
+
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, state.selectedYear)
+            set(Calendar.MONTH, state.selectedMonth)
+            set(Calendar.DAY_OF_MONTH, day)
+        }
+        val isoDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+
+        _uiState.update { it.copy(
+            showCorrectionDialog       = true,
+            correctionStudentId        = studentId,
+            correctionStudentName      = student.name,
+            correctionDate             = isoDate,
+            correctionCurrentStatus    = curStatus,
+            correctionRequestedStatus  = if (curStatus == AttendanceStatus.ABSENT) AttendanceStatus.PRESENT else AttendanceStatus.ABSENT,
+            correctionReason           = ""
+        ) }
+    }
+
+    fun closeCorrectionDialog() {
+        _uiState.update { it.copy(
+            showCorrectionDialog = false,
+            correctionStudentId  = "",
+            correctionDate       = "",
+            correctionReason     = ""
+        ) }
+    }
+
+    fun setCorrectionRequestedStatus(status: AttendanceStatus) {
+        _uiState.update { it.copy(correctionRequestedStatus = status) }
+    }
+
+    fun setCorrectionReason(reason: String) {
+        _uiState.update { it.copy(correctionReason = reason) }
+    }
+
+    fun submitCorrectionRequest() {
+        val state = _uiState.value
+        if (state.correctionStudentId.isEmpty() || state.correctionDate.isEmpty()) return
+        if (state.correctionReason.trim().length < 10) {
+            viewModelScope.launch { _events.emit(AttendanceEvent.ReasonRequired) }
+            return
+        }
+        val req = state.correctionRequestedStatus
+        val (statusChar, isLate) = when (req) {
+            AttendanceStatus.PRESENT -> "P" to false
+            AttendanceStatus.ABSENT  -> "A" to false
+            AttendanceStatus.LEAVE   -> "L" to false
+            AttendanceStatus.TARDY   -> "P" to true   // late = P + late=true (Phase 1 model)
+            else                     -> "P" to false
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSubmittingCorrection = true) }
+            attendanceApiRepo.submitCorrection(
+                studentId             = state.correctionStudentId,
+                date                  = state.correctionDate,
+                requestedStatus       = statusChar,
+                requestedLate         = isLate,
+                requestedLateMinutes  = 0,
+                reason                = state.correctionReason.trim()
+            ).fold(
+                onSuccess = { reqId ->
+                    _uiState.update { it.copy(
+                        isSubmittingCorrection = false,
+                        showCorrectionDialog   = false,
+                        pendingCorrectionIds   = it.pendingCorrectionIds + state.correctionStudentId,
+                        correctionStudentId    = "",
+                        correctionDate         = "",
+                        correctionReason       = ""
+                    ) }
+                    _events.emit(AttendanceEvent.CorrectionSubmitted("Correction submitted (#$reqId)"))
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(isSubmittingCorrection = false) }
+                    val msg = when (e) {
+                        is AttendanceApiError.Conflict -> e.message ?: "A pending correction already exists."
+                        is AttendanceApiError.Forbidden -> e.message ?: "Not authorized for this class."
+                        is AttendanceApiError.ReasonRequired -> "Reason must be 10+ characters."
+                        else -> e.message ?: "Failed to submit"
+                    }
+                    _events.emit(AttendanceEvent.SaveError(msg))
+                }
+            )
         }
     }
 

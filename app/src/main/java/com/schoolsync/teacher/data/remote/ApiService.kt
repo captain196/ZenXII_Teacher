@@ -3,25 +3,24 @@ package com.schoolsync.teacher.data.remote
 import retrofit2.Response
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
+import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 
 /**
  * Retrofit API service for admin panel endpoints.
  *
- * Phase 8b (2026-04-09): added `teacherNotify` so the teacher app
- * can trigger parent push notifications after marking A/T via the
- * admin's `_fire_single_student_event` pipeline.
+ * Phase 1 (2026-05): the teacher app now writes attendance through
+ * the PHP backend (`/attendance/save`) instead of writing Firestore
+ * directly. The backend enforces the time-stage gate, holiday/admission
+ * validation, and audit logging.
+ *
+ * Phase 2: lock state + correction request submission are also
+ * routed through here.
  */
 interface ApiService {
 
-    /**
-     * Notify the admin panel that a student was marked Absent or
-     * Tardy so it fires the FCM push to the parent's device.
-     *
-     * The teacher app writes attendance directly to Firestore
-     * (canonical), but the push pipeline lives in PHP — this
-     * endpoint bridges the gap.
-     */
+    // ── Phase 0 — bridge to FCM push (kept for compatibility) ────
     @FormUrlEncoded
     @POST("attendance/teacher_notify")
     suspend fun teacherNotify(
@@ -31,5 +30,59 @@ interface ApiService {
         @Field("section") section: String,
         @Field("day") day: Int,
         @Field("month") month: String = ""
+    ): Response<Map<String, Any>>
+
+    // ── Phase 1 — smart save ─────────────────────────────────────
+    /**
+     * Default-Present save. Server expands the active roster and writes
+     * Present for every student NOT in absent / leave / late.
+     *
+     * `absent`, `leave`, `late` are JSON-encoded strings sent as form fields.
+     *   absent: ["STU0001","STU0007"]
+     *   leave:  ["STU0012"]
+     *   late:   [{"studentId":"STU0019","lateMinutes":12}]
+     *
+     * Date is server-resolved — DO NOT pass it.
+     */
+    @FormUrlEncoded
+    @POST("attendance/save")
+    suspend fun saveAttendance(
+        @Field("class") className: String,
+        @Field("section") section: String,
+        @Field("absent") absentJson: String = "[]",
+        @Field("leave") leaveJson: String = "[]",
+        @Field("late") lateJson: String = "[]",
+        @Field("reason") reason: String = ""
+    ): Response<Map<String, Any>>
+
+    // ── Phase 2 — lock state ─────────────────────────────────────
+    @GET("attendance/lock")
+    suspend fun getLock(
+        @Query("class") className: String,
+        @Query("section") section: String,
+        @Query("date") date: String = ""
+    ): Response<Map<String, Any>>
+
+    // ── Phase 2 — correction submit ──────────────────────────────
+    /**
+     * `requestedMark` is a JSON-encoded {status, late?, lateMinutes?}.
+     * Server enforces reason ≥10 chars and class-ownership.
+     */
+    @FormUrlEncoded
+    @POST("attendance/correction/submit")
+    suspend fun submitCorrection(
+        @Field("studentId") studentId: String,
+        @Field("date") date: String,
+        @Field("requestedMark") requestedMarkJson: String,
+        @Field("reason") reason: String
+    ): Response<Map<String, Any>>
+
+    // ── Phase 2 — list teacher's own corrections ─────────────────
+    @GET("attendance/correction/list")
+    suspend fun listCorrections(
+        @Query("status") status: String = "pending",
+        @Query("date") date: String = "",
+        @Query("limit") limit: Int = 25,
+        @Query("cursor") cursor: Long = 0
     ): Response<Map<String, Any>>
 }

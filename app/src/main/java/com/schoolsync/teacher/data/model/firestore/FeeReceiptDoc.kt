@@ -21,7 +21,7 @@ data class FeeReceiptDoc(
     val amount: Double = 0.0,
     val paymentMode: String = "",  // "Cash", "Online", "Cheque"
     val feeMonths: List<String> = emptyList(),
-    val feeBreakdown: Map<String, Double> = emptyMap(),
+    val feeBreakdown: List<Map<String, Any>> = emptyList(),
     val remarks: String = "",
     val collectedBy: String = "",
     val createdAt: Any? = null

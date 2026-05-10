@@ -113,6 +113,23 @@ class FCMService : FirebaseMessagingService() {
                     data
                 )
             }
+            // Phase 4 cross-system: explicit handling for HR's leave decisions.
+            // Server sends title/body in the data payload; we surface them
+            // with the right routing and a clear notification id.
+            "leave_approved" -> {
+                showNotification(
+                    data["title"] ?: "Leave Approved",
+                    data["body"] ?: "Your leave request has been approved.",
+                    data
+                )
+            }
+            "leave_rejected" -> {
+                showNotification(
+                    data["title"] ?: "Leave Rejected",
+                    data["body"] ?: "Your leave request has been rejected.",
+                    data
+                )
+            }
             "event", "event_created" -> {
                 // Backend sends title = "New Event: {…}", body = "{startDate} | {location}".
                 // Keep the server-provided text, fall back if either is missing.

@@ -140,6 +140,14 @@ object Constants {
 
         // ── Phase B (RTDB elimination): Student Red Flags ──────────────
         const val STUDENT_FLAGS = "studentFlags"
+
+        // ── Phase 6/7: Academic Planner ────────────────────────────────
+        const val LESSON_PLANS = "lessonPlans"
+        const val CURRICULUM = "curriculum"        // parent docs (topicIds[] + counters)
+        const val ACADEMIC_AUDIT_LOG = "academicAuditLog"
+
+        // ── Homework — teacher evaluations of non-submitters ───────────
+        const val TEACHER_MARKS = "teacherMarks"
     }
 
     /** RTDB URL */

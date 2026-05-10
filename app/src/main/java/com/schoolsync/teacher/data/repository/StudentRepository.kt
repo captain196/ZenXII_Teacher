@@ -1,7 +1,6 @@
 package com.schoolsync.teacher.data.repository
 
 import android.util.Log
-import com.schoolsync.teacher.data.firebase.FirebaseService
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.StudentInfo
@@ -12,61 +11,56 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Student roster repository — Phase 2: Firestore-first with RTDB fallback.
+ * Student roster repository — Firestore-only.
  *
- * PRIMARY:  Firestore → students collection WHERE schoolId + className + section + status
- * FALLBACK: RTDB → Schools/{school}/{session}/{class}/{section}/Students/List
+ * Source: Firestore `students` collection, queried by
+ * `schoolId == schoolCode AND className == ck AND section == sk`,
+ * with a case-insensitive `status` filter applied client-side.
  *
- * The fallback will be removed in Phase 3 once Firestore reads are validated in production.
+ * The previous RTDB fallback (`Schools/{school}/{session}/{class}/{section}/Students/List`)
+ * was removed per the project's absolute NO-RTDB policy (P0c migration). Every
+ * student that admin's Sis writes lands in Firestore via Entity_firestore_sync,
+ * so there is no scenario where a real student exists in the RTDB roster but
+ * not in the Firestore students collection. An empty Firestore result is the
+ * truth — a class with no Active students, not a sync gap.
+ *
+ * Phase 2A (2026-05-09) — case-insensitive status filter. The previous
+ * server-side `status == "Active"` filter dropped any student row whose
+ * status was written as `"active"` (lowercase) — a real-world data
+ * inconsistency observed at SCH_D94FE8F7AD where 9 of 12 active
+ * students had lowercase status. The class-fees screen for those
+ * sections rendered as empty rosters even though the students were
+ * legitimately enrolled. Mirrors the admin-side `_activeStudentIds`
+ * fix: load the per-section roster and filter on a normalized
+ * (lowercase) status with an explicit exclusion list, so any
+ * non-excluded value (Active / active / blank / unrecognized) keeps
+ * the row visible. Inactive states explicitly excluded: TC, Withdrawn,
+ * Inactive, Suspended.
  */
 @Singleton
 class StudentRepository @Inject constructor(
-    private val firebaseService: FirebaseService,
     private val firestoreService: FirestoreService,
     private val tokenManager: TokenManager
 ) {
     companion object {
         private const val TAG = "StudentRepository"
+
+        /**
+         * Statuses that mark a student as no longer Active in the school.
+         * Matched case-insensitively. Anything not in this set (including
+         * "Active", "active", and blank) keeps the student visible.
+         */
+        private val INACTIVE_STATUSES = setOf(
+            "tc", "withdrawn", "inactive", "suspended"
+        )
     }
 
     /**
-     * Get all active students for a class/section.
-     * Tries Firestore first, falls back to RTDB roster on failure.
+     * Get all active students for a class/section from Firestore.
+     * Indexed query on schoolId + className + section; status filter
+     * applied client-side for case-insensitivity (see class docblock).
      */
     suspend fun getStudentsForClass(
-        className: String,
-        section: String
-    ): Result<List<StudentInfo>> {
-        // Try Firestore first
-        val firestoreResult = getStudentsFromFirestore(className, section)
-        if (firestoreResult.isSuccess) {
-            val students = firestoreResult.getOrDefault(emptyList())
-            if (students.isNotEmpty()) {
-                Log.d(TAG, "Firestore: ${students.size} students for $className/$section")
-                return firestoreResult
-            }
-            // Empty Firestore result — could mean no students OR data not synced yet
-            // Fall through to RTDB to check
-            Log.d(TAG, "Firestore empty for $className/$section, checking RTDB fallback")
-        } else {
-            Log.w(TAG, "Firestore query failed for $className/$section, using RTDB fallback",
-                firestoreResult.exceptionOrNull())
-        }
-
-        // Fallback to RTDB roster
-        val rtdbResult = getStudentsFromRtdb(className, section)
-        if (rtdbResult.isSuccess) {
-            val rtdbStudents = rtdbResult.getOrDefault(emptyList())
-            Log.d(TAG, "RTDB fallback: ${rtdbStudents.size} students for $className/$section")
-        }
-        return rtdbResult
-    }
-
-    /**
-     * PRIMARY: Firestore query for active students in a class/section.
-     * Uses indexed fields: schoolId + className + section + status.
-     */
-    private suspend fun getStudentsFromFirestore(
         className: String,
         section: String
     ): Result<List<StudentInfo>> {
@@ -83,10 +77,15 @@ class StudentRepository @Inject constructor(
                 ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("className", ck)
                     .whereEqualTo("section", sk)
-                    .whereEqualTo("status", "Active")
+                // status filter applied client-side; see class docblock
             }
 
-            val students = docs.map { doc ->
+            val active = docs.filter { doc ->
+                val st = doc.status.lowercase().trim()
+                st.isEmpty() || st !in INACTIVE_STATUSES
+            }
+
+            val students = active.map { doc ->
                 // Resolve the canonical student userId. The doc id is
                 // `{schoolId}_{userId}` — if the userId field happens to
                 // be blank, strip the prefix so we always end up with the
@@ -119,85 +118,10 @@ class StudentRepository @Inject constructor(
                 )
             }.sortedBy { it.rollNo.toIntOrNull() ?: Int.MAX_VALUE }
 
+            Log.d(TAG, "Firestore: ${students.size} students for $className/$section")
             Result.success(students)
         } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * FALLBACK: RTDB roster read.
-     * Path: Schools/{schoolCode}/{session}/{class}/{section}/Students/List
-     *
-     * Will be removed in Phase 3.
-     */
-    private suspend fun getStudentsFromRtdb(
-        className: String,
-        section: String
-    ): Result<List<StudentInfo>> {
-        return try {
-            // schoolCode now stores schoolId — used for Schools/{schoolId}/... paths
-            val schoolCode = tokenManager.schoolCode.firstOrNull()
-                ?: return Result.failure(Exception("School code not available"))
-            // parentDbKey is the login code — used for Users/Parents/... paths
-            val parentDbKey = tokenManager.parentDbKey.firstOrNull() ?: schoolCode
-            val session = tokenManager.session.firstOrNull()
-                ?: return Result.failure(Exception("Session not available"))
-
-            val enrollmentPath =
-                "${Constants.Firebase.SCHOOLS}/$schoolCode/$session/${Constants.classKey(className)}/${Constants.sectionKey(section)}/${Constants.Firebase.STUDENT_LIST}"
-            val snapshot = firebaseService.readSnapshot(enrollmentPath)
-
-            val students = mutableListOf<StudentInfo>()
-            for (child in snapshot.children) {
-                val studentId = child.key ?: continue
-
-                // Handle both string ("Name") and object ({Name, Roll_no}) formats
-                var listName = ""
-                var listRollNo = ""
-                try {
-                    listName = child.getValue(String::class.java) ?: ""
-                } catch (_: Exception) {
-                    try {
-                        @Suppress("UNCHECKED_CAST")
-                        val map = child.value as? Map<String, Any?>
-                        if (map != null) {
-                            listName = (map["Name"] ?: map["name"] ?: "").toString()
-                            listRollNo = (map["Roll_no"] ?: map["roll_no"] ?: map["rollNo"] ?: "").toString()
-                        }
-                    } catch (_: Exception) { }
-                }
-
-                // Try full profile for more details — use parentDbKey (login code),
-                // NOT schoolCode (schoolId), since student profiles live at
-                // Users/Parents/{parentDbKey}/{studentId}.
-                try {
-                    val profilePath = "${Constants.Firebase.USERS_PARENTS}/$parentDbKey/$studentId"
-                    val info = firebaseService.readValue<StudentInfo>(profilePath)
-                    if (info != null) {
-                        students.add(info.copy(
-                            studentId = studentId,
-                            name = info.name.ifBlank { listName },
-                            rollNo = info.rollNo.ifBlank { listRollNo },
-                            className = className,
-                            section = section
-                        ))
-                    } else {
-                        students.add(StudentInfo(
-                            studentId = studentId, name = listName,
-                            rollNo = listRollNo, className = className, section = section
-                        ))
-                    }
-                } catch (_: Exception) {
-                    students.add(StudentInfo(
-                        studentId = studentId, name = listName,
-                        rollNo = listRollNo, className = className, section = section
-                    ))
-                }
-            }
-
-            Result.success(students.sortedBy { it.rollNo.toIntOrNull() ?: Int.MAX_VALUE })
-        } catch (e: Exception) {
+            Log.w(TAG, "Firestore query failed for $className/$section", e)
             Result.failure(e)
         }
     }

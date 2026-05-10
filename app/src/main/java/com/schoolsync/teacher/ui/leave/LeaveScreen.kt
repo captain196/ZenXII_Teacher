@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,9 +47,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +68,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.Divider as DividerColor
@@ -114,6 +121,17 @@ fun LeaveScreen(
                 }
             }
         }
+    }
+
+    // P2 — Refresh on screen resume so the balance reflects admin's
+    // approval/rejection without requiring the user to pull-to-refresh.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     GradientBackground {
@@ -388,6 +406,8 @@ fun LeaveScreen(
                 onStartDateChange = viewModel::setStartDate,
                 onEndDateChange = viewModel::setEndDate,
                 onReasonChange = viewModel::setReason,
+                onHalfDayChange = viewModel::setApplyHalfDay,
+                onHalfDayPeriodChange = viewModel::setApplyHalfDayPeriod,
                 onSubmit = viewModel::submitLeaveRequest
             )
         }
@@ -581,11 +601,20 @@ private fun ApplyLeaveDialog(
     onStartDateChange: (String) -> Unit,
     onEndDateChange: (String) -> Unit,
     onReasonChange: (String) -> Unit,
+    onHalfDayChange: (Boolean) -> Unit,
+    onHalfDayPeriodChange: (String) -> Unit,
     onSubmit: () -> Unit
 ) {
     var typeDropdownExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
+        // Tap-outside no longer dismisses — the user must explicitly hit the
+        // cross icon. Back press still closes (standard Android UX) so the
+        // user isn't trapped if they invoke the system back gesture.
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = true,
+        ),
         onDismissRequest = onDismiss,
         title = {
             Row(
@@ -688,27 +717,166 @@ private fun ApplyLeaveDialog(
                         } else "",
                         onValueChange = {},
                         label = { Text("End Date") },
-                        placeholder = { Text("Tap to select") },
+                        placeholder = { Text(if (state.applyHalfDay) "Same as start" else "Tap to select") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         readOnly = true,
+                        enabled = !state.applyHalfDay,
                         colors = leaveTextFieldColors(),
                         shape = RoundedCornerShape(8.dp),
                         trailingIcon = {
-                            IconButton(onClick = { showEndPicker = true }) {
-                                Icon(Icons.Filled.CalendarMonth, "Pick date", tint = Teal)
+                            IconButton(
+                                onClick = { showEndPicker = true },
+                                enabled = !state.applyHalfDay
+                            ) {
+                                Icon(
+                                    Icons.Filled.CalendarMonth,
+                                    "Pick date",
+                                    tint = if (state.applyHalfDay) TextTertiary else Teal
+                                )
                             }
                         },
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }.also {
                             LaunchedEffect(it) {
                                 it.interactions.collect { interaction ->
-                                    if (interaction is androidx.compose.foundation.interaction.PressInteraction.Release) {
+                                    if (interaction is androidx.compose.foundation.interaction.PressInteraction.Release && !state.applyHalfDay) {
                                         showEndPicker = true
                                     }
                                 }
                             }
                         }
                     )
+                }
+
+                // Half-day toggle + period picker.
+                // When ON, the leave is a single-date 0.5-day deduction; the End
+                // Date field is disabled and auto-synced to Start Date by the VM.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Glass.copy(alpha = 0.25f))
+                        .border(1.dp, GlassBorder, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Half Day Leave",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Counts as 0.5 day on a single date",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = state.applyHalfDay,
+                        onCheckedChange = onHalfDayChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = BgStart,
+                            checkedTrackColor = Teal,
+                            uncheckedThumbColor = TextTertiary,
+                            uncheckedTrackColor = Glass
+                        )
+                    )
+                }
+
+                if (state.applyHalfDay) {
+                    var periodDropdownExpanded by remember { mutableStateOf(false) }
+                    Column {
+                        Text(
+                            "Period",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextSecondary
+                        )
+                        Box {
+                            OutlinedButton(
+                                onClick = { periodDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                border = ButtonDefaults.outlinedButtonBorder.copy(
+                                    brush = SolidColor(GlassBorder)
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = if (state.applyHalfDayPeriod == "PM") "Afternoon (PM)" else "Morning (AM)",
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                            }
+                            DropdownMenu(
+                                expanded = periodDropdownExpanded,
+                                onDismissRequest = { periodDropdownExpanded = false },
+                                modifier = Modifier.background(SurfaceDark)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Morning (AM)", color = TextPrimary) },
+                                    onClick = {
+                                        onHalfDayPeriodChange("AM")
+                                        periodDropdownExpanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Afternoon (PM)", color = TextPrimary) },
+                                    onClick = {
+                                        onHalfDayPeriodChange("PM")
+                                        periodDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Active-mode badge — confirms what will be submitted at a
+                    // glance, especially useful since the End Date field is
+                    // disabled and could otherwise look like an error.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(TealSurface)
+                                .border(1.dp, Teal.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Half-day (${state.applyHalfDayPeriod})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Teal
+                            )
+                        }
+                    }
+
+                    // Balance-impact warning so the teacher knows the
+                    // deduction before they hit Submit.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(WarningAmberSurface)
+                            .border(1.dp, WarningAmber.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Half-day counts as 0.5 day deduction from your balance.",
+                            fontSize = 12.sp,
+                            color = WarningAmber,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
 
                 // Date picker dialogs
@@ -727,6 +895,13 @@ private fun ApplyLeaveDialog(
                         dialog.setOnDismissListener { showStartPicker = false }
                         dialog.show()
                     }
+                }
+                // Defense in depth: while half-day is on, never instantiate
+                // the End-Date dialog even if `showEndPicker` somehow flipped
+                // true (e.g. lingering state across recompositions). The
+                // single-date invariant must hold regardless.
+                if (showEndPicker && state.applyHalfDay) {
+                    showEndPicker = false
                 }
                 if (showEndPicker) {
                     val startMs = try {
@@ -763,6 +938,31 @@ private fun ApplyLeaveDialog(
                     colors = leaveTextFieldColors(),
                     shape = RoundedCornerShape(8.dp)
                 )
+
+                // Submit preview — single line summarising what will be sent.
+                // Hidden until both dates are set so an empty preview never
+                // misleads the user; updates live as they edit.
+                if (state.applyStartDate.isNotBlank() && state.applyEndDate.isNotBlank()) {
+                    val previewText = buildLeavePreview(state)
+                    if (previewText.isNotBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(InfoBlueSurface)
+                                .border(1.dp, InfoBlue.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = previewText,
+                                fontSize = 12.sp,
+                                color = InfoBlue,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -794,6 +994,32 @@ private fun ApplyLeaveDialog(
         containerColor = SurfaceDark,
         shape = RoundedCornerShape(16.dp)
     )
+}
+
+// Build the human-readable preview line shown above the Submit button.
+// Returns "" if dates can't be parsed so the caller can hide the row.
+private fun buildLeavePreview(state: LeaveUiState): String {
+    return try {
+        val start = java.time.LocalDate.parse(state.applyStartDate)
+        val end = java.time.LocalDate.parse(state.applyEndDate)
+        val dayMonth = java.time.format.DateTimeFormatter.ofPattern("d MMM")
+        val typeLabel = state.applyLeaveType.ifBlank { "Leave" }
+
+        if (state.applyHalfDay) {
+            val periodWord = if (state.applyHalfDayPeriod == "PM") "Afternoon" else "Morning"
+            "Applying Half-Day $typeLabel ($periodWord) on ${start.format(dayMonth)}"
+        } else {
+            val days = (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1)
+                .toInt().coerceAtLeast(1)
+            if (days == 1) {
+                "Applying $typeLabel on ${start.format(dayMonth)} (1 day)"
+            } else {
+                "Applying $typeLabel from ${start.format(dayMonth)} to ${end.format(dayMonth)} ($days days)"
+            }
+        }
+    } catch (_: Exception) {
+        ""
+    }
 }
 
 @Composable

@@ -23,9 +23,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import javax.inject.Inject
 
 data class HomeworkClassSection(
@@ -56,6 +53,8 @@ data class HomeworkUiState(
     val selectedHomework: HomeworkTeacher? = null,
     val submissions: List<HomeworkStatusEntry> = emptyList(),
     val students: List<StudentInfo> = emptyList(),
+    /** Teacher marks for non-submitters: studentId → (score, remark). */
+    val teacherMarks: Map<String, com.schoolsync.teacher.data.repository.firestore.TeacherMarkEntry> = emptyMap(),
     val showDetailSheet: Boolean = false,
     val isLoadingSubmissions: Boolean = false,
     // Subjects available for the selected class (from assignments)
@@ -272,18 +271,30 @@ class HomeworkTeacherViewModel @Inject constructor(
             viewModelScope.launch { _events.emit(HomeworkEvent.Error("Subject is required")) }
             return
         }
+        if (form.dueDate.isBlank()) {
+            // Was silently falling back to today via .ifBlank — making it
+            // impossible to spot a missed picker selection. Force the
+            // teacher to pick explicitly.
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Due date is required")) }
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(formState = it.formState.copy(isSubmitting = true)) }
             try {
                 val teacherId = tokenManager.userId.firstOrNull() ?: ""
                 val teacherName = tokenManager.userName.firstOrNull() ?: ""
-                val students = _uiState.value.students
-                val dueDate = form.dueDate.ifBlank {
-                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                }
+                val dueDate = form.dueDate
 
-                // Firestore-only: create homework
+                // Re-query the roster at write time. The state-cached
+                // `_uiState.value.students` was loaded when the form opened
+                // and can be stale if a student was added/removed in the
+                // interim — submission rate would then start out wrong.
+                val freshRoster = studentRepository.getStudentsForClass(
+                    classSection.className, classSection.section
+                ).getOrNull() ?: _uiState.value.students
+                val totalStudents = freshRoster.size
+
                 homeworkFirestoreRepo.createHomework(
                     title = form.title.trim(),
                     description = form.description.trim(),
@@ -293,7 +304,7 @@ class HomeworkTeacherViewModel @Inject constructor(
                     dueDate = dueDate,
                     teacherId = teacherId,
                     teacherName = teacherName,
-                    totalStudents = students.size
+                    totalStudents = totalStudents
                 ).fold(
                     onSuccess = { firestoreHwId ->
                         Log.d(TAG, "Homework created: $firestoreHwId")
@@ -337,17 +348,45 @@ class HomeworkTeacherViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Fix #7: delete all related submissions first
-                val submissions = homeworkFirestoreRepo.getSubmissions(hw.hwId).getOrNull() ?: emptyList()
                 val fs = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+
+                // Cascade — delete every doc in `submissions` AND `teacherMarks`
+                // tied to this homework. Skipping teacherMarks (the original
+                // bug) left orphans for students who were graded without
+                // submitting; they piled up in Firestore and confused later
+                // reports.
+                val submissions = homeworkFirestoreRepo.getSubmissions(hw.hwId).getOrNull() ?: emptyList()
                 for (sub in submissions) {
                     try { fs.collection("submissions").document(sub.id).delete().await() } catch (_: Exception) {}
+                }
+                val schoolCode = tokenManager.schoolId.firstOrNull() ?: ""
+                val markDocs = try {
+                    fs.collection("teacherMarks")
+                        .whereEqualTo("schoolId", schoolCode)
+                        .whereEqualTo("homeworkId", hw.hwId)
+                        .get()
+                        .await()
+                        .documents
+                } catch (e: Exception) {
+                    Log.w(TAG, "teacherMarks query failed during delete cascade: ${e.message}")
+                    emptyList()
+                }
+                for (m in markDocs) {
+                    try { m.reference.delete().await() } catch (_: Exception) {}
                 }
 
                 homeworkFirestoreRepo.deleteHomework(hw.hwId).fold(
                     onSuccess = {
-                        Log.d(TAG, "Homework + ${submissions.size} submissions deleted: ${hw.hwId}")
-                        _events.emit(HomeworkEvent.Success("Homework and ${submissions.size} submission(s) deleted"))
+                        Log.d(TAG, "Homework + ${submissions.size} submissions + ${markDocs.size} teacherMarks deleted: ${hw.hwId}")
+                        val msg = buildString {
+                            append("Homework deleted")
+                            if (submissions.isNotEmpty()) append(" (${submissions.size} submission(s)")
+                            if (markDocs.isNotEmpty()) {
+                                if (submissions.isNotEmpty()) append(", ${markDocs.size} mark(s))")
+                                else append(" (${markDocs.size} mark(s))")
+                            } else if (submissions.isNotEmpty()) append(")")
+                        }
+                        _events.emit(HomeworkEvent.Success(msg))
                         _uiState.update { it.copy(selectedHomework = null, showDetailSheet = false) }
                         loadHomework()
                     },
@@ -388,47 +427,45 @@ class HomeworkTeacherViewModel @Inject constructor(
 
         submissionListenerJob = viewModelScope.launch {
             try {
-                // Load students
-                val studentsResult = studentRepository.getStudentsForClass(
+                // Roster + teacherMarks loaded once per detail-sheet open.
+                // These change rarely compared to submissions and don't need
+                // a live listener.
+                val students = studentRepository.getStudentsForClass(
                     classSection.className, classSection.section
-                )
-                val students = studentsResult.getOrNull() ?: emptyList()
+                ).getOrNull() ?: emptyList()
+                val teacherMarks = homeworkFirestoreRepo.getTeacherMarksForHomework(hw.hwId)
+                    .getOrNull() ?: emptyMap()
 
-                // Firestore-only: load submissions
-                val submissionsResult = homeworkFirestoreRepo.getSubmissions(hw.hwId)
-                val submissions = submissionsResult.getOrNull()?.map { doc ->
-                    HomeworkStatusEntry(
-                        studentId = doc.studentId,
-                        studentName = doc.studentName,
-                        status = doc.status,
-                        remark = doc.remark,
-                        text = doc.text,
-                        files = doc.files,
-                        score = doc.score,
-                        maxMarks = doc.maxMarks
-                    )
-                } ?: emptyList()
-
-                Log.d(TAG, "Submissions loaded: ${submissions.size} entries")
-
-                // Fix submissionCount: teacher is staff, rules allow update
-                val submittedCount = submissions.size
-                try {
-                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                        .collection("homework").document(hw.hwId)
-                        .update("submissionCount", submittedCount)
-                        .addOnSuccessListener { Log.d(TAG, "submissionCount updated to $submittedCount") }
-                } catch (_: Exception) {}
-
-                _uiState.update {
-                    it.copy(
-                        students = students,
-                        submissions = submissions,
-                        isLoadingSubmissions = false
-                    )
+                // Live submissions — every parent submit / teacher review
+                // mutates a doc here, and this listener pushes the change
+                // straight into the UI without a manual refresh. submission-
+                // Count is NOT mirrored here: the parent app's submit
+                // transaction owns the increment to keep it monotonic.
+                homeworkFirestoreRepo.observeSubmissions(hw.hwId).collect { docs ->
+                    val submissions = docs.map { doc ->
+                        HomeworkStatusEntry(
+                            studentId = doc.studentId,
+                            studentName = doc.studentName,
+                            status = doc.status,
+                            remark = doc.remark,
+                            text = doc.text,
+                            files = doc.files,
+                            score = doc.score,
+                            maxMarks = doc.maxMarks
+                        )
+                    }
+                    Log.d(TAG, "Submissions live-update: ${submissions.size} entries")
+                    _uiState.update {
+                        it.copy(
+                            students = students,
+                            submissions = submissions,
+                            teacherMarks = teacherMarks,
+                            isLoadingSubmissions = false
+                        )
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                // Normal
+                // Normal — sheet dismissed
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load submissions", e)
                 _uiState.update { it.copy(isLoadingSubmissions = false) }
@@ -449,59 +486,32 @@ class HomeworkTeacherViewModel @Inject constructor(
             try {
                 val teacherId = tokenManager.userId.firstOrNull() ?: ""
                 val teacherName = tokenManager.userName.firstOrNull() ?: teacherId
-                val submissionId = "${hw.hwId}_${studentId}"
-                val schoolCode = tokenManager.schoolId.firstOrNull() ?: ""
-                val classSection = _uiState.value.selectedClass
+                val studentName = _uiState.value.students
+                    .firstOrNull { it.studentId == studentId }?.name ?: ""
 
-                // Fix #2: If submission doc doesn't exist (student hasn't
-                // submitted), create it first so reviewSubmission doesn't
-                // fail with "doc not found".
-                val existing = homeworkFirestoreRepo.getSubmissions(hw.hwId)
-                    .getOrNull()?.find { it.studentId == studentId }
-
-                if (existing == null) {
-                    // Create the submission doc first
-                    val sectionKey = if (classSection != null) {
-                        "${com.schoolsync.teacher.util.Constants.classKey(classSection.className)}/${com.schoolsync.teacher.util.Constants.sectionKey(classSection.section)}"
-                    } else ""
-
-                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                        .collection("submissions").document(submissionId)
-                        .set(mapOf(
-                            "schoolId" to schoolCode,
-                            "homeworkId" to hw.hwId,
-                            "studentId" to studentId,
-                            "studentName" to studentName,
-                            "sectionKey" to sectionKey,
-                            "status" to status,
-                            "text" to "",
-                            "files" to emptyList<String>(),
-                            "remark" to remark,
-                            "score" to score,
-                            "maxMarks" to 0,
-                            "reviewedBy" to teacherName,
-                            "reviewedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                            "submittedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                        ))
-                        .await()
-                    loadSubmissions(hw)
-                } else {
-                    // Fix #5 + #6: remark without status prefix, actual score
-                    homeworkFirestoreRepo.reviewSubmission(
-                        submissionId = submissionId,
-                        remark = remark.trim(),
-                        score = score,
-                        reviewedBy = teacherName
-                    ).fold(
-                        onSuccess = {
-                            loadSubmissions(hw)
-                            loadHomework() // Fix #10: refresh homework list too
-                        },
-                        onFailure = { e ->
-                            _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update"))
-                        }
-                    )
-                }
+                // Atomic decide-and-write — see HomeworkFirestoreRepository
+                // .reviewOrMark for the race-condition rationale. The
+                // submission-vs-teacherMark branch lives inside a Firestore
+                // transaction so a parent-app submit landing mid-flight
+                // cannot create a duplicate-grade state.
+                homeworkFirestoreRepo.reviewOrMark(
+                    homeworkId = hw.hwId,
+                    studentId  = studentId,
+                    studentName = studentName,
+                    score      = score,
+                    remark     = remark,
+                    reviewedBy = teacherName,
+                    teacherId  = teacherId,
+                    status     = status   // Pass through the teacher's pick
+                ).fold(
+                    onSuccess = {
+                        loadSubmissions(hw)
+                        loadHomework()
+                    },
+                    onFailure = { e ->
+                        _events.emit(HomeworkEvent.Error(e.message ?: "Failed to save mark"))
+                    }
+                )
             } catch (e: Exception) {
                 _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update status"))
             }

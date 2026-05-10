@@ -12,11 +12,14 @@ import com.schoolsync.teacher.data.repository.RedFlagRepository
 import com.schoolsync.teacher.data.repository.StudentRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -51,7 +54,9 @@ data class RedFlagUiState(
     val selectedStudentId: String? = null,
     val subjectsForClass: List<String> = emptyList(),
     /** Current teacher's Firebase UID — drives delete-button visibility. */
-    val currentTeacherUid: String = ""
+    val currentTeacherUid: String = "",
+    /** ID of the most recent quick-flag write — drives the Undo snackbar. */
+    val lastCreatedFlagId: String? = null
 )
 
 sealed class RedFlagEvent {
@@ -79,6 +84,12 @@ class RedFlagTeacherViewModel @Inject constructor(
     val events = _events.asSharedFlow()
 
     private var allAssignments: List<ClassAssignment> = emptyList()
+
+    /**
+     * Active snapshot listener for flags in the currently-selected class.
+     * Cancelled on every class change so we don't accumulate listeners.
+     */
+    private var flagsObserveJob: Job? = null
 
     init {
         // Stamp the current teacher's UID into state once at startup so the
@@ -153,27 +164,47 @@ class RedFlagTeacherViewModel @Inject constructor(
     private fun loadStudentsAndFlags() {
         val classSection = _uiState.value.selectedClass ?: return
 
+        // Cancel any prior listener — switching classes must not stack
+        // observers, otherwise the UI would receive interleaved updates
+        // for the old + new class.
+        flagsObserveJob?.cancel()
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                // Load students
+                // Students are static for the session — one-shot fetch.
                 val studentsResult = studentRepository.getStudentsForClass(
                     classSection.className, classSection.section
                 )
                 val students = studentsResult.getOrNull() ?: emptyList()
 
-                // Load flags for all students in the class
-                val flagsResult = redFlagRepository.getFlagsForClass(students)
-                val flagsByStudent = flagsResult.getOrNull() ?: emptyMap()
-
-                Log.d(TAG, "Loaded ${students.size} students, ${flagsByStudent.values.sumOf { it.size }} total flags")
-
                 _uiState.update {
                     it.copy(
                         students = students,
-                        flagsByStudent = flagsByStudent,
+                        flagsByStudent = emptyMap(),
                         isLoading = false
                     )
+                }
+
+                // Flags are live — observe so admin/peer resolves and new
+                // flags from anywhere in the system reflect on this screen
+                // without a manual reload. Mirrors the parent app's
+                // snapshot-listener approach.
+                flagsObserveJob = viewModelScope.launch {
+                    redFlagRepository.observeFlagsForClass(students)
+                        .catch { e ->
+                            // Listener exceptions (missing index, rules
+                            // denial, network drop) must not crash the
+                            // app — surface as an error in UI state and
+                            // let the screen render its existing data.
+                            Log.e(TAG, "observeFlagsForClass failed", e)
+                            _uiState.update { it.copy(error = e.message) }
+                        }
+                        .collect { flagsByStudent ->
+                            Log.d(TAG, "observeFlagsForClass tick — ${students.size} students, " +
+                                "${flagsByStudent.values.sumOf { it.size }} flags")
+                            _uiState.update { it.copy(flagsByStudent = flagsByStudent) }
+                        }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load flags", e)
@@ -221,6 +252,77 @@ class RedFlagTeacherViewModel @Inject constructor(
         _uiState.update {
             it.copy(formState = it.formState.copy(studentId = studentId, studentName = studentName))
         }
+    }
+
+    /**
+     * Phase 6A — submit a flag built by the QuickFlagSheet.
+     *
+     * The sheet hands us a fully-populated [StudentFlag] minus the
+     * teacher identity (which lives in TokenManager / FirebaseAuth).
+     * We hydrate teacher fields here and dispatch to the repo.
+     * Successful writes also seed a "lastCreatedFlagId" in state so
+     * the screen can show a 5-second Undo snackbar.
+     */
+    fun submitQuickFlag(quickFlag: StudentFlag) {
+        viewModelScope.launch {
+            try {
+                val teacherId   = tokenManager.userId.firstOrNull().orEmpty()
+                val teacherName = tokenManager.userName.firstOrNull().orEmpty()
+                val flag = quickFlag.copy(
+                    teacherId   = teacherId,
+                    teacherName = teacherName
+                )
+                redFlagRepository.createFlag(flag).fold(
+                    onSuccess = { flagId ->
+                        Log.d(TAG, "Quick flag created: $flagId")
+                        _uiState.update { it.copy(lastCreatedFlagId = flagId) }
+                        _events.emit(RedFlagEvent.Success(
+                            "Flag raised for ${flag.studentName}"
+                        ))
+                    },
+                    onFailure = { e ->
+                        Log.e(TAG, "Quick flag create failed", e)
+                        _events.emit(RedFlagEvent.Error(
+                            e.message ?: "Failed to raise flag"
+                        ))
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "submitQuickFlag failed", e)
+                _events.emit(RedFlagEvent.Error(e.message ?: "Failed to raise flag"))
+            }
+        }
+    }
+
+    /**
+     * 5-second Undo path for a just-raised quick flag — soft-deletes
+     * via the repo. Only valid for flags this teacher created
+     * (rules block delete on others).
+     */
+    fun undoLastQuickFlag() {
+        val flagId = _uiState.value.lastCreatedFlagId ?: return
+        viewModelScope.launch {
+            redFlagRepository.softDeleteFlag(flagId).fold(
+                onSuccess = {
+                    _uiState.update { it.copy(lastCreatedFlagId = null) }
+                    _events.emit(RedFlagEvent.Success("Flag undone"))
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "Undo failed", e)
+                    _events.emit(RedFlagEvent.Error(e.message ?: "Undo failed"))
+                }
+            )
+        }
+    }
+
+    /** Caller invokes this after the snackbar timeout to drop the undo handle. */
+    fun clearLastCreatedFlagId() {
+        _uiState.update { it.copy(lastCreatedFlagId = null) }
+    }
+
+    /** Surface a one-line hint to the user via the existing snackbar host. */
+    fun showHint(message: String) {
+        viewModelScope.launch { _events.emit(RedFlagEvent.Success(message)) }
     }
 
     fun createFlag() {
