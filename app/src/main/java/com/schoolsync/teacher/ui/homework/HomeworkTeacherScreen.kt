@@ -34,18 +34,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Pending
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.ui.platform.LocalContext
+import com.schoolsync.teacher.util.AttachmentUrlValidator
+import com.schoolsync.teacher.util.HomeworkAttachmentUploader
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -236,6 +245,7 @@ fun HomeworkTeacherScreen(
 
         // Create homework dialog
         if (state.showCreateDialog) {
+            val context = LocalContext.current
             CreateHomeworkDialog(
                 formState = state.formState,
                 subjects = state.subjectsForClass,
@@ -243,8 +253,11 @@ fun HomeworkTeacherScreen(
                 onDescriptionChange = viewModel::updateFormDescription,
                 onSubjectChange = viewModel::updateFormSubject,
                 onDueDateChange = viewModel::updateFormDueDate,
-                onCreate = viewModel::createHomework,
-                onDismiss = viewModel::hideCreateDialog
+                onCreate = { viewModel.createHomework(context) },
+                onDismiss = viewModel::hideCreateDialog,
+                onAttachmentsPicked = { uris -> viewModel.onAttachmentsPicked(context, uris) },
+                onRemoveAttachment = viewModel::removeSelectedAttachment,
+                onClearAttachmentError = viewModel::clearAttachmentError
             )
         }
 
@@ -974,6 +987,86 @@ private fun HomeworkDetailPanel(
             StatusChip("Pending", pendingCount.toString(), ErrorRed, ErrorRedSurface, Modifier.weight(1f))
         }
 
+        // ── Phase 1b (2026-05-15) Attachments review section ──────────
+        // Mirrors the Parent app's "ATTACHMENTS FROM TEACHER" Row pattern
+        // (HomeworkScreen.kt:863-933). Reads homework.attachments — the
+        // legacy List<String> field that Step 4 dual-emits alongside
+        // attachmentObjects. Each tap routes through
+        // [AttachmentUrlValidator.openAttachmentSafely] which enforces
+        // https-only + firebasestorage.googleapis.com allowlist before
+        // Intent.ACTION_VIEW dispatch. Same security posture as Parent.
+        if (homework.attachments.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            val attachmentContext = LocalContext.current
+            Text(
+                text = "ATTACHMENTS",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 10.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                homework.attachments.forEach { attachment ->
+                    val rawTail = attachment
+                        .substringAfterLast("/")
+                        .substringBefore("?")
+                    val fileName = when {
+                        rawTail.isBlank() -> "Attachment"
+                        !rawTail.contains('.') -> "Attachment"
+                        else -> rawTail
+                    }
+                    val isPdf = fileName.endsWith(".pdf", ignoreCase = true)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .glassCard(cornerRadius = 10.dp)
+                            .clickable {
+                                AttachmentUrlValidator.openAttachmentSafely(
+                                    context = attachmentContext,
+                                    rawUrl = attachment,
+                                    fileName = fileName
+                                )
+                            }
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(ErrorRedSurface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isPdf)
+                                    Icons.Filled.PictureAsPdf else Icons.Filled.Description,
+                                contentDescription = null,
+                                tint = ErrorRed,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = fileName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.AttachFile,
+                            contentDescription = "Open",
+                            tint = TextTertiary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(10.dp))
 
         // Student list
@@ -1309,7 +1402,16 @@ private fun CreateHomeworkDialog(
     onSubjectChange: (String) -> Unit,
     onDueDateChange: (String) -> Unit,
     onCreate: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    // Step 4 (2026-05-15) attachment integration. Three callbacks:
+    //   • onAttachmentsPicked  → file picker activity-result lambda; the
+    //                            ViewModel validates each URI's MIME +
+    //                            size and stages valid ones in state
+    //   • onRemoveAttachment   → pre-submit chip removal
+    //   • onClearAttachmentError → dismiss the inline error banner
+    onAttachmentsPicked: (List<android.net.Uri>) -> Unit,
+    onRemoveAttachment: (android.net.Uri) -> Unit,
+    onClearAttachmentError: () -> Unit
 ) {
     var subjectDropdownExpanded by remember { mutableStateOf(false) }
     // Hoisted out of the AlertDialog text slot — nesting a Dialog inside
@@ -1433,6 +1535,162 @@ private fun CreateHomeworkDialog(
                     enabled = false, // makes entire field clickable
                     colors = textFieldColors
                 )
+
+                // ─── Step 4 (2026-05-15) Attachments section ──────────
+                // Layout: header row with count + Add Files button →
+                // optional error banner → chip-style list of selected
+                // files (each with file-type icon, name, size, and a
+                // remove [X] button). The Add Files button is disabled
+                // when the count cap is reached or while uploads are in
+                // flight. Each chip's [X] is disabled during submit so a
+                // teacher can't yank a file out from under the uploader.
+                //
+                // File picker uses ActivityResultContracts.OpenMultipleDocuments
+                // with the homework MIME allowlist as the type filter.
+                // The system picker enforces type filtering at the OS
+                // level, so a teacher physically cannot select a .zip
+                // or .docx — but the ViewModel re-validates MIME + size
+                // server-side (well, app-side) as defense in depth.
+                val attachmentPickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenMultipleDocuments(),
+                    onResult = onAttachmentsPicked
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Attachments (${formState.selectedAttachments.size}/" +
+                                "${HomeworkAttachmentUploader.MAX_FILES_PER_HOMEWORK})",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        val canAdd = !formState.isSubmitting &&
+                            formState.selectedAttachments.size <
+                                HomeworkAttachmentUploader.MAX_FILES_PER_HOMEWORK
+                        OutlinedButton(
+                            onClick = {
+                                attachmentPickerLauncher.launch(
+                                    HomeworkAttachmentUploader.ALLOWED_MIME_TYPES.toTypedArray()
+                                )
+                            },
+                            enabled = canAdd,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.AttachFile,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (canAdd) Teal else TextSecondary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Add files",
+                                fontSize = 13.sp,
+                                color = if (canAdd) Teal else TextSecondary
+                            )
+                        }
+                    }
+
+                    // Inline error banner (per-pick validation or upload
+                    // failure surfacing). Tap dismisses.
+                    formState.attachmentError?.let { err ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !formState.isSubmitting) { onClearAttachmentError() }
+                                .background(
+                                    Color(0xFF5C1F1F).copy(alpha = 0.35f),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    Color(0xFF7A2C2C),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Dismiss",
+                                tint = Color(0xFFE57373),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = err,
+                                color = Color(0xFFE57373),
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // Chip list — one row per selected attachment.
+                    formState.selectedAttachments.forEachIndexed { idx, attachment ->
+                        val isUploading = formState.uploadingIndex == idx
+                        val isPdf = attachment.mimeType.equals("application/pdf", ignoreCase = true)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    GlassBorder.copy(alpha = 0.15f),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .border(1.dp, GlassBorder, RoundedCornerShape(8.dp))
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isPdf) Icons.Filled.PictureAsPdf
+                                              else Icons.Filled.Image,
+                                contentDescription = null,
+                                tint = if (isPdf) Color(0xFFE57373) else Teal,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = attachment.displayName,
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = formatBytes(attachment.sizeBytes),
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            if (isUploading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Teal,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                IconButton(
+                                    onClick = { onRemoveAttachment(attachment.uri) },
+                                    enabled = !formState.isSubmitting,
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Remove",
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -1477,30 +1735,93 @@ private fun CreateHomeworkDialog(
     // teacher would tap a date and the picker would auto-close with no
     // confirm option.
     if (showDatePicker) {
+        // 2026-05-15 timezone-correctness pass: Material3 stores
+        // selectedDateMillis as UTC midnight of the chosen day. ALL parsing
+        // and formatting in this dialog block uses a UTC-pinned SDF so that
+        // the "yyyy-MM-dd" string round-trips cleanly with the picker's
+        // internal representation. Without this, IST teachers saw the date
+        // decrement by one on each reopen (UTC-midnight formatted in local
+        // zone rendered as the previous day) and the dialog auto-closed
+        // immediately on open (the local-zone seed never equalled the
+        // picker's UTC-normalized state).
+        val ymdUtc = remember {
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+        }
         // Initialise the picker with the form's currently-set due date, if any,
         // so re-opening the picker shows the existing pick instead of defaulting
         // back to "+7 days from now". Falls back to +7 days when blank/invalid.
         val initialMillis = remember(formState.dueDate) {
             val parsed = try {
                 if (formState.dueDate.isNotBlank()) {
-                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                        .parse(formState.dueDate)?.time
+                    ymdUtc.parse(formState.dueDate)?.time
                 } else null
             } catch (e: Exception) { null }
             parsed ?: (System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L)
         }
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+        // Finding #25 2026-05-14 — picker-level past-date guard.
+        // Without selectableDates, teachers could scroll the picker back to
+        // any past year and create homework "born overdue" — Parent app's
+        // isOverdue() immediately flags it, students see panic-state for
+        // homework they never had a chance to submit. Two realistic vectors:
+        //   • Operator-error: typo / wrong-year scroll (dominant scenario)
+        //   • Insider abuse: disgruntled teacher weaponising deadlines
+        // SelectableDates blocks past dates at picker UI level (greys them
+        // out + hides past years in the year selector for snappier UX).
+        // The "today" boundary is computed by mapping the teacher's locally
+        // perceived calendar date (year/month/day from the device wall
+        // clock) to UTC midnight of that same calendar date — matching the
+        // unit Material3 uses to identify each day cell. This works in
+        // every zone (IST, UTC, PST, etc.) without timezone-specific drift.
+        //
+        // UI-LAYER PROTECTION ONLY — server-side enforcement remains
+        // intentionally deferred (Finding #1C for rule-layer dueDate
+        // rejection; Finding #28 for repo-layer normalizeDueDate bounds).
+        // Modified-APK bypass is therefore still possible; the same threat
+        // scope applies to both deferred siblings. Picker-layer fix is the
+        // accessible first-line defense for the dominant operator-error path.
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialMillis,
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val nowLocal = java.util.Calendar.getInstance()
+                    val startOfTodayUtc = java.util.Calendar.getInstance(
+                        java.util.TimeZone.getTimeZone("UTC")
+                    ).apply {
+                        set(java.util.Calendar.YEAR, nowLocal.get(java.util.Calendar.YEAR))
+                        set(java.util.Calendar.MONTH, nowLocal.get(java.util.Calendar.MONTH))
+                        set(java.util.Calendar.DAY_OF_MONTH, nowLocal.get(java.util.Calendar.DAY_OF_MONTH))
+                        set(java.util.Calendar.HOUR_OF_DAY, 0)
+                        set(java.util.Calendar.MINUTE, 0)
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                    return utcTimeMillis >= startOfTodayUtc
+                }
+                override fun isSelectableYear(year: Int): Boolean {
+                    return year >= java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+                }
+            }
+        )
+
+        // Capture the picker's OWN post-normalization seed (UTC midnight of
+        // the seeded day) so the auto-close guard compares like with like.
+        // Previously this compared against the pre-normalization local-zone
+        // initialMillis, which always differed from the picker's internal
+        // value by the local UTC offset — causing instant auto-close on
+        // every open (the "picker closes the moment I tap it" symptom).
+        val pickerSeed = remember { datePickerState.selectedDateMillis }
 
         // Auto-fill + auto-close as soon as the user picks a date — was a UX
         // complaint that the dialog wouldn't close until the OK button was
         // tapped, and the field wouldn't update either. Compare against the
-        // initial value so the LaunchedEffect doesn't fire on the picker's
-        // own seed value.
+        // picker's own seed so the LaunchedEffect doesn't fire on the
+        // initial state delivery.
         androidx.compose.runtime.LaunchedEffect(datePickerState.selectedDateMillis) {
             val ms = datePickerState.selectedDateMillis ?: return@LaunchedEffect
-            if (ms != initialMillis) {
-                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                onDueDateChange(sdf.format(java.util.Date(ms)))
+            if (ms != pickerSeed) {
+                onDueDateChange(ymdUtc.format(java.util.Date(ms)))
                 showDatePicker = false
             }
         }
@@ -1513,8 +1834,7 @@ private fun CreateHomeworkDialog(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                        onDueDateChange(sdf.format(java.util.Date(millis)))
+                        onDueDateChange(ymdUtc.format(java.util.Date(millis)))
                     }
                     showDatePicker = false
                 }) { Text("OK", color = Teal) }
@@ -1528,6 +1848,18 @@ private fun CreateHomeworkDialog(
             DatePicker(state = datePickerState)
         }
     }
+}
+
+/**
+ * Human-readable byte count. Used by the Create Homework dialog's
+ * attachment chip subtitles (e.g. "324 KB", "1.4 MB"). 0 or negative
+ * size renders as "—" since some content providers don't expose length.
+ */
+private fun formatBytes(bytes: Long): String = when {
+    bytes <= 0L -> "—"
+    bytes < 1024L -> "$bytes B"
+    bytes < 1024L * 1024L -> "${bytes / 1024L} KB"
+    else -> "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0))
 }
 
 /** Map subject names to theme colors. */

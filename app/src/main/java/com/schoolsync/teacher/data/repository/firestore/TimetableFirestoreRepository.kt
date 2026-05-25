@@ -130,10 +130,14 @@ class TimetableFirestoreRepository @Inject constructor(
                 val todayDay = java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault())
                     .format(java.util.Date())
 
-                // Substitutes use isAuth() rule — no schoolId required in query
-                // Query by date only, filter schoolId client-side
+                // Stage 0 FZ-3 (2026-05-24) — added schoolId predicate to prevent
+                // cross-tenant substitute leakage. Composite index (schoolId, date)
+                // already deployed per firestore.indexes.json. Server-side rule
+                // tightening is FZ-2-CRITICAL follow-up; for now, client-side
+                // scoping closes the data-leakage path observed in app traffic.
                 val subsSnapshot = firestoreService.queryDocuments("substitutes") { ref ->
-                    ref.whereEqualTo("date", todayStr)
+                    ref.whereEqualTo("schoolId", schoolCode)
+                        .whereEqualTo("date", todayStr)
                 }
 
                 for (doc in subsSnapshot.documents) {

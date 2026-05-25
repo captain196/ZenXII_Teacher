@@ -1,6 +1,5 @@
 package com.schoolsync.teacher.ui.attendance
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.model.AttendanceData
@@ -15,6 +14,7 @@ import com.schoolsync.teacher.data.repository.LateMark
 import com.schoolsync.teacher.data.repository.firestore.AttendanceFirestoreRepository
 import com.schoolsync.teacher.util.Constants
 import com.schoolsync.teacher.util.RoleHelper
+import com.schoolsync.teacher.util.debugLog
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -126,6 +126,10 @@ data class AttendanceUiState(
     val showTardyDialog: Boolean = false,
     val tardyStudentId: String = "",
     val tardyDay: Int = 0,
+    // Captured arrival-time minutes per "studentId|day"; consumed by saveAttendance
+    // when building LateMark entries. Stale keys across class/month switches are
+    // harmless — only the current state.students roster is iterated on save.
+    val tardyMinutesByStudentDay: Map<String, Int> = emptyMap(),
     // Phase 1+2 stage gate (server-driven)
     val stage: Stage = Stage.UNKNOWN,
     val editReason: String = "",                       // required for S2 saves
@@ -163,6 +167,13 @@ class AttendanceViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "AttendanceVM"
+
+        // Default school start time used to convert arrival HH:mm into
+        // lateMinutes. 08:00 is the prevailing Indian-school norm and is
+        // safe as a fallback. TODO(rollout+1): read from school config
+        // once a `schoolStartTime` field exists on the school doc.
+        private const val SCHOOL_START_MINUTES = 8 * 60
+        private const val LATE_MINUTES_CAP = 180
     }
 
     private val _uiState = MutableStateFlow(AttendanceUiState())
@@ -186,12 +197,12 @@ class AttendanceViewModel @Inject constructor(
             try {
                 teacherRepository.getAssignedClasses().fold(
                     onSuccess = { assignments ->
-                        Log.d(TAG, "Loaded ${assignments.size} assignments")
+                        debugLog("[$TAG][D] Loaded ${assignments.size} assignments")
                         cachedAssignments = assignments
                         val classSections = assignments
                             .map { ClassSection(it.className, it.section) }
                             .distinct()
-                        Log.d(TAG, "Distinct classes: ${classSections.map { it.displayName }}")
+                        debugLog("[$TAG][D] Distinct classes: ${classSections.map { it.displayName }}")
                         val firstClass = classSections.firstOrNull()
                         val isClassTeacherForFirst = firstClass?.let {
                             RoleHelper.isClassTeacher(assignments, it.className, it.section)
@@ -208,12 +219,12 @@ class AttendanceViewModel @Inject constructor(
                         }
                     },
                     onFailure = { e ->
-                        Log.e(TAG, "Failed to load assignments: ${e.message}", e)
+                        debugLog("[$TAG][E] Failed to load assignments: ${e.message}")
                         _uiState.update { it.copy(error = e.message) }
                     }
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to load classes", e)
+                debugLog("[$TAG][E] Failed to load classes: ${e.message}")
                 _uiState.update { it.copy(error = e.message) }
             }
         }
@@ -287,7 +298,7 @@ class AttendanceViewModel @Inject constructor(
                 }
                 val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
                 val monthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
-                Log.d(TAG, "Loading attendance for ${classSection.displayName}, month=$monthName")
+                debugLog("[$TAG][D] Loading attendance for ${classSection.displayName}, month=$monthName")
 
                 // 1. Get student list for this class/section
                 val studentsResult = studentRepository.getStudentsForClass(
@@ -295,10 +306,9 @@ class AttendanceViewModel @Inject constructor(
                 )
                 val students = studentsResult.getOrNull() ?: emptyList()
                 currentStudentInfos = students
-                Log.d(TAG, "Found ${students.size} students: ${students.map { "${it.studentId}=${it.displayName}" }}")
+                debugLog("[$TAG][D] Found ${students.size} students: ${students.map { "${it.studentId}=${it.displayName}" }}")
 
                 // 2. Firestore: For each student, read their attendance summary for this month
-                // TODO: Remove RTDB fallback after Firestore validation
                 val rows = students.map { student ->
                     val dayMap = mutableMapOf<Int, AttendanceStatus>()
 
@@ -315,9 +325,9 @@ class AttendanceViewModel @Inject constructor(
                             val status = AttendanceStatus.fromCode(char.toString())
                             dayMap[index + 1] = status
                         }
-                        Log.d(TAG, "${student.studentId} Firestore dayWise='${summaryDoc.dayWise}' days=${dayMap.size}")
+                        debugLog("[$TAG][D] ${student.studentId} Firestore dayWise='${summaryDoc.dayWise}' days=${dayMap.size}")
                     } else {
-                        Log.d(TAG, "${student.studentId} no Firestore attendance data for $monthName")
+                        debugLog("[$TAG][D] ${student.studentId} no Firestore attendance data for $monthName")
                     }
 
                     StudentAttendanceRow(
@@ -328,7 +338,7 @@ class AttendanceViewModel @Inject constructor(
                     )
                 }.sortedBy { it.rollNo }
 
-                Log.d(TAG, "Attendance loaded: ${rows.size} rows")
+                debugLog("[$TAG][D] Attendance loaded: ${rows.size} rows")
                 _uiState.update {
                     it.copy(
                         students = rows,
@@ -338,7 +348,7 @@ class AttendanceViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to load attendance", e)
+                debugLog("[$TAG][E] Failed to load attendance: ${e.message}")
                 _uiState.update {
                     it.copy(isLoading = false, error = e.message ?: "Failed to load attendance")
                 }
@@ -390,6 +400,49 @@ class AttendanceViewModel @Inject constructor(
     }
 
     /**
+     * Confirm the user-entered arrival time for the currently-pending tardy
+     * mark. Parses HH:mm, computes minutes-late vs SCHOOL_START_MINUTES,
+     * and stores per "studentId|day" so saveAttendance can emit an accurate
+     * LateMark.lateMinutes through the existing /save contract.
+     *
+     * Invalid input (non-HH:mm, out-of-range) silently records 0 minutes —
+     * matches the pre-existing default and avoids an extra error surface
+     * in the dialog.
+     */
+    fun confirmTardyTime(time: String) {
+        val state = _uiState.value
+        val studentId = state.tardyStudentId
+        val day = state.tardyDay
+        if (studentId.isEmpty() || day <= 0) {
+            dismissTardyDialog()
+            return
+        }
+
+        val arrivalMinutes = parseHhMmToMinutes(time)
+        val lateMinutes = if (arrivalMinutes < 0) 0
+            else (arrivalMinutes - SCHOOL_START_MINUTES).coerceIn(0, LATE_MINUTES_CAP)
+
+        val key = "$studentId|$day"
+        _uiState.update {
+            it.copy(
+                tardyMinutesByStudentDay = it.tardyMinutesByStudentDay + (key to lateMinutes),
+                showTardyDialog = false,
+                tardyStudentId = "",
+                tardyDay = 0
+            )
+        }
+    }
+
+    private fun parseHhMmToMinutes(s: String): Int {
+        val parts = s.trim().split(":")
+        if (parts.size != 2) return -1
+        val h = parts[0].toIntOrNull() ?: return -1
+        val m = parts[1].toIntOrNull() ?: return -1
+        if (h !in 0..23 || m !in 0..59) return -1
+        return h * 60 + m
+    }
+
+    /**
      * Mark all students as Present for today.
      */
     fun markAllPresentToday() {
@@ -423,10 +476,6 @@ class AttendanceViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Save attendance via Firestore (primary) with RTDB fallback.
-     * For each student, builds the attendance string for the month and writes it.
-     */
     /**
      * Save TODAY's attendance via the PHP API (Phase 1).
      *
@@ -477,7 +526,11 @@ class AttendanceViewModel @Inject constructor(
                 when (st) {
                     AttendanceStatus.ABSENT  -> absent.add(student.studentId)
                     AttendanceStatus.LEAVE   -> leave.add(student.studentId)
-                    AttendanceStatus.TARDY   -> late.add(LateMark(student.studentId, lateMinutes = 0))
+                    AttendanceStatus.TARDY   -> {
+                        val key = "${student.studentId}|$todayDay"
+                        val minutes = state.tardyMinutesByStudentDay[key] ?: 0
+                        late.add(LateMark(student.studentId, lateMinutes = minutes))
+                    }
                     AttendanceStatus.PRESENT -> {} // server default
                     AttendanceStatus.HOLIDAY,
                     AttendanceStatus.VACATION -> {} // not user-markable; ignore
@@ -493,7 +546,7 @@ class AttendanceViewModel @Inject constructor(
                 reason    = state.editReason
             ).fold(
                 onSuccess = { res ->
-                    Log.d(TAG, "save OK — updated=${res.updated.size} rejected=${res.rejected.size} stage=${res.stage}")
+                    debugLog("[$TAG][D] save OK — updated=${res.updated.size} rejected=${res.rejected.size} stage=${res.stage}")
                     _uiState.update { it.copy(
                         isSaving = false,
                         hasUnsavedChanges = false,
@@ -508,7 +561,7 @@ class AttendanceViewModel @Inject constructor(
                     _events.emit(AttendanceEvent.SaveSuccess(msg))
                 },
                 onFailure = { e ->
-                    Log.e(TAG, "save failed: ${e.message}")
+                    debugLog("[$TAG][E] save failed: ${e.message}")
                     _uiState.update { it.copy(isSaving = false) }
                     when (e) {
                         is AttendanceApiError.Locked -> {
@@ -557,7 +610,7 @@ class AttendanceViewModel @Inject constructor(
                     ) }
                 },
                 onFailure = { e ->
-                    Log.w(TAG, "refreshStage failed: ${e.message}")
+                    debugLog("[$TAG][W] refreshStage failed: ${e.message}")
                     // Keep last-good state; UI degrades to UNKNOWN if never loaded
                 }
             )

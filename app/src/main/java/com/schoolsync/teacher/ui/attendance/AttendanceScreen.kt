@@ -368,8 +368,7 @@ fun AttendanceScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        // TODO: store the time in lateTimes when writing summary
-                        viewModel.dismissTardyDialog()
+                        viewModel.confirmTardyTime(timeInput)
                     }) {
                         Text("OK", color = Teal, fontWeight = FontWeight.Bold)
                     }

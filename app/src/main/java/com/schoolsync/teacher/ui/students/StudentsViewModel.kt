@@ -54,7 +54,7 @@ data class StudentsUiState(
 
 @HiltViewModel
 class StudentsViewModel @Inject constructor(
-    private val studentRepository: StudentRepository, // TODO: Remove RTDB fallback after Firestore validation
+    private val studentRepository: StudentRepository,
     private val teacherRepository: TeacherRepository,
     private val studentFirestoreRepo: StudentFirestoreRepository,
     private val feeFirestoreRepo: FeeFirestoreRepository
@@ -142,7 +142,6 @@ class StudentsViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 // Primary: Firestore student data
-                // TODO: Remove RTDB fallback after Firestore validation
                 studentFirestoreRepo.getStudentsByClass(
                     className = state.selectedClassName,
                     section = state.selectedSection
@@ -190,7 +189,6 @@ class StudentsViewModel @Inject constructor(
                     onFailure = { firestoreError ->
                         Log.e(TAG, "Firestore getStudentsByClass failed, falling back: ${firestoreError.message}")
                         // Fallback: RTDB student data
-                        // TODO: Remove RTDB fallback after Firestore validation
                         loadStudentsFromRtdb()
                     }
                 )
@@ -200,7 +198,6 @@ class StudentsViewModel @Inject constructor(
         }
     }
 
-    // TODO: Remove RTDB fallback after Firestore validation
     private suspend fun loadStudentsFromRtdb() {
         val state = _uiState.value
         studentRepository.getStudentsForClass(

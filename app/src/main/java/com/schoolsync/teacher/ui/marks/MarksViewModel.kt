@@ -146,7 +146,6 @@ class MarksViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Primary: Firestore exams
-                // TODO: Remove RTDB fallback after Firestore validation
                 examFirestoreRepo.getExams().fold(
                     onSuccess = { examDocs ->
                         // Filter exams applicable to the selected class
@@ -175,7 +174,6 @@ class MarksViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Primary: Firestore exam schedule for subject details
-                // TODO: Remove RTDB fallback after Firestore validation
                 examFirestoreRepo.getExamSchedule(
                     examId = exam.examId,
                     className = state.selectedClassName,
@@ -219,7 +217,6 @@ class MarksViewModel @Inject constructor(
                 val sectionKey = "${Constants.classKey(state.selectedClassName)}/${Constants.sectionKey(state.selectedSection)}"
 
                 // Primary: Firestore student marks
-                // TODO: Remove RTDB fallback after Firestore validation
                 examFirestoreRepo.getStudentMarks(
                     examId = exam.examId,
                     sectionKey = sectionKey,
@@ -340,7 +337,6 @@ class MarksViewModel @Inject constructor(
                 val sectionKey = "${Constants.classKey(state.selectedClassName)}/${Constants.sectionKey(state.selectedSection)}"
 
                 // Primary: Firestore batch marks save
-                // TODO: Remove RTDB fallback after Firestore validation
                 val marksList = state.studentMarks.map { mark ->
                     MarksDoc(
                         studentId = mark.studentId,

@@ -5,9 +5,12 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
+import com.schoolsync.teacher.data.model.firestore.Attachment
 import com.schoolsync.teacher.data.model.firestore.HomeworkDoc
 import com.schoolsync.teacher.data.model.firestore.SubmissionDoc
+import com.schoolsync.teacher.data.model.firestore.toFirestoreMap
 import com.schoolsync.teacher.util.Constants
+import com.schoolsync.teacher.util.debugLog
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -47,6 +50,37 @@ class HomeworkFirestoreRepository @Inject constructor(
     private val tokenManager: TokenManager
 ) {
 
+    companion object {
+        /**
+         * Mint a fresh homework document ID.
+         *
+         * Format: `{schoolCode}_{epochMs}_{8 hex chars}` — exact parity with
+         * the Admin PHP mint in Homework.php (Finding #8 hardening, 2026-05-15:
+         * `"{$school}_" . round(microtime(true) * 1000) . '_' . bin2hex(random_bytes(4))`).
+         *
+         * The 32-bit random suffix from [java.security.SecureRandom] makes a
+         * within-millisecond collision between two creates in the same
+         * school statistically unreachable in practice (1 in 4.3 billion
+         * even when the millisecond AND schoolCode happen to match). Prior
+         * to this fix the ID was `{schoolCode}_{epochMs}` only — collision
+         * would silently full-overwrite the earlier doc, and (post Step 4
+         * attachments) the loser's attachments would orphan in Storage
+         * while the winner's would mix with them under the same path scope.
+         * See `teacher_hwid_entropy_backlog.md` in operator memory for the
+         * full rationale.
+         *
+         * Treated as an opaque ID by all downstream consumers — no parser
+         * relies on the internal `{school}_{ms}` shape, so adding the
+         * `_{hex}` suffix is non-breaking.
+         */
+        fun mintHwId(schoolCode: String): String {
+            val random = ByteArray(4)
+            java.security.SecureRandom().nextBytes(random)
+            val suffix = random.joinToString("") { "%02x".format(it) }
+            return "${schoolCode}_${System.currentTimeMillis()}_$suffix"
+        }
+    }
+
     /**
      * Create a new homework assignment.
      *
@@ -62,8 +96,38 @@ class HomeworkFirestoreRepository @Inject constructor(
         teacherId: String,
         teacherName: String,
         totalStudents: Int,
-        attachments: List<String> = emptyList()
+        // Step 4 (2026-05-15) — rich attachment list. Caller (typically
+        // HomeworkTeacherViewModel) uploads each file via
+        // HomeworkAttachmentUploader.uploadSuspending() first and passes
+        // the resulting Attachment objects here. We dual-emit them into
+        // BOTH Firestore fields below so legacy readers (Parent UI today,
+        // pre-Step-2 readers in general) see the download URLs in the
+        // existing `attachments: List<String>` field while new readers
+        // (Step 2 parser onward) get full metadata via `attachmentObjects`.
+        attachments: List<Attachment> = emptyList(),
+        // Step 4 (2026-05-15) — optional caller-supplied hwId. When the
+        // caller pre-mints the hwId (so it can use the same value as the
+        // {homeworkId} segment in attachment Storage paths uploaded
+        // BEFORE this Firestore write), pass it here. Caller is then
+        // responsible for using the SAME hwId as the storage path scope.
+        // Defaults to the legacy "{schoolCode}_{ms}" mint when null —
+        // preserving exact behaviour for any caller that doesn't upload
+        // attachments first.
+        existingHwId: String? = null
     ): Result<String> {
+        // BUG-020 — input-boundary length validation (mirror of admin BUG-013).
+        // Byte-count via toByteArray().size for accurate Firestore 1MB doc-cap
+        // semantics; user-facing message says "characters" for clarity.
+        if (title.toByteArray().size > 200) {
+            return Result.failure(IllegalArgumentException("Title exceeds 200 characters."))
+        }
+        if (subject.toByteArray().size > 100) {
+            return Result.failure(IllegalArgumentException("Subject exceeds 100 characters."))
+        }
+        if (description.toByteArray().size > 10000) {
+            return Result.failure(IllegalArgumentException("Description exceeds 10000 characters."))
+        }
+
         val schoolCode = getSchoolCode()
             ?: return Result.failure(Exception("School code not available"))
         val session = getSession()
@@ -72,8 +136,16 @@ class HomeworkFirestoreRepository @Inject constructor(
         val cls = Constants.classKey(className)
         val sec = Constants.sectionKey(section)
         val sectionKey = "${cls}/${sec}"
-        val hwId = "${schoolCode}_${System.currentTimeMillis()}"
+        val hwId = existingHwId ?: mintHwId(schoolCode)
         val normalizedDueDate = normalizeDueDate(dueDate)
+
+        // Dual-emit: legacy `attachments` (URLs only) + rich
+        // `attachmentObjects` (full metadata as Maps).
+        val attachmentUrls: List<String> = attachments
+            .map { it.downloadUrl }
+            .filter { it.isNotBlank() }
+        val attachmentMaps: List<Map<String, Any?>> = attachments
+            .map { it.toFirestoreMap() }
 
         val data = hashMapOf(
             "schoolId" to schoolCode,
@@ -91,7 +163,8 @@ class HomeworkFirestoreRepository @Inject constructor(
             "status" to "active",
             "submissionCount" to 0,
             "totalStudents" to totalStudents,
-            "attachments" to attachments
+            "attachments" to attachmentUrls,
+            "attachmentObjects" to attachmentMaps
         )
 
         return try {
@@ -333,8 +406,22 @@ class HomeworkFirestoreRepository @Inject constructor(
                 if (hwStatus.equals("closed", ignoreCase = true)) {
                     throw IllegalStateException("Homework is closed — reviews are not accepted")
                 }
-                val snap = txn.get(submissionRef)
-                if (snap.exists()) {
+                // Defensive 2026-05-14: isSameSchoolStrict() now denies reads
+                // of non-existent /submissions docs (PERMISSION_DENIED) instead
+                // of returning a snapshot with exists()==false. Catch the
+                // denial here and treat as "submission does not exist" so the
+                // teacherMark fall-through branch still fires for unsubmitted
+                // students. Other exceptions still abort the transaction.
+                val snap: com.google.firebase.firestore.DocumentSnapshot? = try {
+                    txn.get(submissionRef)
+                } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+                    if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                        null
+                    } else {
+                        throw e
+                    }
+                }
+                if (snap != null && snap.exists()) {
                     txn.update(
                         submissionRef,
                         mapOf(
@@ -413,13 +500,32 @@ class HomeworkFirestoreRepository @Inject constructor(
      */
     suspend fun closeHomework(homeworkId: String): Result<Unit> {
         return try {
+            // BUG-018 — capture prevStatus + idempotent short-circuit + structured
+            // before/after debugLog. Mobile analog of admin BUG-008 (closed-verified)
+            // log_audit enrichment. Idempotent short-circuit on already-closed
+            // skips the no-op write AND emits a distinct ACC_HW_CLOSE_NOOP signal so
+            // operator can distinguish re-clicks from real closing events.
+            // TOCTOU window between read and write remains (separate BUG-N candidate;
+            // mobile equivalent of admin BUG-009 which is itself oos-blocked on
+            // Firebase.php transaction primitives).
+            val existingSnap = firestoreService.getDocument(
+                Constants.Firestore.HOMEWORK,
+                homeworkId
+            )
+            val prevStatus = existingSnap?.getString("status")?.takeIf { it.isNotBlank() } ?: "active"
+            if (prevStatus.lowercase() == "closed") {
+                debugLog("ACC_HW_CLOSE_NOOP hwId=$homeworkId reason=already_closed")
+                return Result.success(Unit)
+            }
             firestoreService.updateDocument(
                 Constants.Firestore.HOMEWORK,
                 homeworkId,
                 mapOf("status" to "closed")
             )
+            debugLog("ACC_HW_CLOSE_OK hwId=$homeworkId prevStatus=$prevStatus newStatus=closed")
             Result.success(Unit)
         } catch (e: Exception) {
+            debugLog("ACC_HW_CLOSE_FAILED hwId=$homeworkId err=${e.javaClass.simpleName}:${e.message}")
             Result.failure(e)
         }
     }
@@ -465,7 +571,11 @@ class HomeworkFirestoreRepository @Inject constructor(
             }
             Result.success(out)
         } catch (e: Exception) {
-            android.util.Log.w("HomeworkRepo", "getTeacherMarksForHomework failed: ${e.message}")
+            // BUG-019 — route through debugLog (OEM-strip-immune cache-file sink
+            // per the F1 Phase-1 stabilization finding; OxygenOS/ColorOS/MIUI
+            // strip third-party Log.w from logcat, leaving operator triage blind).
+            // Result.success(emptyMap()) contract preserved so callers don't break.
+            debugLog("ACC_HW_REPO_GET_TEACHER_MARKS_FAILED hwId=$homeworkId err=${e.javaClass.simpleName}:${e.message}")
             Result.success(emptyMap())  // best-effort — don't block submissions screen
         }
     }

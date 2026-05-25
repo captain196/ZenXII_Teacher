@@ -20,5 +20,14 @@ data class HomeworkDoc(
     val status: String = "active",   // "active", "closed"
     val submissionCount: Int = 0,
     val totalStudents: Int = 0,
-    val attachments: List<String> = emptyList()
+    // Legacy URL-only attachments. Kept for backward compatibility with
+    // older docs and pre-Step-2 readers. Step 4 writers dual-emit both
+    // this field and `attachmentObjects` so legacy readers still see URLs.
+    val attachments: List<String> = emptyList(),
+    // Rich attachment metadata (Step 2 backward-compatibility addition,
+    // 2026-05-15). Each entry is the raw Firestore Map for an Attachment
+    // — call `parsedAttachments()` (extension fn on HomeworkDoc) to merge
+    // this with `attachments` into a canonical List<Attachment>. Empty
+    // for legacy docs that lack the field.
+    val attachmentObjects: List<Map<String, Any?>> = emptyList()
 )
