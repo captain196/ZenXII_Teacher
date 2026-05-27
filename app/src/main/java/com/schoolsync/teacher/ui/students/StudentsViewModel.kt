@@ -270,7 +270,21 @@ class StudentsViewModel @Inject constructor(
                     _uiState.update { current ->
                         val sel = current.selectedStudent
                         if (sel?.studentId == student.studentId) {
-                            current.copy(selectedStudent = sel.copy(monthFee = derived))
+                            // SW4-companion-C defensive guard (2026-05-27): do
+                            // not overwrite a populated monthFee with an empty
+                            // derivation. Empty emissions come from (a) the
+                            // upstream .onStart { emit(emptyList()) } priming
+                            // pulse, or (b) the .catch fallback when the
+                            // Firestore composite index is missing. In both
+                            // cases the initial-roster monthFee (from
+                            // StudentDoc.monthFee, backend-populated) is the
+                            // best available state — keep it visible rather
+                            // than blanking every chip.
+                            if (derived.isEmpty() && sel.monthFee.isNotEmpty()) {
+                                current
+                            } else {
+                                current.copy(selectedStudent = sel.copy(monthFee = derived))
+                            }
                         } else current
                     }
                 }

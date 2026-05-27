@@ -267,8 +267,17 @@ class FeeFirestoreRepository @Inject constructor(
             }
             .onStart { emit(emptyList()) }
             .catch { e ->
-                android.util.Log.w("FeeRepo", "observeStudentFeeDemands failed — falling back to empty", e)
-                emit(emptyList())
+                // SW4-companion-C defensive fallback (2026-05-27): do NOT
+                // emit emptyList() on failure. The collector in
+                // StudentsViewModel overwrites selectedStudent.monthFee
+                // with whatever this flow emits — an empty emission on
+                // FAILED_PRECONDITION (missing composite index) would
+                // wipe the valid initial-roster monthFee map and hide
+                // every paid chip + annual fee + progress bar in the UI.
+                // Logging only — the flow terminates and the VM keeps
+                // whatever monthFee state it had from the initial roster
+                // load (StudentDoc.monthFee) or the last good emission.
+                android.util.Log.w("FeeRepo", "observeStudentFeeDemands failed — preserving prior monthFee state (no empty emit)", e)
             }
     }
 
@@ -347,8 +356,13 @@ class FeeFirestoreRepository @Inject constructor(
             }
             .onStart { emit(emptyList()) }
             .catch { e ->
-                android.util.Log.w("FeeRepo", "observeClassFeeDemands failed — falling back to empty", e)
-                emit(emptyList())
+                // SW4-companion-C defensive fallback (2026-05-27): see
+                // matching rationale on observeStudentFeeDemands above.
+                // Class-summary card consumers overwrite their per-month
+                // rollup with this flow's emission; an empty emit on
+                // FAILED_PRECONDITION would blank the "X paid of Y per
+                // month" breakdown row on the class summary card.
+                android.util.Log.w("FeeRepo", "observeClassFeeDemands failed — preserving prior rollup state (no empty emit)", e)
             }
     }
 
