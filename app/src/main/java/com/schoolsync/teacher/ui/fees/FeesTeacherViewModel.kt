@@ -282,9 +282,20 @@ class FeesTeacherViewModel @Inject constructor(
 
         demandsListenerJob = viewModelScope.launch {
             feeFirestoreRepo.observeClassFeeDemands(className, section)
-                .collect { demands ->
+                .collect { rawDemands ->
                     val current = _uiState.value.selectedClass ?: return@collect
                     if (current.className != className || current.section != section) return@collect
+
+                    // BUG-076 defense (2026-05-27): client-side archived skip.
+                    // Belt-and-suspenders pairing with FeeFirestoreRepository.kt
+                    // SW4-C upstream .whereNotEqualTo("status","archived")
+                    // filter. Even when the upstream is unavailable (stale APK
+                    // without SW4-C, undeployed composite index, Firestore SDK
+                    // fallback path), archived demands MUST NOT enter monthly
+                    // breakdown counts, yearly aggregation, or paid-month
+                    // derivation — otherwise post-promotion phantom counts
+                    // surface in the class summary card + per-student chips.
+                    val demands = rawDemands.filter { it.status != "archived" }
 
                     // Split demands by periodicity. Yearly fees can't be
                     // meaningfully grouped alongside April / May / etc.,
