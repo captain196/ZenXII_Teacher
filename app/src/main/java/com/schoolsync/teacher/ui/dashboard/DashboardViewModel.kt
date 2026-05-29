@@ -21,6 +21,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -108,7 +109,16 @@ class DashboardViewModel @Inject constructor(
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
-        loadDashboard()
+        // Reload when the school's active session changes (propagated into
+        // TokenManager by SchoolFirestoreRepository.observeSchool). First
+        // emission performs the initial load. Mirrors AttendanceViewModel.
+        viewModelScope.launch {
+            tokenManager.session
+                .distinctUntilChanged()
+                .collect { session ->
+                    if (!session.isNullOrBlank()) loadDashboard()
+                }
+        }
     }
 
     fun loadDashboard() {
