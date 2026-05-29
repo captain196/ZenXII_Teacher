@@ -20,13 +20,16 @@ import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.schoolsync.teacher.data.local.TokenManager
+import com.schoolsync.teacher.data.repository.firestore.SchoolFirestoreRepository
 import com.schoolsync.teacher.ui.navigation.AppNavGraph
 import com.schoolsync.teacher.ui.navigation.Route
 import com.schoolsync.teacher.ui.theme.GradientBackground
 import com.schoolsync.teacher.ui.theme.SchoolSyncTeacherTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -34,6 +37,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var tokenManager: TokenManager
+
+    @Inject
+    lateinit var schoolFirestoreRepository: SchoolFirestoreRepository
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -44,6 +50,21 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
         publishDeepLinkFromIntent(intent)
+
+        // Live session-authority observer (mirrors the Parent app). observeSchool()
+        // emits schools/{schoolCode} snapshots; its internal onEach propagates
+        // currentSession into TokenManager so session-scoped repositories
+        // (attendance, marks, timetable) follow admin-side session changes without
+        // a re-login. Empty collector — the side-effect lives in the repository.
+        // Try/catch so an observer failure can never crash the Activity; the app
+        // then falls back to the login-time session value.
+        lifecycleScope.launch {
+            try {
+                schoolFirestoreRepository.observeSchool().collect { /* side-effects via onEach in repo */ }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "ACC_SESSION_OBSERVER_FAILED err=${e.message}")
+            }
+        }
 
         // Immersive landscape -- hide system bars
         WindowCompat.setDecorFitsSystemWindows(window, false)

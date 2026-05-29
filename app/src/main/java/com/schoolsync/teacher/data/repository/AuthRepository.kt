@@ -105,12 +105,14 @@ class AuthRepository @Inject constructor(
             tokenManager.saveParentDbKey(parentDbKey)    // for Users/Parents/Admin paths
             tokenManager.saveDeviceId(deviceId)
 
-            // 6. Resolve active academic session — uses schoolId for the path
+            // 6. Seed active academic session from Firestore schools/{schoolId}.currentSession.
+            //    If absent/empty, SchoolFirestoreRepository.observeSchool() self-heals it
+            //    on the first snapshot after MainActivity subscribes.
             val session = resolveActiveSession(schoolId)
             if (session != null) {
                 tokenManager.saveSession(session)
             } else {
-                Log.w(TAG, "login: ActiveSession not found at Schools/$schoolId/Config/ActiveSession")
+                Log.w(TAG, "login: currentSession absent/empty on schools/$schoolId — observeSchool will self-heal")
             }
 
             // 7. Phase 7z — register the current FCM token now that the
@@ -287,14 +289,20 @@ class AuthRepository @Inject constructor(
     }
 
     /**
-     * Resolve the active academic session from Schools/{schoolId}/Config/ActiveSession.
-     * Param name kept as `schoolId` to make the path expectation explicit.
+     * Seed the active academic session from Firestore schools/{schoolId}.currentSession.
+     *
+     * Firestore-only as of 2026-05-29: the legacy RTDB read of
+     * Schools/{schoolId}/Config/ActiveSession was removed per the NO-RTDB policy.
+     * Returns null when currentSession is absent/empty — in that case
+     * SchoolFirestoreRepository.observeSchool() self-heals the session from the
+     * first schools/{schoolCode} snapshot after MainActivity subscribes.
      */
     private suspend fun resolveActiveSession(schoolId: String): String? {
         return try {
-            val path = "${Constants.Firebase.SCHOOLS}/$schoolId/Config/ActiveSession"
-            firebaseService.readValue<String>(path)
+            val doc = firestoreService.getDocumentMap(Constants.Firestore.SCHOOLS, schoolId)
+            (doc?.get("currentSession") as? String)?.trim()?.takeIf { it.isNotEmpty() }
         } catch (e: Exception) {
+            Log.w(TAG, "resolveActiveSession: Firestore currentSession read failed for $schoolId", e)
             null
         }
     }
