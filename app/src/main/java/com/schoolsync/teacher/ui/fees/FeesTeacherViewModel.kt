@@ -90,6 +90,15 @@ data class FeesUiState(
      * school/session. Drives the "Reminded 2h ago" badge on student rows.
      */
     val lastReminderByStudent: Map<String, String> = emptyMap(),
+    /**
+     * SW4-companion-C parity (2026-05-27): per-student paid-month list,
+     * derived from the same observeClassFeeDemands stream that drives
+     * monthlyBreakdown. Drives the green "Paid:" chip row on each Fees
+     * student card so the screen visually mirrors the StudentsScreen
+     * FeeSnapshotCard's paid+unpaid layout. Sorted in academic order
+     * (April → March, "Yearly Fees" relabelled to "Annual" by the UI).
+     */
+    val paidMonthsByStudent: Map<String, List<String>> = emptyMap(),
     val errorMessage: String? = null
 )
 
@@ -273,9 +282,20 @@ class FeesTeacherViewModel @Inject constructor(
 
         demandsListenerJob = viewModelScope.launch {
             feeFirestoreRepo.observeClassFeeDemands(className, section)
-                .collect { demands ->
+                .collect { rawDemands ->
                     val current = _uiState.value.selectedClass ?: return@collect
                     if (current.className != className || current.section != section) return@collect
+
+                    // BUG-076 defense (2026-05-27): client-side archived skip.
+                    // Belt-and-suspenders pairing with FeeFirestoreRepository.kt
+                    // SW4-C upstream .whereNotEqualTo("status","archived")
+                    // filter. Even when the upstream is unavailable (stale APK
+                    // without SW4-C, undeployed composite index, Firestore SDK
+                    // fallback path), archived demands MUST NOT enter monthly
+                    // breakdown counts, yearly aggregation, or paid-month
+                    // derivation — otherwise post-promotion phantom counts
+                    // surface in the class summary card + per-student chips.
+                    val demands = rawDemands.filter { it.status != "archived" }
 
                     // Split demands by periodicity. Yearly fees can't be
                     // meaningfully grouped alongside April / May / etc.,
@@ -331,10 +351,35 @@ class FeesTeacherViewModel @Inject constructor(
                         )
                     }
 
+                    // SW4-companion-C parity (2026-05-27): derive paid
+                    // months per student. A month enters a student's paid
+                    // list iff every demand for that student in that month
+                    // (monthly or yearly) has status="paid". Mirrors the
+                    // StudentsViewModel.selectedDemandsJob contract.
+                    val paidByStudent: Map<String, List<String>> = demands
+                        .groupBy { it.studentId }
+                        .mapValues { (_, studentDemands) ->
+                            studentDemands
+                                .groupBy { it.month.ifBlank { "Unknown" } }
+                                .filter { (_, group) ->
+                                    group.isNotEmpty() && group.all { it.status == "paid" }
+                                }
+                                .keys
+                                .sortedBy { m ->
+                                    val idx = academicOrder.indexOf(m)
+                                    when {
+                                        idx >= 0 -> idx
+                                        m == YEARLY_MONTH_LABEL -> academicOrder.size
+                                        else -> academicOrder.size + 1
+                                    }
+                                }
+                        }
+
                     _uiState.update {
                         it.copy(
                             monthlyBreakdown = perMonth,
-                            annualFee = annual
+                            annualFee = annual,
+                            paidMonthsByStudent = paidByStudent
                         )
                     }
                 }

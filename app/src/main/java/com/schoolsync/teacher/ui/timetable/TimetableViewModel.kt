@@ -2,6 +2,7 @@ package com.schoolsync.teacher.ui.timetable
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.DayTimetable
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.TimetableFirestoreRepository
@@ -9,6 +10,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -42,14 +44,24 @@ data class TimetableUiState(
 @HiltViewModel
 class TimetableViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
-    private val timetableFirestoreRepo: TimetableFirestoreRepository
+    private val timetableFirestoreRepo: TimetableFirestoreRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TimetableUiState())
     val uiState: StateFlow<TimetableUiState> = _uiState.asStateFlow()
 
     init {
-        loadTimetable()
+        // Reload when the school's active session changes (propagated into
+        // TokenManager by SchoolFirestoreRepository.observeSchool). First
+        // emission performs the initial load. Mirrors AttendanceViewModel.
+        viewModelScope.launch {
+            tokenManager.session
+                .distinctUntilChanged()
+                .collect { session ->
+                    if (!session.isNullOrBlank()) loadTimetable()
+                }
+        }
     }
 
     fun loadTimetable() {

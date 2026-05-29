@@ -3,6 +3,7 @@ package com.schoolsync.teacher.ui.marks
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.MarksDoc
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.ExamFirestoreRepository
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -65,7 +67,8 @@ sealed class MarksEvent {
 @HiltViewModel
 class MarksViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
-    private val examFirestoreRepo: ExamFirestoreRepository
+    private val examFirestoreRepo: ExamFirestoreRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     companion object {
@@ -79,12 +82,33 @@ class MarksViewModel @Inject constructor(
     val events = _events.asSharedFlow()
 
     init {
-        loadInitialData()
+        // Reload when the school's active session changes (propagated into
+        // TokenManager by SchoolFirestoreRepository.observeSchool). First
+        // emission performs the initial load. Mirrors AttendanceViewModel.
+        viewModelScope.launch {
+            tokenManager.session
+                .distinctUntilChanged()
+                .collect { session ->
+                    if (!session.isNullOrBlank()) loadInitialData()
+                }
+        }
     }
 
     private fun loadInitialData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            // Clear downstream selections/results so a session switch never
+            // leaves the previous session's exams/subjects/marks on screen.
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    availableExams = emptyList(),
+                    selectedExam = null,
+                    availableSubjects = emptyList(),
+                    selectedSubject = null,
+                    studentMarks = emptyList(),
+                    hasUnsavedChanges = false
+                )
+            }
             try {
                 // Load assigned classes from teacher profile
                 teacherRepository.getAssignedClasses().fold(

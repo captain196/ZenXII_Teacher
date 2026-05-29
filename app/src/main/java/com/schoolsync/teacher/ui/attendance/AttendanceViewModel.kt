@@ -2,6 +2,7 @@ package com.schoolsync.teacher.ui.attendance
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.AttendanceData
 import com.schoolsync.teacher.data.model.AttendanceStatus as ModelAttendanceStatus
 import com.schoolsync.teacher.data.model.ClassAssignment
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -162,7 +164,8 @@ class AttendanceViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
     private val studentRepository: StudentRepository,
     private val attendanceFirestoreRepo: AttendanceFirestoreRepository,    // reads only
-    private val attendanceApiRepo: AttendanceApiRepository                  // ALL writes
+    private val attendanceApiRepo: AttendanceApiRepository,                 // ALL writes
+    private val tokenManager: TokenManager                                 // observes active-session changes
 ) : ViewModel() {
 
     companion object {
@@ -189,7 +192,21 @@ class AttendanceViewModel @Inject constructor(
     private var cachedAssignments: List<ClassAssignment> = emptyList()
 
     init {
-        loadAssignedClasses()
+        // React to academic-session changes. When the admin switches the
+        // school's active session, SchoolFirestoreRepository.observeSchool()
+        // propagates the new value into TokenManager; we reload the teacher's
+        // assigned classes for that session so the class dropdown + roster
+        // never show stale data from the previous session. The first (current)
+        // emission performs the initial load.
+        viewModelScope.launch {
+            tokenManager.session
+                .distinctUntilChanged()
+                .collect { session ->
+                    if (!session.isNullOrBlank()) {
+                        loadAssignedClasses()
+                    }
+                }
+        }
     }
 
     private fun loadAssignedClasses() {
@@ -211,11 +228,19 @@ class AttendanceViewModel @Inject constructor(
                             it.copy(
                                 availableClasses = classSections,
                                 selectedClass = firstClass,
-                                isClassTeacher = isClassTeacherForFirst
+                                isClassTeacher = isClassTeacherForFirst,
+                                // Clear the stale roster when the new session has no
+                                // classes for this teacher (e.g. a future session with
+                                // no assignments) so the prior session's students don't
+                                // linger on screen after a session switch.
+                                students = if (classSections.isEmpty()) emptyList() else it.students,
+                                hasUnsavedChanges = if (classSections.isEmpty()) false else it.hasUnsavedChanges
                             )
                         }
                         if (classSections.isNotEmpty()) {
                             loadAttendance()
+                        } else {
+                            currentStudentInfos = emptyList()
                         }
                     },
                     onFailure = { e ->

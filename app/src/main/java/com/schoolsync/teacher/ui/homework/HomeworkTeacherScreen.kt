@@ -85,12 +85,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.schoolsync.teacher.data.model.HomeworkStatusEntry
 import com.schoolsync.teacher.data.model.HomeworkTeacher
 import com.schoolsync.teacher.data.model.StudentInfo
@@ -817,6 +819,38 @@ private fun HomeworkCard(
                     )
                 }
 
+                // Attachment indicator — a compact paperclip (+ count when
+                // more than one) so teachers can tell at a glance which cards
+                // carry files without opening each one. Grouped with the
+                // subject pill as a "tag"; placed before the due date, whose
+                // weight(1f, fill=false) yields space so this never clips it.
+                if (homework.attachments.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Teal.copy(alpha = 0.12f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.AttachFile,
+                            contentDescription = "Has attachments",
+                            tint = Teal,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        if (homework.attachments.size > 1) {
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = "${homework.attachments.size}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Teal,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+
                 // Due date — calendar icon + compact label. Truncates if the
                 // pane is somehow even narrower than expected, instead of
                 // forcing the row to break.
@@ -902,199 +936,217 @@ private fun HomeworkDetailPanel(
         }
     }
 
-    Column(
+    LazyColumn(
         modifier = modifier
-            .padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 8.dp)
+            .padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = 0.dp, bottom = 8.dp)
     ) {
         // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassCard(cornerRadius = 14.dp)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(subjectColor)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassCard(cornerRadius = 14.dp)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(subjectColor)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = homework.subject,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = subjectColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = homework.subject,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = subjectColor,
-                        fontWeight = FontWeight.SemiBold
+                        text = homework.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
                     )
+                    if (homework.description.isNotBlank()) {
+                        Text(
+                            text = homework.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(
+                            text = formatDueDateIST(homework.dueDate),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = "By: ${homework.teacherName}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextTertiary
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = homework.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-                if (homework.description.isNotBlank()) {
-                    Text(
-                        text = homework.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        text = formatDueDateIST(homework.dueDate),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextSecondary
-                    )
-                    Text(
-                        text = "By: ${homework.teacherName}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextTertiary
-                    )
-                }
-            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick = { onDelete(homework) }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = ErrorRed, modifier = Modifier.size(18.dp))
-                }
-                IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(onClick = { onDelete(homework) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = ErrorRed, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(10.dp))
 
         // Status summary chips. "Done" merges Reviewed + Complete +
         // teacher marks (the three end-states where the teacher has
         // actioned the row); previously Reviewed had no chip and the
         // students with that status disappeared from the totals.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            StatusChip("Done", doneCount.toString(), SuccessGreen, SuccessGreenSurface, Modifier.weight(1f))
-            StatusChip("Submitted", submittedCount.toString(), InfoBlue, InfoBlueSurface, Modifier.weight(1f))
-            StatusChip("Incomplete", incompleteCount.toString(), WarningAmber, WarningAmberSurface, Modifier.weight(1f))
-            StatusChip("Pending", pendingCount.toString(), ErrorRed, ErrorRedSurface, Modifier.weight(1f))
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatusChip("Done", doneCount.toString(), SuccessGreen, SuccessGreenSurface, Modifier.weight(1f))
+                StatusChip("Submitted", submittedCount.toString(), InfoBlue, InfoBlueSurface, Modifier.weight(1f))
+                StatusChip("Incomplete", incompleteCount.toString(), WarningAmber, WarningAmberSurface, Modifier.weight(1f))
+                StatusChip("Pending", pendingCount.toString(), ErrorRed, ErrorRedSurface, Modifier.weight(1f))
+            }
         }
 
-        // ── Phase 1b (2026-05-15) Attachments review section ──────────
-        // Mirrors the Parent app's "ATTACHMENTS FROM TEACHER" Row pattern
-        // (HomeworkScreen.kt:863-933). Reads homework.attachments — the
-        // legacy List<String> field that Step 4 dual-emits alongside
-        // attachmentObjects. Each tap routes through
-        // [AttachmentUrlValidator.openAttachmentSafely] which enforces
-        // https-only + firebasestorage.googleapis.com allowlist before
-        // Intent.ACTION_VIEW dispatch. Same security posture as Parent.
+        // ── Phase 1b Attachments review section ───────────────────────
+        // Lives as a header item in the SAME LazyColumn as the student
+        // roster, so a tall attachment list scrolls with the page instead
+        // of squeezing the roster (it was previously a fixed Column above
+        // a separate list). Each tap routes through
+        // [AttachmentUrlValidator.openAttachmentSafely] which enforces the
+        // https + firebasestorage.googleapis.com allowlist before
+        // Intent.ACTION_VIEW dispatch. Images render a real Coil thumbnail;
+        // PDFs/other show a type-coloured icon. The display name is decoded
+        // from the URL (see [attachmentDisplayName]) so the teacher sees
+        // "photo.jpg" rather than the %2F-encoded storage path.
         if (homework.attachments.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(10.dp))
-            val attachmentContext = LocalContext.current
-            Text(
-                text = "ATTACHMENTS",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 10.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                homework.attachments.forEach { attachment ->
-                    val rawTail = attachment
-                        .substringAfterLast("/")
-                        .substringBefore("?")
-                    val fileName = when {
-                        rawTail.isBlank() -> "Attachment"
-                        !rawTail.contains('.') -> "Attachment"
-                        else -> rawTail
-                    }
-                    val isPdf = fileName.endsWith(".pdf", ignoreCase = true)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .glassCard(cornerRadius = 10.dp)
-                            .clickable {
-                                AttachmentUrlValidator.openAttachmentSafely(
-                                    context = attachmentContext,
-                                    rawUrl = attachment,
-                                    fileName = fileName
+            item {
+                val attachmentContext = LocalContext.current
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "ATTACHMENTS",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 10.sp
+                    )
+                    homework.attachments.forEach { attachment ->
+                        val fileName = attachmentDisplayName(attachment)
+                        val isPdf = fileName.endsWith(".pdf", ignoreCase = true)
+                        val isImage = isImageAttachment(fileName)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .glassCard(cornerRadius = 10.dp)
+                                .clickable {
+                                    AttachmentUrlValidator.openAttachmentSafely(
+                                        context = attachmentContext,
+                                        rawUrl = attachment,
+                                        fileName = fileName
+                                    )
+                                }
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isImage) {
+                                AsyncImage(
+                                    model = attachment,
+                                    contentDescription = fileName,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(6.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isPdf) ErrorRedSurface else TealSurface),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isPdf)
+                                            Icons.Filled.PictureAsPdf else Icons.Filled.Description,
+                                        contentDescription = null,
+                                        tint = if (isPdf) ErrorRed else Teal,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = fileName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (isImage) "Image" else if (isPdf) "PDF" else "Document",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextTertiary,
+                                    fontSize = 10.sp
                                 )
                             }
-                            .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(ErrorRedSurface),
-                            contentAlignment = Alignment.Center
-                        ) {
                             Icon(
-                                imageVector = if (isPdf)
-                                    Icons.Filled.PictureAsPdf else Icons.Filled.Description,
-                                contentDescription = null,
-                                tint = ErrorRed,
+                                imageVector = Icons.Filled.AttachFile,
+                                contentDescription = "Open",
+                                tint = TextTertiary,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = fileName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextPrimary,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = Icons.Filled.AttachFile,
-                            contentDescription = "Open",
-                            tint = TextTertiary,
-                            modifier = Modifier.size(16.dp)
-                        )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Student list
+        // Student roster — rows live in the same scrolling list. The
+        // header/chips/attachments above are header items, so the roster
+        // keeps its full height regardless of attachment count.
         if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = Teal)
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Teal)
+                }
             }
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(vertical = 4.dp)
-            ) {
-                items(students, key = { it.studentId }) { student ->
-                    val entry = submissionMap[student.studentId]
-                    val mark  = if (entry == null) teacherMarks[student.studentId] else null
-                    StudentSubmissionRow(
-                        student = student,
-                        entry = entry,
-                        teacherMark = mark,
-                        onStatusChange = { newStatus, remark, score ->
-                            onMarkStatus(student.studentId, student.displayName, newStatus, remark, score)
-                        }
-                    )
-                }
+            items(students, key = { it.studentId }) { student ->
+                val entry = submissionMap[student.studentId]
+                val mark = if (entry == null) teacherMarks[student.studentId] else null
+                StudentSubmissionRow(
+                    student = student,
+                    entry = entry,
+                    teacherMark = mark,
+                    onStatusChange = { newStatus, remark, score ->
+                        onMarkStatus(student.studentId, student.displayName, newStatus, remark, score)
+                    }
+                )
             }
         }
     }
@@ -1860,6 +1912,39 @@ private fun formatBytes(bytes: Long): String = when {
     bytes < 1024L -> "$bytes B"
     bytes < 1024L * 1024L -> "${bytes / 1024L} KB"
     else -> "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0))
+}
+
+/**
+ * Derive a clean, human-readable filename from a Firebase Storage download
+ * URL. The object path's separators are %2F-encoded in the URL, so a naive
+ * substringAfterLast("/") returns the whole encoded path (e.g.
+ * "homework%2FSCH_X%2F..%2F1779989378030_photo.jpg") — which is what the
+ * teacher used to see. We decode first, take the final path segment, then
+ * strip the "{epochMillis}_" prefix the uploader prepends to keep storage
+ * keys unique (see HomeworkAttachmentUploader). Falls back to "Attachment".
+ */
+private fun attachmentDisplayName(rawUrl: String): String {
+    val noQuery = rawUrl.substringBefore("?")
+    val decoded = try {
+        java.net.URLDecoder.decode(noQuery, "UTF-8")
+    } catch (_: Exception) {
+        noQuery
+    }
+    val tail = decoded.substringAfterLast("/")
+    val stripped = tail.replaceFirst(Regex("^\\d{10,}_"), "")
+    return when {
+        stripped.isBlank() -> "Attachment"
+        !stripped.contains('.') -> "Attachment"
+        else -> stripped
+    }
+}
+
+/** True when the resolved filename looks like a viewable image. */
+private fun isImageAttachment(fileName: String): Boolean {
+    val l = fileName.lowercase()
+    return l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".png") ||
+        l.endsWith(".webp") || l.endsWith(".gif") || l.endsWith(".bmp") ||
+        l.endsWith(".heic") || l.endsWith(".heif")
 }
 
 /** Map subject names to theme colors. */

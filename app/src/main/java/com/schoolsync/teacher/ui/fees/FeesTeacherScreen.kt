@@ -141,7 +141,8 @@ fun FeesTeacherScreen(viewModel: FeesTeacherViewModel = hiltViewModel()) {
                         selectedFilter = state.selectedFilter,
                         onFilter = viewModel::setFilter,
                         lastReminderByStudent = state.lastReminderByStudent,
-                        defaultersById = state.defaulters.associateBy { it.studentId }
+                        defaultersById = state.defaulters.associateBy { it.studentId },
+                        paidMonthsByStudent = state.paidMonthsByStudent
                     )
                 }
             }
@@ -293,7 +294,8 @@ private fun MainContent(
     selectedFilter: StudentFilter,
     onFilter: (StudentFilter) -> Unit,
     lastReminderByStudent: Map<String, String>,
-    defaultersById: Map<String, com.schoolsync.teacher.data.model.FeeDefaulter>
+    defaultersById: Map<String, com.schoolsync.teacher.data.model.FeeDefaulter>,
+    paidMonthsByStudent: Map<String, List<String>>
 ) {
     // Stable keys on each top-of-screen card so rememberSaveable inside
     // CollapsibleCard can persist expanded/collapsed state across the
@@ -347,7 +349,8 @@ private fun MainContent(
             StudentRow(
                 s = s,
                 defaulter = defaultersById[s.studentId],
-                lastReminderIso = lastReminderByStudent[s.studentId]
+                lastReminderIso = lastReminderByStudent[s.studentId],
+                paidMonths = paidMonthsByStudent[s.studentId].orEmpty()
             )
         }
         item { Spacer(Modifier.height(16.dp)) }
@@ -858,7 +861,8 @@ private fun FilterPill(
 private fun StudentRow(
     s: StudentFeeStatus,
     defaulter: com.schoolsync.teacher.data.model.FeeDefaulter?,
-    lastReminderIso: String?
+    lastReminderIso: String?,
+    paidMonths: List<String>
 ) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
@@ -972,6 +976,45 @@ private fun StudentRow(
                             color = Teal,
                             fontWeight = FontWeight.Medium
                         )
+                    }
+                }
+
+                // Paid months — feature parity with the StudentsScreen
+                // FeeSnapshotCard. Sourced from the VM's
+                // paidMonthsByStudent map (derived live from
+                // observeClassFeeDemands so it updates the moment a
+                // parent payment lands). "Yearly Fees" is relabelled
+                // to "Annual" to match the unpaid chip and parent app.
+                if (paidMonths.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Paid:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        paidMonths.forEach { m ->
+                            val display = if (m == "Yearly Fees") "Annual" else m
+                            Box(
+                                modifier = Modifier
+                                    .background(SuccessGreenSurface, RoundedCornerShape(6.dp))
+                                    .border(1.dp, SuccessGreen.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    display,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SuccessGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
 

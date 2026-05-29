@@ -107,6 +107,11 @@ class FeeFirestoreRepository @Inject constructor(
                 ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("session", session)
                     .whereEqualTo("studentId", studentId)
+                    // SW4-companion-C (2026-05-27): exclude archived demand
+                    // docs from one-shot fee-status reads. Same rationale
+                    // + composite-index requirement as the live observer
+                    // observeStudentFeeDemands below.
+                    .whereNotEqualTo("status", "archived")
                 // No orderBy: Firestore drops docs missing the indexed field,
                 // and alphabetical month order is meaningless anyway. The VM
                 // re-sorts by academic order (April → March, Yearly last).
@@ -236,6 +241,23 @@ class FeeFirestoreRepository @Inject constructor(
                         ref.whereEqualTo("schoolId", schoolCode)
                             .whereEqualTo("session", session)
                             .whereEqualTo("studentId", studentId)
+                            // SW4-companion-C (2026-05-27): exclude archived
+                            // demand docs from the per-student fee-chip
+                            // derivation. Archived demands represent
+                            // historical state (promotion/reverse-promotion
+                            // cycles, consolidation) and must not falsify
+                            // the `monthDemands.all { status == "paid" }`
+                            // derivation used by StudentsViewModel. Mirrors
+                            // admin SW4-companion-A (fetch_months) and
+                            // SW4-companion-D (defaulter aggregation), plus
+                            // parent SW4-companion-B (Parent FeeFirestore-
+                            // Repository).
+                            //
+                            // Composite index required (auto-prompted by
+                            // Firestore on first query if missing):
+                            //   feeDemands(schoolId ASC, session ASC,
+                            //   studentId ASC, status ASC).
+                            .whereNotEqualTo("status", "archived")
                     }.map { snap ->
                         snap.documents.mapNotNull {
                             try { it.toObject(FeeDemandDoc::class.java) } catch (_: Exception) { null }
@@ -245,8 +267,17 @@ class FeeFirestoreRepository @Inject constructor(
             }
             .onStart { emit(emptyList()) }
             .catch { e ->
-                android.util.Log.w("FeeRepo", "observeStudentFeeDemands failed — falling back to empty", e)
-                emit(emptyList())
+                // SW4-companion-C defensive fallback (2026-05-27): do NOT
+                // emit emptyList() on failure. The collector in
+                // StudentsViewModel overwrites selectedStudent.monthFee
+                // with whatever this flow emits — an empty emission on
+                // FAILED_PRECONDITION (missing composite index) would
+                // wipe the valid initial-roster monthFee map and hide
+                // every paid chip + annual fee + progress bar in the UI.
+                // Logging only — the flow terminates and the VM keeps
+                // whatever monthFee state it had from the initial roster
+                // load (StudentDoc.monthFee) or the last good emission.
+                android.util.Log.w("FeeRepo", "observeStudentFeeDemands failed — preserving prior monthFee state (no empty emit)", e)
             }
     }
 
@@ -307,6 +338,15 @@ class FeeFirestoreRepository @Inject constructor(
                             .whereEqualTo("session", session)
                             .whereEqualTo("className", Constants.classKey(className))
                             .whereEqualTo("section", Constants.sectionKey(section))
+                            // SW4-companion-C (2026-05-27): exclude archived
+                            // demand docs from the class monthly breakdown.
+                            // Archived Class 9 orphans (333 across the
+                            // cohort) would otherwise be summed into the
+                            // "X paid of Y" per-month rollup that drives
+                            // the class summary card. Mirrors the
+                            // observeStudentFeeDemands filter above. Same
+                            // composite-index requirement.
+                            .whereNotEqualTo("status", "archived")
                     }.map { snap ->
                         snap.documents.mapNotNull {
                             try { it.toObject(FeeDemandDoc::class.java) } catch (_: Exception) { null }
@@ -316,8 +356,13 @@ class FeeFirestoreRepository @Inject constructor(
             }
             .onStart { emit(emptyList()) }
             .catch { e ->
-                android.util.Log.w("FeeRepo", "observeClassFeeDemands failed — falling back to empty", e)
-                emit(emptyList())
+                // SW4-companion-C defensive fallback (2026-05-27): see
+                // matching rationale on observeStudentFeeDemands above.
+                // Class-summary card consumers overwrite their per-month
+                // rollup with this flow's emission; an empty emit on
+                // FAILED_PRECONDITION would blank the "X paid of Y per
+                // month" breakdown row on the class summary card.
+                android.util.Log.w("FeeRepo", "observeClassFeeDemands failed — preserving prior rollup state (no empty emit)", e)
             }
     }
 

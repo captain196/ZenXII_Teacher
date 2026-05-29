@@ -1,10 +1,14 @@
 package com.schoolsync.teacher.data.model.firestore
 
-import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.PropertyName
 
+// schools/{id} docs (written by the admin web panel) carry an explicit `schoolId`
+// data field whose value equals the document ID, so reading it from data is
+// identical to the @DocumentId-populated value. The annotation is dropped because
+// Firestore's CustomClassMapper.populateDocumentIdProperties throws a
+// RuntimeException when the observeSchool() snapshot listener deserialises into
+// this class with @DocumentId present (same fix already shipped in the Parent app).
 data class SchoolDoc(
-    @DocumentId
     val schoolId: String = "",
     val name: String = "",
     val schoolCode: String = "",

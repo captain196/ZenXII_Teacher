@@ -3,6 +3,7 @@ package com.schoolsync.teacher.ui.students
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
+import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.ClassAssignment
 import com.schoolsync.teacher.data.model.StudentInfo as ModelStudentInfo
 import com.schoolsync.teacher.data.repository.StudentRepository
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -57,7 +59,8 @@ class StudentsViewModel @Inject constructor(
     private val studentRepository: StudentRepository,
     private val teacherRepository: TeacherRepository,
     private val studentFirestoreRepo: StudentFirestoreRepository,
-    private val feeFirestoreRepo: FeeFirestoreRepository
+    private val feeFirestoreRepo: FeeFirestoreRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     companion object {
@@ -77,7 +80,16 @@ class StudentsViewModel @Inject constructor(
     private var selectedDemandsJob: Job? = null
 
     init {
-        loadClasses()
+        // Reload when the school's active session changes (propagated into
+        // TokenManager by SchoolFirestoreRepository.observeSchool). First
+        // emission performs the initial load. Mirrors AttendanceViewModel.
+        viewModelScope.launch {
+            tokenManager.session
+                .distinctUntilChanged()
+                .collect { session ->
+                    if (!session.isNullOrBlank()) loadClasses()
+                }
+        }
     }
 
     private fun loadClasses() {
@@ -94,13 +106,26 @@ class StudentsViewModel @Inject constructor(
                         val subjectsForFirst = firstClass?.let {
                             RoleHelper.getAssignedSubjects(assignments, it.first, it.second)
                         } ?: emptyList()
+                        // New session has no classes for this teacher: stop any
+                        // per-student fee listener so it doesn't keep observing
+                        // an old-session student.
+                        if (classes.isEmpty()) {
+                            selectedDemandsJob?.cancel()
+                            selectedDemandsJob = null
+                        }
                         _uiState.update {
                             it.copy(
                                 availableClasses = classes,
                                 selectedClassName = firstClass?.first ?: "",
                                 selectedSection = firstClass?.second ?: "",
                                 isClassTeacher = isClassTeacherForFirst,
-                                assignedSubjects = subjectsForFirst
+                                assignedSubjects = subjectsForFirst,
+                                // Clear the stale roster/selection when the new
+                                // session yields no classes so the previous
+                                // session's students don't linger on screen.
+                                students = if (classes.isEmpty()) emptyList() else it.students,
+                                filteredStudents = if (classes.isEmpty()) emptyList() else it.filteredStudents,
+                                selectedStudent = if (classes.isEmpty()) null else it.selectedStudent
                             )
                         }
                         if (classes.isNotEmpty()) {
@@ -270,7 +295,21 @@ class StudentsViewModel @Inject constructor(
                     _uiState.update { current ->
                         val sel = current.selectedStudent
                         if (sel?.studentId == student.studentId) {
-                            current.copy(selectedStudent = sel.copy(monthFee = derived))
+                            // SW4-companion-C defensive guard (2026-05-27): do
+                            // not overwrite a populated monthFee with an empty
+                            // derivation. Empty emissions come from (a) the
+                            // upstream .onStart { emit(emptyList()) } priming
+                            // pulse, or (b) the .catch fallback when the
+                            // Firestore composite index is missing. In both
+                            // cases the initial-roster monthFee (from
+                            // StudentDoc.monthFee, backend-populated) is the
+                            // best available state — keep it visible rather
+                            // than blanking every chip.
+                            if (derived.isEmpty() && sel.monthFee.isNotEmpty()) {
+                                current
+                            } else {
+                                current.copy(selectedStudent = sel.copy(monthFee = derived))
+                            }
                         } else current
                     }
                 }
