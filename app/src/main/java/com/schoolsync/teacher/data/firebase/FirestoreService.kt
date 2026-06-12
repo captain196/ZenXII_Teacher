@@ -136,6 +136,29 @@ class FirestoreService @Inject constructor(
             .addOnFailureListener { e -> cont.resumeWithException(e) }
     }
 
+    /**
+     * Write many documents in a SINGLE atomic Firestore WriteBatch (one network
+     * round-trip, all-or-nothing). Used by marks save so a full section commits
+     * in ~1 call instead of N sequential setDocument calls.
+     *
+     * Each item is (collection, docId, data). A batch is capped by Firestore at
+     * 500 ops; callers above that should chunk (marks sections are far smaller).
+     */
+    suspend fun setDocumentsBatch(
+        items: List<Triple<String, String, Any>>,
+        merge: Boolean = true
+    ): Unit = suspendCancellableCoroutine { cont ->
+        if (items.isEmpty()) { cont.resume(Unit); return@suspendCancellableCoroutine }
+        val batch = firestore.batch()
+        for ((collection, docId, data) in items) {
+            val ref = firestore.collection(collection).document(docId)
+            if (merge) batch.set(ref, data, SetOptions.merge()) else batch.set(ref, data)
+        }
+        batch.commit()
+            .addOnSuccessListener { cont.resume(Unit) }
+            .addOnFailureListener { e -> cont.resumeWithException(e) }
+    }
+
     suspend fun updateDocument(
         collection: String,
         docId: String,

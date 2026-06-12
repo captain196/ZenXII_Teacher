@@ -67,6 +67,8 @@ object Constants {
         const val EXAMS = "exams"
         const val EXAM_SCHEDULE = "examSchedule"
         const val MARKS = "marks"
+        const val MARKS_AUDIT = "marksAudit"          // append-only marks change trail
+        const val EXAM_RESULT_META = "examResultMeta"  // result staleness / publication-dirty
         const val RESULTS = "results"
         const val TIMETABLES = "timetables"
         const val FEE_STRUCTURES = "feeStructures"
@@ -187,6 +189,25 @@ object Constants {
         if (trimmed.isEmpty()) return ""
         if (trimmed.startsWith("Section ", ignoreCase = true)) return trimmed
         return "Section $trimmed"
+    }
+
+    /**
+     * Collision-safe document-id token, byte-identical to the admin panel's
+     * Firestore_service::idToken — substr(sha1(canonicalize(raw)), 0, 16).
+     * canonicalize = trim → collapse internal whitespace → Unicode NFC.
+     *
+     * Used to build marks / template / result doc-ids that match exactly what
+     * the admin writes, so the apps and the admin panel touch the SAME document
+     * (and never produce an invalid id — a raw class/section like
+     * "Class 8th/Section A" would otherwise put a '/' inside the id, which
+     * Firestore rejects as an "invalid document reference").
+     */
+    fun idToken(raw: String): String {
+        var s = raw.trim().replace(Regex("\\s+"), " ")
+        s = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFC)
+        val digest = java.security.MessageDigest.getInstance("SHA-1")
+            .digest(s.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }.substring(0, 16)
     }
 
     /**
