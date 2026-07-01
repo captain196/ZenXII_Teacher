@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.model.ClassFeeOverview
 import com.schoolsync.teacher.data.model.FeeDefaulter
 import com.schoolsync.teacher.data.model.StudentFeeStatus
+import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.repository.FeeRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.FeeFirestoreRepository
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
@@ -106,7 +108,8 @@ data class FeesUiState(
 class FeesTeacherViewModel @Inject constructor(
     private val feeRepository: FeeRepository,
     private val teacherRepository: TeacherRepository,
-    private val feeFirestoreRepo: FeeFirestoreRepository
+    private val feeFirestoreRepo: FeeFirestoreRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     companion object {
@@ -131,7 +134,21 @@ class FeesTeacherViewModel @Inject constructor(
     private var remindersListenerJob: Job? = null
 
     init {
-        loadAssignedClasses()
+        // React to academic-session changes. When the admin switches the
+        // school's active session, SchoolFirestoreRepository.observeSchool()
+        // propagates the new value into TokenManager; we reload the teacher's
+        // assigned classes for that session so the class dropdown + fee data
+        // never show stale data from the previous session. The first (current)
+        // emission performs the initial load. Mirrors AttendanceViewModel.
+        viewModelScope.launch {
+            tokenManager.session
+                .distinctUntilChanged()
+                .collect { session ->
+                    if (!session.isNullOrBlank()) {
+                        loadAssignedClasses()
+                    }
+                }
+        }
     }
 
     private fun loadAssignedClasses() {
