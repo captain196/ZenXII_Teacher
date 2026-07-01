@@ -1,6 +1,7 @@
 package com.schoolsync.teacher.data.remote
 
 import retrofit2.Response
+import retrofit2.http.Body
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
@@ -85,4 +86,34 @@ interface ApiService {
         @Query("limit") limit: Int = 25,
         @Query("cursor") cursor: Long = 0
     ): Response<Map<String, Any>>
+
+    // ── GPS Staff Self-Attendance (Firestore-backed; Bearer auth) ────
+    /**
+     * Record a GPS staff punch. The SERVER is the sole authority — it
+     * verifies the token (uid == staffId), runs the geofence/window/leave/
+     * holiday/lock checks, decides Present/Late/Rejected, and persists via
+     * Staff_attendance_writer. The app only sends raw GPS + direction.
+     */
+    @POST("staff_attendance/punch")
+    suspend fun staffPunch(@Body body: StaffPunchRequest): Response<Map<String, Any>>
+
+    /** Read the authenticated staff member's own attendance (today + month + 30-day history). */
+    @GET("staff_attendance/me")
+    suspend fun staffMe(): Response<Map<String, Any>>
 }
+
+/**
+ * JSON body for [ApiService.staffPunch]. Serialized by Gson; the PHP backend
+ * reads it from the request body. `staffId` is intentionally ABSENT — the
+ * server derives identity from the Firebase token, never from the client.
+ */
+data class StaffPunchRequest(
+    val direction: String,            // "in" | "out"
+    val lat: Double?,
+    val lng: Double?,
+    val accuracy: Float?,
+    val mock: Boolean,
+    val clientPunchId: String,        // idempotency / correlation key
+    val clientCapturedAt: String?,    // ISO-8601 device capture time (audit only)
+    val device: Map<String, String>? = null,
+)

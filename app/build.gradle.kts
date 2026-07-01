@@ -29,10 +29,13 @@ android {
         //   "https://api.yourdomain.com/Grader/school/".
         //
         // Quick reference:
-        //   - same-WiFi LAN access:    http://<PC_LAN_IP>/Grader/school/
-        //   - emulator:                http://10.0.2.2/Grader/school/
+        //   - same-WiFi LAN access:    http://<PC_LAN_IP>/ZenX/school/
+        //   - emulator:                http://10.0.2.2/ZenX/school/
         //   - USB tether (legacy):     localhost:8080 + `adb reverse tcp:8080 tcp:80`
-        buildConfigField("String", "BASE_URL", "\"http://10.119.9.181/Grader/school/\"")
+        //
+        // Phase 12: repointed from the legacy /Grader/school/ path to the
+        // canonical ZenX backend (/ZenX/school/). Update the host/IP per env.
+        buildConfigField("String", "BASE_URL", "\"http://localhost:8080/ZenX/school/\"")
     }
 
     buildTypes {
@@ -111,6 +114,9 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+
+    // Location — FusedLocationProviderClient (GPS staff attendance, Phase 11)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
