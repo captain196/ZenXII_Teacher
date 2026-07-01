@@ -16,6 +16,43 @@ object StorySharedConfig {
     // ── Collection / paths ─────────────────────────────────────────
     const val COLLECTION = "stories"
     const val VIEWERS_SUBCOLLECTION = "viewers"
+    /** Per-user reaction docs: stories/{id}/reactions/{userId} = {emoji, reactedAt}. */
+    const val REACTIONS_SUBCOLLECTION = "reactions"
+
+    // ── Reactions (v1) ─────────────────────────────────────────────
+    /** Fixed emoji palette. Parents react; teacher/admin see aggregate counts. */
+    val ALLOWED_REACTIONS = listOf("❤️", "👍", "😍", "👏", "🎉")
+
+    // ── Audience scoping (v1) ──────────────────────────────────────
+    // A story carries `audienceClassKeys: List<String>` of CANONICAL
+    // class-section tokens. EMPTY = school-wide (back-compat: every
+    // pre-v1 doc has no field → empty → visible to all, as before).
+    //
+    // [audienceKey] reduces ANY representation of a class+section to a
+    // single canonical token so the teacher writer and the parent
+    // reader match even though the two apps' Constants.classKey differ
+    // (teacher adds an ordinal "8"→"Class 8th", parent does not). All
+    // of "Class 8th"/"8th"/"8" → "8"; "Section A"/"A" → "a".
+    //   ⚠ MUST stay byte-identical in: teacher StorySharedConfig,
+    //     parent StorySharedConfig, admin Stories.php.
+
+    /** Canonical class+section token, e.g. ("Class 8th","Section A") → "8-a". */
+    fun audienceKey(className: String, section: String): String =
+        "${canonClassToken(className)}-${canonSectionToken(section)}"
+
+    private fun canonClassToken(raw: String): String {
+        var s = raw.trim().lowercase()
+        if (s.startsWith("class ")) s = s.removePrefix("class ").trim()
+        // strip ordinal suffix on a pure-numeric class: "8th" → "8", "12th" → "12"
+        Regex("^(\\d+)(st|nd|rd|th)$").find(s)?.let { s = it.groupValues[1] }
+        return s
+    }
+
+    private fun canonSectionToken(raw: String): String {
+        var s = raw.trim().lowercase()
+        if (s.startsWith("section ")) s = s.removePrefix("section ").trim()
+        return s
+    }
 
     // ── Lifecycle ──────────────────────────────────────────────────
     /** Story lives 24h by default. */

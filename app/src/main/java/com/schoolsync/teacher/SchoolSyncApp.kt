@@ -20,7 +20,7 @@ class SchoolSyncApp : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 "school_sync_channel",
-                "SchoolSync Notifications",
+                "ZenXii Notifications",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "School notifications"

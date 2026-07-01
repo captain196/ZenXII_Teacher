@@ -1,6 +1,5 @@
 package com.schoolsync.teacher.data.repository.firestore
 
-import com.google.firebase.firestore.Query
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.StoryDoc
@@ -63,21 +62,25 @@ class StoryFirestoreRepository @Inject constructor(
             .flatMapLatest { schoolCode ->
                 if (schoolCode.isNullOrBlank()) flowOf(emptyList())
                 else {
-                    val nowTs = com.google.firebase.Timestamp.now()
+                    // Single-field equality query (schoolId only) — auto-
+                    // indexed, so NO composite index is required and the
+                    // listener never errors out. Expiry + status filtering
+                    // and the newest-first sort are done CLIENT-SIDE (story
+                    // volume per school is tiny). This is what keeps the
+                    // ring carousel from flickering: the previous
+                    // schoolId==/expiresAtTs>/orderBy query needed a
+                    // composite index and, until it exists, failed with
+                    // FAILED_PRECONDITION — Firestore would serve cached
+                    // docs (ring appears) then reject on the server (ring
+                    // vanishes). Same pattern as observeMyStories.
                     firestoreService.observeQuery(COLLECTION) { ref ->
                         ref.whereEqualTo("schoolId", schoolCode)
-                            .whereGreaterThan("expiresAtTs", nowTs)
-                            .orderBy("expiresAtTs", Query.Direction.DESCENDING)
                     }.map { snap ->
                         val nowMs = System.currentTimeMillis()
                         snap.documents
                             .mapNotNull { it.toObject(StoryDoc::class.java) }
-                            // Status + defense-in-depth millis filter
-                            // (covers the window where a legacy doc
-                            // has only the Long expiresAt and the
-                            // Firestore query couldn't compare it
-                            // against a Timestamp).
                             .filter { it.status == "active" && it.expiresAtMillis > nowMs }
+                            .sortedByDescending { it.expiresAtMillis }
                     }.onStart { emit(emptyList()) }
                      .catch { emit(emptyList()) }
                 }
@@ -159,7 +162,11 @@ class StoryFirestoreRepository @Inject constructor(
         type: String = "image",
         caption: String = "",
         teacherName: String,
-        teacherPic: String = ""
+        teacherPic: String = "",
+        /** Canonical class-section tokens (StorySharedConfig.audienceKey).
+         *  EMPTY = school-wide. Teacher posts default to their own
+         *  class-teacher section(s); "Whole school" clears it. */
+        audienceClassKeys: List<String> = emptyList()
     ): Result<String> {
         // Validation
         val cleanUrl     = mediaUrl.trim()
@@ -223,6 +230,10 @@ class StoryFirestoreRepository @Inject constructor(
             "type"            to cleanType,
             "caption"         to cleanCaption,
             "priority"        to "normal",
+            // Audience scoping (v1) — empty list = school-wide.
+            "audienceClassKeys" to audienceClassKeys,
+            // Reactions (v1) — starts empty; parent app increments.
+            "reactionCounts"  to emptyMap<String, Int>(),
             // Lifecycle — expiresAtTs (Timestamp) is the canonical
             // expiry field used by both clients AND Firestore TTL.
             // expiresAt (Long) is written for one more release so

@@ -1,8 +1,13 @@
 package com.schoolsync.teacher.util
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -45,8 +50,20 @@ object StoryMediaUploader {
         data class Failed(val reason: String) : UploadProgress()
     }
 
-    private const val MAX_IMAGE_BYTES = 10L * 1024 * 1024
-    private const val MAX_VIDEO_BYTES = 50L * 1024 * 1024
+    // Raw-pick caps. Images are downscaled/re-encoded client-side before
+    // upload (see [compressImage]) the way Instagram/WhatsApp do, so the
+    // image cap is generous — it only rejects absurd inputs; anything
+    // reasonable is shrunk to ~MAX_IMAGE_DIMEN before it leaves the device.
+    private const val MAX_IMAGE_BYTES = 40L * 1024 * 1024
+    // Generous raw cap: videos are transcoded to ~720p/2Mbps client-side
+    // (see StoryVideoCompressor) before upload, so this only rejects absurd
+    // inputs rather than ordinary phone recordings.
+    private const val MAX_VIDEO_BYTES = 300L * 1024 * 1024
+
+    /** Longest-edge cap for uploaded images (Instagram-story-ish 9:16 @1080
+     *  fits comfortably; 1920 keeps landscape/quality without bloating). */
+    private const val MAX_IMAGE_DIMEN = 1920
+    private const val JPEG_QUALITY = 82
 
     /**
      * Cheap server-free pre-checks. Returns null when OK, otherwise an
@@ -101,10 +118,16 @@ object StoryMediaUploader {
                 else -> if (declaredType == "image") "jpg" else "mp4"
             }
 
-            val path = "stories/${schoolId}/${teacherId}/${System.currentTimeMillis()}.${ext}"
+            // Shrink images on-device before upload (Instagram/WhatsApp do
+            // the same). Falls back to the original Uri on any failure.
+            val uploadUri = if (declaredType == "image") compressImage(context, uri) else uri
+            // Re-derive extension: a compressed image is always JPEG.
+            val finalExt = if (declaredType == "image") "jpg" else ext
+
+            val path = "stories/${schoolId}/${teacherId}/${System.currentTimeMillis()}.${finalExt}"
             val ref = FirebaseStorage.getInstance().reference.child(path)
 
-            val task = ref.putFile(uri)
+            val task = ref.putFile(uploadUri)
             task.addOnProgressListener { snap ->
                 val pct = if (snap.totalByteCount > 0) {
                     ((snap.bytesTransferred * 100) / snap.totalByteCount).toInt().coerceIn(0, 99)
@@ -134,6 +157,68 @@ object StoryMediaUploader {
             close()
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Downscale + re-encode an image to a JPEG no larger than
+     * [MAX_IMAGE_DIMEN] on its longest edge, honouring EXIF rotation, and
+     * write it to the cache dir. Returns a file:// Uri for the compressed
+     * copy, or the original [uri] unchanged on any failure (so upload still
+     * proceeds). This mirrors what Instagram/WhatsApp do client-side so a
+     * 12 MP phone photo (~5–10 MB) uploads as a ~200–500 KB JPEG.
+     */
+    private fun compressImage(context: Context, uri: Uri): Uri {
+        return try {
+            val cr = context.contentResolver
+
+            // 1. Read bounds only (no full decode) to compute a sane sample.
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            val srcW = bounds.outWidth
+            val srcH = bounds.outHeight
+            if (srcW <= 0 || srcH <= 0) return uri
+
+            // 2. Power-of-two downsample to get within ~2× of target cheaply.
+            var sample = 1
+            val longest = maxOf(srcW, srcH)
+            while (longest / sample > MAX_IMAGE_DIMEN * 2) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            var bmp = cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+                ?: return uri
+
+            // 3. Precise scale to the longest-edge cap.
+            val scale = MAX_IMAGE_DIMEN.toFloat() / maxOf(bmp.width, bmp.height)
+            if (scale < 1f) {
+                bmp = Bitmap.createScaledBitmap(
+                    bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true
+                )
+            }
+
+            // 4. Honour EXIF orientation so portrait photos don't upload sideways.
+            val orientation = cr.openInputStream(uri)?.use {
+                android.media.ExifInterface(it).getAttributeInt(
+                    android.media.ExifInterface.TAG_ORIENTATION,
+                    android.media.ExifInterface.ORIENTATION_NORMAL
+                )
+            } ?: android.media.ExifInterface.ORIENTATION_NORMAL
+            val rotation = when (orientation) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+            if (rotation != 0f) {
+                val m = Matrix().apply { postRotate(rotation) }
+                bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            }
+
+            // 5. Encode JPEG to cache and hand back a file:// Uri.
+            val out = File(context.cacheDir, "story_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(out).use { bmp.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+            Uri.fromFile(out)
+        } catch (_: Exception) {
+            uri
+        }
+    }
 
     /**
      * Best-effort rollback — delete a previously-uploaded Storage

@@ -6,6 +6,7 @@ import com.schoolsync.teacher.data.firebase.FirebaseService
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.LoginUser
+import com.schoolsync.teacher.data.remote.AuthApi
 import com.schoolsync.teacher.util.Constants
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.tasks.await
@@ -21,7 +22,8 @@ class AuthRepository @Inject constructor(
     private val tokenManager: TokenManager,
     private val firebaseAuthManager: FirebaseAuthManager,
     private val firebaseService: FirebaseService,
-    private val firestoreService: FirestoreService
+    private val firestoreService: FirestoreService,
+    private val authApi: AuthApi,
 ) {
     companion object { private const val TAG = "AuthRepository" }
 
@@ -51,6 +53,16 @@ class AuthRepository @Inject constructor(
             val schoolId = claims["school_id"] as? String
                 ?: claims["schoolId"] as? String
                 ?: return Result.failure(Exception("No school_id in claims"))
+
+            // Force-change-password gate — cache the flag so SplashViewModel
+            // and LoginViewModel can route to the force-change screen.
+            val mustChange = when (val v = claims["must_change_password"]) {
+                is Boolean -> v
+                is String  -> v.equals("true", ignoreCase = true)
+                else       -> false
+            }
+            tokenManager.saveMustChangePassword(mustChange)
+            Log.d(TAG, "login: must_change_password=$mustChange")
 
             // 3. Resolve parent_db_key for Users/Admin & Users/Parents paths.
             //    For new SCH_* schools this is the numeric login code (e.g. "10001").
@@ -219,13 +231,61 @@ class AuthRepository @Inject constructor(
     }
 
     /**
-     * Change password via Firebase Auth.
+     * Change password via Firebase Auth (client-side).
+     * For voluntary changes from a Settings screen — Firebase requires a
+     * "recent login" window, so this can fail after a few minutes idle.
+     * For admin-driven resets, use [clearMustChange] instead.
      */
     suspend fun changePassword(newPassword: String): Result<Unit> {
         return try {
             firebaseAuthManager.changePassword(newPassword)
             Result.success(Unit)
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Finalise an admin-driven password reset. Calls the server endpoint
+     * /auth/clear_must_change which updates Firebase Auth and clears the
+     * must_change_password custom claim atomically. The client then
+     * refreshes its ID token + clears the local mustChangePassword flag.
+     */
+    suspend fun clearMustChange(newPassword: String): Result<Unit> {
+        return try {
+            val token = firebaseAuthManager.getIdTokenResult(forceRefresh = false).token
+                ?: return Result.failure(Exception("Not signed in"))
+
+            val res = authApi.clearMustChange(
+                bearer = "Bearer $token",
+                newPassword = newPassword,
+            )
+
+            if (!res.isSuccessful) {
+                val body = res.errorBody()?.string().orEmpty()
+                Log.w(TAG, "clearMustChange HTTP ${res.code()}: $body")
+                val msg = try {
+                    org.json.JSONObject(body).optString("message").ifBlank { "Reset failed (HTTP ${res.code()})." }
+                } catch (_: Exception) {
+                    "Reset failed (HTTP ${res.code()})."
+                }
+                return Result.failure(Exception(msg))
+            }
+
+            val payload = res.body()
+            if (payload?.status != "success") {
+                return Result.failure(Exception(payload?.message ?: "Reset failed."))
+            }
+
+            // Force-refresh the ID token so subsequent calls see the cleared claim.
+            try { firebaseAuthManager.getIdTokenResult(forceRefresh = true) } catch (_: Exception) {}
+
+            // Clear local flag so the navigation gate releases.
+            tokenManager.saveMustChangePassword(false)
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "clearMustChange exception", e)
             Result.failure(e)
         }
     }

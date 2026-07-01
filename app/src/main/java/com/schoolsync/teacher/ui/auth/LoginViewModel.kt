@@ -27,6 +27,7 @@ data class LoginUiState(
 
 sealed class LoginEvent {
     data object LoginSuccess : LoginEvent()
+    data object LoginRequiresPasswordChange : LoginEvent()
 }
 
 @HiltViewModel
@@ -79,7 +80,14 @@ class LoginViewModel @Inject constructor(
                 result.fold(
                     onSuccess = {
                         _uiState.update { it.copy(isLoading = false) }
-                        _events.emit(LoginEvent.LoginSuccess)
+                        // Force-change-password gate: if the admin reset this
+                        // user's password, AuthRepository.login cached the flag
+                        // in TokenManager. Route accordingly.
+                        val mustChange = tokenManager.mustChangePassword.firstOrNull() ?: false
+                        _events.emit(
+                            if (mustChange) LoginEvent.LoginRequiresPasswordChange
+                            else LoginEvent.LoginSuccess
+                        )
                     },
                     onFailure = { throwable ->
                         _uiState.update {

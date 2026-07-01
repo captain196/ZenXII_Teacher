@@ -9,7 +9,11 @@ data class Story(
     val expiresAt: Long = 0L,
     val teacherName: String = "",
     val teacherPic: String = "",
-    val viewCount: Int = 0
+    val viewCount: Int = 0,
+    /** Canonical class-section tokens this story targets; empty = school-wide. */
+    val audienceClassKeys: List<String> = emptyList(),
+    /** Aggregate emoji → count (read-only analytics in the teacher app). */
+    val reactionCounts: Map<String, Int> = emptyMap()
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "mediaUrl" to mediaUrl,

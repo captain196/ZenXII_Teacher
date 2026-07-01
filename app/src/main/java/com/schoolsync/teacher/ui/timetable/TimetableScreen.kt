@@ -22,12 +22,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -99,13 +101,82 @@ fun TimetableScreen(
                 }
             }
 
-            if (state.isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Teal)
+            when {
+                state.isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Teal)
+                    }
                 }
-            } else {
-                // Timetable grid
-                TimetableGrid(state = state)
+                state.error != null -> {
+                    TimetableMessage(
+                        icon = Icons.Filled.CloudOff,
+                        title = "Couldn't load timetable",
+                        message = state.error ?: "Something went wrong",
+                        onRetry = viewModel::refresh
+                    )
+                }
+                state.weekGrid.isEmpty() ||
+                    state.weekGrid.values.all { row -> row.all { it == null } } -> {
+                    TimetableMessage(
+                        icon = Icons.Filled.CalendarMonth,
+                        title = "No timetable yet",
+                        message = "Your weekly schedule hasn't been set up. Pull to refresh or check back later.",
+                        onRetry = viewModel::refresh
+                    )
+                }
+                else -> {
+                    // Timetable grid
+                    TimetableGrid(state = state)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimetableMessage(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    message: String,
+    onRetry: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = TextTertiary,
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = title,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextSecondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                fontSize = 14.sp,
+                color = TextTertiary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(onClick = onRetry) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = Teal,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = "Retry", color = Teal, fontWeight = FontWeight.SemiBold)
             }
         }
     }

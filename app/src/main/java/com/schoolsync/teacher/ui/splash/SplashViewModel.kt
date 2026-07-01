@@ -15,7 +15,8 @@ import javax.inject.Inject
 data class SplashState(
     val isLoading: Boolean = true,
     val isLoggedIn: Boolean = false,
-    val hasSeenOnboarding: Boolean = false
+    val hasSeenOnboarding: Boolean = false,
+    val mustChangePassword: Boolean = false,
 )
 
 @HiltViewModel
@@ -35,10 +36,12 @@ class SplashViewModel @Inject constructor(
         viewModelScope.launch {
             val loggedIn = tokenManager.isLoggedIn.first()
             val seenOnboarding = prefs.getBoolean("onboarding_seen", false)
+            val mustChange = if (loggedIn) tokenManager.mustChangePassword.first() else false
             _state.value = SplashState(
                 isLoading = false,
                 isLoggedIn = loggedIn,
-                hasSeenOnboarding = seenOnboarding
+                hasSeenOnboarding = seenOnboarding,
+                mustChangePassword = mustChange,
             )
         }
     }

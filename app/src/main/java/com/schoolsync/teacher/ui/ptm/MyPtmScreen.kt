@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import com.schoolsync.teacher.ui.theme.SuccessGreen
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -252,7 +253,7 @@ private fun PtmCard(
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatPill("Applied",   applied,   cs.primary)
-            StatPill("Delivered", delivered, Color(0xFF2E7D32))
+            StatPill("Delivered", delivered, SuccessGreen)
             if (noShow > 0) StatPill("No-show", noShow, cs.error)
         }
 
@@ -353,7 +354,7 @@ private fun StudentRow(
     val cs = MaterialTheme.colorScheme
     val rsvp = view.rsvp
     val statusColor = when (view.status) {
-        "delivered" -> Color(0xFF2E7D32)
+        "delivered" -> SuccessGreen
         "applied"   -> cs.primary
         "no-show"   -> cs.error
         else        -> cs.onSurfaceVariant
@@ -442,7 +443,7 @@ private fun StudentRow(
                 ActionChip(
                     label = "Mark delivered",
                     icon = Icons.Filled.CheckCircle,
-                    tint = Color(0xFF2E7D32),
+                    tint = SuccessGreen,
                     onClick = { onMarkDelivered(rsvp.studentId) }
                 )
                 ActionChip(

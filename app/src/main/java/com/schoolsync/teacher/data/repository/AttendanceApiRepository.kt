@@ -41,7 +41,11 @@ class AttendanceApiRepository @Inject constructor(
             absentJson  = JSONArray(absent).toString(),
             leaveJson   = JSONArray(leave).toString(),
             lateJson    = JSONArray(late.map {
-                JSONObject(mapOf("studentId" to it.studentId, "lateMinutes" to it.lateMinutes))
+                val obj = JSONObject()
+                    .put("studentId", it.studentId)
+                    .put("lateMinutes", it.lateMinutes)
+                if (it.arrivalTime != null) obj.put("time", it.arrivalTime)
+                obj
             }).toString(),
             reason      = reason
         )
@@ -154,7 +158,19 @@ class AttendanceApiRepository @Inject constructor(
 
 // ── Models ───────────────────────────────────────────────────────
 
-data class LateMark(val studentId: String, val lateMinutes: Int)
+/**
+ * Late mark for a student on the active day.
+ *
+ * `arrivalTime` is the raw "HH:mm" the teacher entered in the tardy dialog;
+ * the admin backend uses it to populate `attendanceSummary.lateTimes`
+ * (per-day arrival map the parent app reads). Null means the teacher
+ * skipped the time prompt — server should fall back to its own default.
+ */
+data class LateMark(
+    val studentId: String,
+    val lateMinutes: Int,
+    val arrivalTime: String? = null
+)
 
 data class SaveResult(
     val updated: List<String>,

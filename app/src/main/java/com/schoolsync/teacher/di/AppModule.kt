@@ -10,6 +10,7 @@ import com.schoolsync.teacher.data.firebase.FirebaseAuthManager
 import com.schoolsync.teacher.data.firebase.FirebaseService
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
+import com.schoolsync.teacher.data.remote.AuthApi
 import com.schoolsync.teacher.data.remote.AuthInterceptor
 import com.schoolsync.teacher.data.remote.ApiService
 import com.schoolsync.teacher.data.repository.AuthRepository
@@ -134,12 +135,18 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideAuthApi(retrofit: Retrofit): AuthApi =
+        retrofit.create(AuthApi::class.java)
+
+    @Provides
+    @Singleton
     fun provideAuthRepository(
         tokenManager: TokenManager,
         firebaseAuthManager: FirebaseAuthManager,
         firebaseService: FirebaseService,
-        firestoreService: FirestoreService
-    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firebaseService, firestoreService)
+        firestoreService: FirestoreService,
+        authApi: AuthApi
+    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firebaseService, firestoreService, authApi)
 
     @Provides
     @Singleton

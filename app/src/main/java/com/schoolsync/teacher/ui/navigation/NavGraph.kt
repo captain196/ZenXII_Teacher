@@ -103,6 +103,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.schoolsync.teacher.ui.attendance.AttendanceScreen
+import com.schoolsync.teacher.ui.auth.ForceChangePasswordScreen
 import com.schoolsync.teacher.ui.auth.LoginScreen
 import com.schoolsync.teacher.ui.splash.SplashScreen
 import com.schoolsync.teacher.ui.splash.SplashViewModel
@@ -146,6 +147,7 @@ sealed class Route(val route: String) {
     data object Splash : Route("splash")
     data object Walkthrough : Route("walkthrough")
     data object Login : Route("login")
+    data object ForceChangePassword : Route("force_change_password")
     data object Main : Route("main")
 
     // Main tabs
@@ -160,6 +162,9 @@ sealed class Route(val route: String) {
     data object Homework : Route("homework")
     data object RedFlags : Route("redflags")
     data object Stories : Route("stories")
+    data object StoryViewer : Route("story_viewer/{authorId}") {
+        fun create(authorId: String) = "story_viewer/$authorId"
+    }
     data object Fees : Route("fees")
     data object Gallery : Route("gallery")
     data object Library : Route("library")
@@ -243,8 +248,14 @@ fun AppNavGraph(
                             popUpTo(Route.Splash.route) { inclusive = true }
                         }
                     },
+                    onNavigateToForceChange = {
+                        navController.navigate(Route.ForceChangePassword.route) {
+                            popUpTo(Route.Splash.route) { inclusive = true }
+                        }
+                    },
                     isLoggedIn = state.isLoggedIn,
-                    hasSeenOnboarding = state.hasSeenOnboarding
+                    hasSeenOnboarding = state.hasSeenOnboarding,
+                    mustChangePassword = state.mustChangePassword,
                 )
             }
         }
@@ -268,7 +279,27 @@ fun AppNavGraph(
                     navController.navigate(Route.Main.route) {
                         popUpTo(Route.Login.route) { inclusive = true }
                     }
-                }
+                },
+                onRequiresPasswordChange = {
+                    navController.navigate(Route.ForceChangePassword.route) {
+                        popUpTo(Route.Login.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Route.ForceChangePassword.route) {
+            ForceChangePasswordScreen(
+                onDone = {
+                    navController.navigate(Route.Main.route) {
+                        popUpTo(Route.ForceChangePassword.route) { inclusive = true }
+                    }
+                },
+                onLogout = {
+                    navController.navigate(Route.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
             )
         }
 
@@ -515,6 +546,11 @@ fun MainScaffold(navController: NavHostController) {
                             launchSingleTop = true
                             restoreState = true
                         }
+                    },
+                    onOpenStory = { authorId ->
+                        innerNavController.navigate(Route.StoryViewer.create(authorId)) {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
@@ -532,7 +568,29 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.Leave.route) { LeaveScreen() }
             composable(Route.Homework.route) { HomeworkTeacherScreen() }
             composable(Route.RedFlags.route) { RedFlagTeacherScreen() }
-            composable(Route.Stories.route) { StoriesTeacherScreen() }
+            composable(Route.Stories.route) {
+                StoriesTeacherScreen(
+                    onOpenViewer = { authorId ->
+                        innerNavController.navigate(Route.StoryViewer.create(authorId)) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(
+                route = Route.StoryViewer.route,
+                arguments = listOf(
+                    androidx.navigation.navArgument("authorId") {
+                        type = androidx.navigation.NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val authorId = backStackEntry.arguments?.getString("authorId").orEmpty()
+                com.schoolsync.teacher.ui.stories.StoryViewerScreen(
+                    initialAuthorId = authorId,
+                    onClose = { innerNavController.popBackStack() }
+                )
+            }
             composable(Route.Fees.route) { FeesTeacherScreen() }
             composable(Route.Gallery.route) { GalleryTeacherScreen() }
             composable(Route.Library.route) { LibraryTeacherScreen() }

@@ -2,6 +2,7 @@ package com.schoolsync.teacher.ui.splash
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
@@ -12,26 +13,31 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.schoolsync.teacher.R
 import com.schoolsync.teacher.ui.theme.BgEnd
 import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 
-private val ZenzGreen = Color(0xFF2DB87A)
-private val ZenzDark = Color(0xFF1E2D3D)
+// Splash accent — aligned to the "Soft Blue & Cloud" palette accent (#3E5F8A)
+// so the splash matches the (blue) login screen that follows it. Was a legacy
+// brand green (#2DB87A) that clashed with the rebranded palette.
+private val ZenXiiAccent = Color(0xFF3E5F8A)
 
 @Composable
 fun SplashScreen(
     onNavigateToWalkthrough: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onNavigateToMain: () -> Unit,
+    onNavigateToForceChange: () -> Unit,
     isLoggedIn: Boolean,
-    hasSeenOnboarding: Boolean
+    hasSeenOnboarding: Boolean,
+    mustChangePassword: Boolean,
 ) {
     var phase by remember { mutableIntStateOf(0) }
 
@@ -48,15 +54,6 @@ fun SplashScreen(
         targetValue = if (phase >= 1) 1f else 0f,
         animationSpec = tween(400), label = "logoAlpha"
     )
-    val greenReveal by animateFloatAsState(
-        targetValue = if (phase >= 1) 1f else 0f,
-        animationSpec = tween(700, easing = FastOutSlowInEasing), label = "greenReveal"
-    )
-    val darkReveal by animateFloatAsState(
-        targetValue = if (phase >= 1) 1f else 0f,
-        animationSpec = tween(700, delayMillis = 250, easing = FastOutSlowInEasing), label = "darkReveal"
-    )
-
     val titleAlpha by animateFloatAsState(
         targetValue = if (phase >= 2) 1f else 0f,
         animationSpec = tween(500), label = "titleAlpha"
@@ -99,6 +96,7 @@ fun SplashScreen(
         phase = 3
         delay(1000)
         when {
+            isLoggedIn && mustChangePassword -> onNavigateToForceChange()
             isLoggedIn -> onNavigateToMain()
             !hasSeenOnboarding -> onNavigateToWalkthrough()
             else -> onNavigateToLogin()
@@ -124,14 +122,14 @@ fun SplashScreen(
                 // Glow
                 Canvas(
                     modifier = Modifier
-                        .size(160.dp)
+                        .size(180.dp)
                         .alpha(if (phase >= 1) glowAlpha else 0f)
                 ) {
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                ZenzGreen.copy(alpha = 0.5f),
-                                ZenzGreen.copy(alpha = 0f)
+                                ZenXiiAccent.copy(alpha = 0.5f),
+                                ZenXiiAccent.copy(alpha = 0f)
                             ),
                             center = center,
                             radius = size.minDimension / 2f * glowRadius
@@ -139,47 +137,24 @@ fun SplashScreen(
                     )
                 }
 
-                // Z Logo
-                Canvas(
+                Image(
+                    painter = painterResource(id = R.drawable.zenxii_logo),
+                    contentDescription = "ZenXii",
                     modifier = Modifier
-                        .size(100.dp)
+                        .size(140.dp)
                         .scale(logoScale)
                         .alpha(logoAlpha)
-                ) {
-                    val w = size.width
-                    val h = size.height
-                    // Green: top bar + diagonal stroke
-                    val greenPath = Path().apply {
-                        moveTo(w * 0.07f, h * 0.03f)
-                        lineTo(w * 0.93f, h * 0.03f)
-                        lineTo(w * 0.93f, h * 0.27f)
-                        lineTo(w * 0.67f, h * 0.27f)
-                        lineTo(w * 0.27f, h * 0.73f)
-                        lineTo(w * 0.07f, h * 0.73f)
-                        close()
-                    }
-                    // Dark: bottom bar
-                    val darkPath = Path().apply {
-                        moveTo(w * 0.07f, h * 0.73f)
-                        lineTo(w * 0.93f, h * 0.73f)
-                        lineTo(w * 0.93f, h * 0.97f)
-                        lineTo(w * 0.07f, h * 0.97f)
-                        close()
-                    }
-
-                    drawPath(greenPath, color = ZenzGreen, alpha = greenReveal)
-                    drawPath(darkPath, color = Color(0xFF8AA0B8), alpha = darkReveal)
-                }
+                )
             }
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = "ZENZ",
-                fontSize = 42.sp,
+                text = "ZenXii",
+                fontSize = 38.sp,
                 fontWeight = FontWeight.Black,
                 color = TextPrimary,
-                letterSpacing = 8.sp,
+                letterSpacing = 2.sp,
                 modifier = Modifier
                     .alpha(titleAlpha)
                     .offset(y = titleOffsetY.dp)
@@ -202,7 +177,7 @@ fun SplashScreen(
                 text = "Teacher Portal",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = ZenzGreen,
+                color = ZenXiiAccent,
                 modifier = Modifier.alpha(taglineAlpha)
             )
         }

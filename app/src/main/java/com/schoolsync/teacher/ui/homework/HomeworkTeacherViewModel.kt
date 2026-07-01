@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -71,7 +72,14 @@ data class HomeworkFormState(
      * the global `HomeworkUiState.error` AlertDialog so a per-file
      * MIME / size rejection doesn't push a modal over the dialog itself.
      */
-    val attachmentError: String? = null
+    val attachmentError: String? = null,
+    /**
+     * When non-null the Create-Homework dialog is operating in EDIT mode for
+     * this homework id: the form is pre-filled and submit routes to
+     * [HomeworkTeacherViewModel.updateHomework] instead of createHomework.
+     * Null = create mode (default).
+     */
+    val editingHwId: String? = null
 )
 
 data class HomeworkUiState(
@@ -91,10 +99,23 @@ data class HomeworkUiState(
     val teacherMarks: Map<String, com.schoolsync.teacher.data.repository.firestore.TeacherMarkEntry> = emptyMap(),
     val showDetailSheet: Boolean = false,
     val isLoadingSubmissions: Boolean = false,
+    /**
+     * Student IDs whose status write is currently in flight. The detail-panel
+     * row shows a spinner in place of its status button while its id is here,
+     * so the teacher gets immediate feedback that the pick is being saved.
+     */
+    val savingStatusIds: Set<String> = emptySet(),
     // Subjects available for the selected class (from assignments)
     val subjectsForClass: List<String> = emptyList(),
     // Phase HW: delete confirmation
-    val homeworkToDelete: HomeworkTeacher? = null
+    val homeworkToDelete: HomeworkTeacher? = null,
+    /**
+     * Current signed-in teacher's userId. Used purely as a CLIENT-SIDE guard
+     * to show/enable Edit · Close · Delete only on homework this teacher owns
+     * (homework.teacherId == currentUserId). Server-side Firestore rules are a
+     * separate enforcement layer.
+     */
+    val currentUserId: String = ""
 )
 
 sealed class HomeworkEvent {
@@ -124,47 +145,67 @@ class HomeworkTeacherViewModel @Inject constructor(
     private var allAssignments: List<ClassAssignment> = emptyList()
     private var homeworkListenerJob: Job? = null
 
+    // Full (unfiltered) homework list for the selected section, as last loaded
+    // from Firestore. Subject filtering is applied over THIS cache in memory so
+    // switching the subject filter never triggers a refetch (Fix #3).
+    private var allHomeworkCache: List<HomeworkTeacher> = emptyList()
+
     init {
+        loadCurrentUserId()
         loadAssignedClasses()
+    }
+
+    /** Seed the current teacher's userId for client-side ownership guards. */
+    private fun loadCurrentUserId() {
+        viewModelScope.launch {
+            val uid = tokenManager.userId.firstOrNull().orEmpty()
+            if (uid.isNotBlank()) {
+                _uiState.update { it.copy(currentUserId = uid) }
+            }
+        }
     }
 
     private fun loadAssignedClasses() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            try {
-                teacherRepository.getAssignedClasses().fold(
-                    onSuccess = { assignments ->
-                        allAssignments = assignments
-                        val classSections = assignments
-                            .map { HomeworkClassSection(it.className, it.section) }
-                            .distinct()
-                        val allSubjects = assignments.map { it.subject }.distinct().sorted()
+            // LIVE: re-emits whenever the admin changes this teacher's subject
+            // assignments — the class/subject pickers update without a restart.
+            teacherRepository.observeAssignedClasses()
+                .catch { e ->
+                    Log.e(TAG, "Failed to observe assignments", e)
+                    _uiState.update { it.copy(isLoading = false, error = e.message) }
+                }
+                .collect { assignments ->
+                    allAssignments = assignments
+                    val classSections = assignments
+                        .map { HomeworkClassSection(it.className, it.section) }
+                        .distinct()
+                    val allSubjects = assignments.map { it.subject }.distinct().sorted()
 
-                        _uiState.update {
-                            it.copy(
-                                availableClasses = classSections,
-                                availableSubjects = allSubjects,
-                                selectedClass = classSections.firstOrNull()
-                            )
-                        }
+                    // Keep the current selection if it still exists; otherwise
+                    // fall back to the first available class.
+                    val prev = _uiState.value.selectedClass
+                    val selected = prev?.takeIf { classSections.contains(it) } ?: classSections.firstOrNull()
+                    val selectionChanged = selected != prev
 
-                        if (classSections.isNotEmpty()) {
-                            updateSubjectsForClass(classSections.first())
-                            loadStudentsForClass(classSections.first())
-                            loadHomework()
-                        } else {
-                            _uiState.update { it.copy(isLoading = false) }
-                        }
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Failed to load assignments", e)
-                        _uiState.update { it.copy(isLoading = false, error = e.message) }
+                    _uiState.update {
+                        it.copy(
+                            availableClasses = classSections,
+                            availableSubjects = allSubjects,
+                            selectedClass = selected
+                        )
                     }
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to load classes", e)
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
-            }
+
+                    if (selected != null) {
+                        updateSubjectsForClass(selected)
+                        if (selectionChanged) {
+                            loadStudentsForClass(selected)
+                            loadHomework()
+                        }
+                    } else {
+                        _uiState.update { it.copy(isLoading = false) }
+                    }
+                }
         }
     }
 
@@ -213,8 +254,24 @@ class HomeworkTeacherViewModel @Inject constructor(
 
     fun selectSubjectFilter(subject: String?) {
         _uiState.update { it.copy(selectedSubjectFilter = subject) }
-        // Fix #3: re-filter immediately since loadHomework is a one-shot call
-        loadHomework()
+        // Fix #3: subject filtering is purely client-side over the cached list,
+        // so re-filter in memory instead of re-running the Firestore query.
+        applySubjectFilter()
+    }
+
+    /**
+     * Recompute [HomeworkUiState.homeworkList] from [allHomeworkCache] using the
+     * current [HomeworkUiState.selectedSubjectFilter]. Pure in-memory — never
+     * hits Firestore. Called both after a fresh load and on subject-filter change.
+     */
+    private fun applySubjectFilter() {
+        val subjectFilter = _uiState.value.selectedSubjectFilter
+        val filtered = if (subjectFilter != null) {
+            allHomeworkCache.filter { it.subject.equals(subjectFilter, ignoreCase = true) }
+        } else {
+            allHomeworkCache
+        }
+        _uiState.update { it.copy(homeworkList = filtered) }
     }
 
     fun loadHomework() {
@@ -245,14 +302,12 @@ class HomeworkTeacherViewModel @Inject constructor(
                                 attachments = doc.attachments
                             )
                         }
-                        val subjectFilter = _uiState.value.selectedSubjectFilter
-                        val filtered = if (subjectFilter != null) {
-                            allHomework.filter { it.subject.equals(subjectFilter, ignoreCase = true) }
-                        } else {
-                            allHomework
-                        }
-                        Log.d(TAG, "Firestore loaded: ${filtered.size} homework items")
-                        _uiState.update { it.copy(homeworkList = filtered, isLoading = false) }
+                        // Cache the full list, then derive the visible list via
+                        // the shared client-side subject filter (Fix #3).
+                        allHomeworkCache = allHomework
+                        _uiState.update { it.copy(isLoading = false) }
+                        applySubjectFilter()
+                        Log.d(TAG, "Firestore loaded: ${allHomework.size} homework items")
                     },
                     onFailure = { e ->
                         Log.e(TAG, "Firestore load failed", e)
@@ -281,6 +336,116 @@ class HomeworkTeacherViewModel @Inject constructor(
 
     fun hideCreateDialog() {
         _uiState.update { it.copy(showCreateDialog = false, formState = HomeworkFormState()) }
+    }
+
+    /**
+     * Open the homework dialog in EDIT mode, pre-filled from [hw]. Only the
+     * text fields + subject + dueDate are editable; attachments and the
+     * submission/mark cascade are left untouched by [updateHomework]. The
+     * dueDate is shown as a plain "yyyy-MM-dd" (date-part of the stored ISO)
+     * so the date-picker round-trips cleanly the same way create does.
+     */
+    fun showEditDialog(hw: HomeworkTeacher) {
+        _uiState.update {
+            it.copy(
+                showCreateDialog = true,
+                formState = HomeworkFormState(
+                    title = hw.title,
+                    description = hw.description,
+                    subject = hw.subject,
+                    dueDate = hw.dueDate.take(10),  // "yyyy-MM-dd" prefix of the ISO dueDate
+                    editingHwId = hw.hwId
+                )
+            )
+        }
+    }
+
+    /**
+     * Edit-mode submit. Validation mirrors [createHomework] exactly. Updates
+     * only title/description/subject/dueDate via the repo (no submission /
+     * teacherMark / submissionCount touching). Refreshes the list and patches
+     * the open detail header on success.
+     */
+    fun updateHomework(@Suppress("UNUSED_PARAMETER") context: Context) {
+        val form = _uiState.value.formState
+        val hwId = form.editingHwId ?: return
+
+        if (form.title.isBlank()) {
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Title is required")) }
+            return
+        }
+        if (form.subject.isBlank()) {
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Subject is required")) }
+            return
+        }
+        if (form.dueDate.isBlank()) {
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Due date is required")) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(formState = it.formState.copy(isSubmitting = true))
+            }
+            homeworkFirestoreRepo.updateHomework(
+                homeworkId = hwId,
+                title = form.title.trim(),
+                description = form.description.trim(),
+                subject = form.subject.trim(),
+                dueDate = form.dueDate
+            ).fold(
+                onSuccess = {
+                    Log.d(TAG, "Homework updated: $hwId")
+                    // Patch the open detail header so it reflects the edit
+                    // immediately without waiting for the list refresh.
+                    val normalizedDue = if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(form.dueDate))
+                        "${form.dueDate}T23:59:59+05:30" else form.dueDate
+                    _uiState.update { st ->
+                        val patched = st.selectedHomework?.takeIf { it.hwId == hwId }?.copy(
+                            title = form.title.trim(),
+                            description = form.description.trim(),
+                            subject = form.subject.trim(),
+                            dueDate = normalizedDue
+                        )
+                        st.copy(
+                            showCreateDialog = false,
+                            formState = HomeworkFormState(),
+                            selectedHomework = patched ?: st.selectedHomework
+                        )
+                    }
+                    _events.emit(HomeworkEvent.Success("Homework updated"))
+                    loadHomework()
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(formState = it.formState.copy(isSubmitting = false)) }
+                    _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update homework"))
+                }
+            )
+        }
+    }
+
+    /**
+     * Close a homework (no further submissions/reviews accepted). Wires the
+     * repo's [HomeworkFirestoreRepository.closeHomework], which the admin
+     * panel also exposes. Caller (UI) gates this to the owning teacher.
+     */
+    fun closeHomework(hw: HomeworkTeacher) {
+        viewModelScope.launch {
+            homeworkFirestoreRepo.closeHomework(hw.hwId).fold(
+                onSuccess = {
+                    _uiState.update { st ->
+                        val patched = st.selectedHomework?.takeIf { it.hwId == hw.hwId }
+                            ?.copy(status = "closed")
+                        st.copy(selectedHomework = patched ?: st.selectedHomework)
+                    }
+                    _events.emit(HomeworkEvent.Success("Homework closed"))
+                    loadHomework()
+                },
+                onFailure = { e ->
+                    _events.emit(HomeworkEvent.Error(e.message ?: "Failed to close homework"))
+                }
+            )
+        }
     }
 
     fun updateFormTitle(title: String) {
@@ -588,22 +753,20 @@ class HomeworkTeacherViewModel @Inject constructor(
                 // bug) left orphans for students who were graded without
                 // submitting; they piled up in Firestore and confused later
                 // reports.
-                // BUG-017 — per-doc cascade-delete failures previously silent
-                // (catches were `catch (_: Exception) {}`). Now surfaced via
-                // debugLog + per-doc-failure counters so the success message
-                // reports partial failures honestly. Atomicity (full
-                // transaction wrap) and pagination remain deferred to a
-                // future Mobile transaction primitives phase.
+                // BUG-017 — per-doc cascade-delete failures previously silent.
+                // Now batched: submissions + teacherMarks are deleted via
+                // Firestore WriteBatch (atomic per batch, ≤500 ops/batch — we
+                // chunk if larger). A batch commit is all-or-nothing, so a
+                // failed chunk counts its whole size as failed and is logged;
+                // the success message still reports partial failures honestly.
                 val submissions = homeworkFirestoreRepo.getSubmissions(hw.hwId).getOrNull() ?: emptyList()
-                var failedSubDeletes = 0
-                for (sub in submissions) {
-                    try {
-                        fs.collection("submissions").document(sub.id).delete().await()
-                    } catch (e: Exception) {
-                        failedSubDeletes++
-                        debugLog("ACC_HW_DELETE_CASCADE_SUB_FAILED hwId=${hw.hwId} subId=${sub.id} err=${e.javaClass.simpleName}:${e.message}")
-                    }
+                val failedSubDeletes = batchDelete(
+                    fs,
+                    submissions.map { fs.collection("submissions").document(it.id) }
+                ) { failedRefs ->
+                    debugLog("ACC_HW_DELETE_CASCADE_SUB_BATCH_FAILED hwId=${hw.hwId} count=${failedRefs.size}")
                 }
+
                 val schoolCode = tokenManager.schoolId.firstOrNull() ?: ""
                 val markDocs = try {
                     fs.collection("teacherMarks")
@@ -616,14 +779,11 @@ class HomeworkTeacherViewModel @Inject constructor(
                     Log.w(TAG, "teacherMarks query failed during delete cascade: ${e.message}")
                     emptyList()
                 }
-                var failedMarkDeletes = 0
-                for (m in markDocs) {
-                    try {
-                        m.reference.delete().await()
-                    } catch (e: Exception) {
-                        failedMarkDeletes++
-                        debugLog("ACC_HW_DELETE_CASCADE_MARK_FAILED hwId=${hw.hwId} markId=${m.id} err=${e.javaClass.simpleName}:${e.message}")
-                    }
+                val failedMarkDeletes = batchDelete(
+                    fs,
+                    markDocs.map { it.reference }
+                ) { failedRefs ->
+                    debugLog("ACC_HW_DELETE_CASCADE_MARK_BATCH_FAILED hwId=${hw.hwId} count=${failedRefs.size}")
                 }
 
                 homeworkFirestoreRepo.deleteHomework(hw.hwId).fold(
@@ -659,6 +819,33 @@ class HomeworkTeacherViewModel @Inject constructor(
                 _events.emit(HomeworkEvent.Error(e.message ?: "Failed to delete"))
             }
         }
+    }
+
+    /**
+     * Delete [refs] using Firestore WriteBatch, chunked at 500 ops/batch
+     * (Firestore's hard cap). Each chunk is atomic; a chunk that fails to
+     * commit counts its full size toward the returned failure total and is
+     * passed to [onChunkFailed] for structured logging. Returns the number of
+     * docs that could NOT be deleted.
+     */
+    private suspend fun batchDelete(
+        fs: com.google.firebase.firestore.FirebaseFirestore,
+        refs: List<com.google.firebase.firestore.DocumentReference>,
+        onChunkFailed: (List<com.google.firebase.firestore.DocumentReference>) -> Unit
+    ): Int {
+        if (refs.isEmpty()) return 0
+        var failed = 0
+        for (chunk in refs.chunked(500)) {
+            try {
+                val batch = fs.batch()
+                chunk.forEach { batch.delete(it) }
+                batch.commit().await()
+            } catch (e: Exception) {
+                failed += chunk.size
+                onChunkFailed(chunk)
+            }
+        }
+        return failed
     }
 
     // --- Submission detail ---
@@ -730,6 +917,12 @@ class HomeworkTeacherViewModel @Inject constructor(
                             studentName = doc.studentName,
                             status = doc.status,
                             remark = doc.remark,
+                            // submittedAt / reviewedBy were previously dropped
+                            // here, so the "Submitted X ago" + reviewer UI never
+                            // rendered. submittedAt is stored as a Firestore
+                            // Timestamp (Any?) → normalise to epoch millis.
+                            submittedAt = doc.submittedAt.toEpochMillisOrNull() ?: 0L,
+                            reviewedBy = doc.reviewedBy,
                             text = doc.text,
                             files = doc.files,
                             score = doc.score,
@@ -749,8 +942,14 @@ class HomeworkTeacherViewModel @Inject constructor(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Normal — sheet dismissed
             } catch (e: Exception) {
+                // Surface the failure instead of silently clearing the spinner
+                // and showing an empty roster — a missing composite index or a
+                // PERMISSION_DENIED on the submissions listener was previously
+                // invisible to the teacher. Drop stale-iteration emissions.
+                if (submissionListenerVersion.get() != myVersion) return@launch
                 Log.e(TAG, "Failed to load submissions", e)
                 _uiState.update { it.copy(isLoadingSubmissions = false) }
+                _events.emit(HomeworkEvent.Error(e.message ?: "Failed to load submissions"))
             }
         }
     }
@@ -765,11 +964,15 @@ class HomeworkTeacherViewModel @Inject constructor(
         val hw = _uiState.value.selectedHomework ?: return
 
         viewModelScope.launch {
+            _uiState.update { it.copy(savingStatusIds = it.savingStatusIds + studentId) }
             try {
                 val teacherId = tokenManager.userId.firstOrNull() ?: ""
                 val teacherName = tokenManager.userName.firstOrNull() ?: teacherId
-                val studentName = _uiState.value.students
-                    .firstOrNull { it.studentId == studentId }?.name ?: ""
+                // Prefer the roster re-lookup, but fall back to the name the
+                // caller passed (not "") so a roster cache-miss doesn't blank
+                // the student name in the review push notification.
+                val resolvedName = _uiState.value.students
+                    .firstOrNull { it.studentId == studentId }?.name ?: studentName
 
                 // Atomic decide-and-write — see HomeworkFirestoreRepository
                 // .reviewOrMark for the race-condition rationale. The
@@ -779,7 +982,7 @@ class HomeworkTeacherViewModel @Inject constructor(
                 homeworkFirestoreRepo.reviewOrMark(
                     homeworkId = hw.hwId,
                     studentId  = studentId,
-                    studentName = studentName,
+                    studentName = resolvedName,
                     score      = score,
                     remark     = remark,
                     reviewedBy = teacherName,
@@ -807,6 +1010,8 @@ class HomeworkTeacherViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update status"))
+            } finally {
+                _uiState.update { it.copy(savingStatusIds = it.savingStatusIds - studentId) }
             }
         }
     }

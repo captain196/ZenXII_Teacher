@@ -125,10 +125,9 @@ class TimetableFirestoreRepository @Inject constructor(
             // Overlay substitute data: add periods where I'm the substitute,
             // mark periods where someone covers for me
             try {
-                val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                     .format(java.util.Date())
-                val todayDay = java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault())
-                    .format(java.util.Date())
+                val todayDay = com.schoolsync.teacher.util.englishDayName()
 
                 // Stage 0 FZ-3 (2026-05-24) — added schoolId predicate to prevent
                 // cross-tenant substitute leakage. Composite index (schoolId, date)

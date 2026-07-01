@@ -18,7 +18,15 @@ class AuthInterceptor @Inject constructor() : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
-        // Get Firebase ID token for authenticated requests
+        // Skip if the call site already set Authorization explicitly via a
+        // Retrofit @Header param — otherwise OkHttp would carry BOTH values
+        // and downstream PHP merges them into a comma-joined string that no
+        // longer parses as a valid bearer token (caused 401 on
+        // /auth/clear_must_change).
+        if (originalRequest.header("Authorization") != null) {
+            return chain.proceed(originalRequest)
+        }
+
         val idToken = runBlocking {
             try {
                 FirebaseAuth.getInstance().currentUser
@@ -32,7 +40,7 @@ class AuthInterceptor @Inject constructor() : Interceptor {
 
         val request = if (idToken != null) {
             originalRequest.newBuilder()
-                .addHeader("Authorization", "Bearer $idToken")
+                .header("Authorization", "Bearer $idToken")
                 .build()
         } else {
             originalRequest

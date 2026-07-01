@@ -18,3 +18,8 @@ app/release/
 # JVM crash dumps
 hs_err_pid*.log
 replay_pid*.log
+
+# Release signing secrets — never commit
+keystore.properties
+*.jks
+*.keystore

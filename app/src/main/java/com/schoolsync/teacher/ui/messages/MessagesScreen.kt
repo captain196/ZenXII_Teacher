@@ -75,6 +75,7 @@ import coil.compose.AsyncImage
 import com.schoolsync.teacher.R
 import com.schoolsync.teacher.ui.theme.BgEnd
 import com.schoolsync.teacher.ui.theme.Divider as DividerColor
+import com.schoolsync.teacher.ui.theme.ErrorRed
 import com.schoolsync.teacher.ui.theme.Glass
 import com.schoolsync.teacher.ui.theme.GlassBorder
 import com.schoolsync.teacher.ui.theme.GradientBackground
@@ -306,12 +307,12 @@ private fun ConversationItem(
             onDismissRequest = { menuExpanded = false }
         ) {
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.messages_delete_chat), color = androidx.compose.ui.graphics.Color(0xFFD64545)) },
+                text = { Text(stringResource(R.string.messages_delete_chat), color = ErrorRed) },
                 leadingIcon = {
                     Icon(
                         Icons.Filled.DeleteOutline,
                         contentDescription = null,
-                        tint = androidx.compose.ui.graphics.Color(0xFFD64545)
+                        tint = ErrorRed
                     )
                 },
                 onClick = {
@@ -925,7 +926,7 @@ private fun DeleteConversationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val errorRed = androidx.compose.ui.graphics.Color(0xFFD64545)
+    val errorRed = ErrorRed
     val resolvedName = otherName.ifBlank { stringResource(R.string.messages_delete_default_name) }
     AlertDialog(
         onDismissRequest = onDismiss,

@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +29,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Image
@@ -60,6 +64,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -90,9 +95,12 @@ import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun StoriesTeacherScreen(
-    viewModel: StoriesTeacherViewModel = hiltViewModel()
+    onOpenViewer: (authorId: String) -> Unit = {},
+    viewModel: StoriesTeacherViewModel = hiltViewModel(),
+    viewerViewModel: StoryViewerViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val storyGroups by viewerViewModel.groups.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -135,7 +143,17 @@ fun StoriesTeacherScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Top bar
+                // "Recent stories" — everyone's active stories, grouped
+                // by author. Tap a ring to open the full-screen viewer.
+                // Shows an empty hint here so the feature is discoverable.
+                StoriesSection(
+                    groups = storyGroups,
+                    onOpenStory = onOpenViewer,
+                    title = "Recent stories",
+                    showWhenEmpty = true
+                )
+
+                // Top bar (your own stories)
                 StoriesTopBar(onRefresh = viewModel::refresh)
 
                 // Content
@@ -156,6 +174,12 @@ fun StoriesTeacherScreen(
                 type = state.uploadType,
                 isUploading = state.isUploading,
                 mediaUploadPercent = state.mediaUploadPercent,
+                isCompressing = state.isCompressing,
+                pickedLocalUri = state.pickedLocalUri,
+                audienceOptions = state.audienceOptions,
+                selectedAudience = state.selectedAudience,
+                onToggleAudience = viewModel::toggleAudience,
+                onSelectWholeSchool = viewModel::selectWholeSchool,
                 onUrlChange = viewModel::setUploadUrl,
                 onCaptionChange = viewModel::setUploadCaption,
                 onTypeChange = viewModel::setUploadType,
@@ -453,14 +477,23 @@ private fun StoryCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UploadStoryDialog(
     url: String,
     caption: String,
     type: String,
     isUploading: Boolean,
-    /** -1 = idle, 0..99 = picker upload in flight, 100 = ready. */
+    /** -1 = idle, 0..99 = transcode/upload in flight, 100 = ready. */
     mediaUploadPercent: Int,
+    /** True while a video is transcoding on-device (before upload). */
+    isCompressing: Boolean = false,
+    /** Local content:// Uri of picked media for the live preview. */
+    pickedLocalUri: String,
+    audienceOptions: List<AudienceOption>,
+    selectedAudience: Set<String>,
+    onToggleAudience: (String) -> Unit,
+    onSelectWholeSchool: () -> Unit,
     onUrlChange: (String) -> Unit,
     onCaptionChange: (String) -> Unit,
     onTypeChange: (String) -> Unit,
@@ -477,11 +510,9 @@ private fun UploadStoryDialog(
     ) { uri ->
         if (uri != null) onPickMedia(uri)
     }
-    val pickerMime = if (type == "video") {
-        ActivityResultContracts.PickVisualMedia.VideoOnly
-    } else {
-        ActivityResultContracts.PickVisualMedia.ImageOnly
-    }
+    // One picker for both — the media type is auto-detected from the
+    // chosen file's MIME in the ViewModel, so the user never pre-selects.
+    val pickerMime = ActivityResultContracts.PickVisualMedia.ImageAndVideo
     val isPicking = mediaUploadPercent in 0..99
     val hasPickedMedia = mediaUploadPercent == 100 && url.isNotBlank()
     val textFieldColors = OutlinedTextFieldDefaults.colors(
@@ -505,102 +536,239 @@ private fun UploadStoryDialog(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Upload Story", color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text("New Story", color = TextPrimary, fontWeight = FontWeight.Bold)
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
-                // ── PICKER PRIMARY ────────────────────────────────
-                // Phase B: device gallery picker → Firebase Storage
-                // upload → URL injected into uploadUrl. Replaces the
-                // unusable "paste a URL" path as the primary flow.
-                Button(
-                    onClick = {
-                        mediaPicker.launch(PickVisualMediaRequest(pickerMime))
-                    },
-                    enabled = !isPicking && !isUploading,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Teal,
-                        contentColor = BgStart
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(
-                        Icons.Filled.AddPhotoAlternate,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        when {
-                            hasPickedMedia -> "Replace ${if (type == "video") "video" else "photo"}"
-                            else -> "Pick ${if (type == "video") "video" else "photo"} from device"
+                // ── HERO MEDIA CARD ───────────────────────────────
+                // One tappable surface: an inviting call-to-action when
+                // empty, the live preview (with progress + remove) once
+                // media is picked. A single tap opens the system photo
+                // picker; the media type is auto-detected from the file.
+                val previewModel = pickedLocalUri.ifBlank { url }
+                val hasPreview = previewModel.isNotBlank()
+                val heroContext = LocalContext.current
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(210.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (hasPreview) SurfaceDark else TealSurface)
+                        .border(
+                            width = 1.5.dp,
+                            color = if (hasPreview) GlassBorder else Teal.copy(alpha = 0.45f),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .clickable(enabled = !isUploading && !isPicking) {
+                            mediaPicker.launch(PickVisualMediaRequest(pickerMime))
                         },
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                // ── PROGRESS ──────────────────────────────────────
-                if (isPicking) {
-                    LinearProgressIndicator(
-                        progress = { mediaUploadPercent / 100f },
-                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                        color = Teal,
-                        trackColor = GlassBorder
-                    )
-                    Text(
-                        "Uploading… $mediaUploadPercent%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
-                    )
-                }
-
-                // ── PICKED-MEDIA SUMMARY ─────────────────────────
-                if (hasPickedMedia) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(TealSurface)
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Icon(
-                            Icons.Filled.Image,
-                            contentDescription = null,
-                            tint = Teal,
-                            modifier = Modifier.size(14.dp)
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (hasPreview) {
+                        val request = coil.request.ImageRequest.Builder(heroContext)
+                            .data(previewModel)
+                            .apply {
+                                if (type == "video") decoderFactory(coil.decode.VideoFrameDecoder.Factory())
+                            }
+                            .crossfade(true)
+                            .build()
+                        AsyncImage(
+                            model = request,
+                            contentDescription = "Selected media",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
                         )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "Media ready to publish",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Teal,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = onClearPickedMedia) {
-                            Text("Remove", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                        if (type == "video") {
+                            Icon(
+                                Icons.Filled.Videocam,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(10.dp)
+                                    .size(20.dp)
+                            )
+                        }
+                        if (!isPicking && hasPickedMedia) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.5f))
+                                    .clickable { onClearPickedMedia() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = "Remove media",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        if (!isPicking) {
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))
+                                        )
+                                    )
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.AddPhotoAlternate,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "Tap to replace",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                        if (isPicking) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.45f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(
+                                        progress = { mediaUploadPercent / 100f },
+                                        color = Color.White,
+                                        strokeWidth = 3.dp,
+                                        modifier = Modifier.size(42.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        if (isCompressing) "Compressing… $mediaUploadPercent%"
+                                        else "Uploading… $mediaUploadPercent%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(Teal.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.AddPhotoAlternate,
+                                    contentDescription = null,
+                                    tint = Teal,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "Add photo or video",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                "Tap to choose from your gallery",
+                                color = TextSecondary,
+                                style = MaterialTheme.typography.labelMedium
+                            )
                         }
                     }
                 }
 
-                // ── URL FALLBACK (power-user / external CDN) ─────
-                // Hidden by default once media is picked to keep the
-                // dialog clean — show a compact "or paste URL" line
-                // for the rare case the cashier is using an external
-                // host. Tap reveals an editable text field.
-                if (!hasPickedMedia) {
-                    OutlinedTextField(
-                        value = url,
-                        onValueChange = onUrlChange,
-                        label = { Text("…or paste a URL") },
-                        placeholder = { Text("https://...", color = TextTertiary) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = textFieldColors,
-                        enabled = !isPicking
+                // ── AUDIENCE PICKER ───────────────────────────────
+                // Who sees this story. Placed directly under the media so
+                // the teacher makes an explicit visibility choice BEFORE
+                // sharing. "Whole school" = empty target set (visible to
+                // all parents). Otherwise scoped to the selected class-
+                // sections (parents of those sections). Defaults to the
+                // teacher's class-teacher section(s). Always rendered — even
+                // if the teacher has no assigned sections yet, the "Whole
+                // school" option is shown so the picker is never blank.
+                Column {
+                    Text(
+                        text = "Who can see this story?",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    run {
+                        val audienceChipColors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = TealSurface,
+                            selectedLabelColor = Teal,
+                            selectedLeadingIconColor = Teal,
+                            containerColor = Color.Transparent,
+                            labelColor = TextSecondary,
+                            iconColor = TextSecondary
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val wholeSchool = selectedAudience.isEmpty()
+                            FilterChip(
+                                selected = wholeSchool,
+                                onClick = onSelectWholeSchool,
+                                label = { Text("Whole school") },
+                                leadingIcon = if (wholeSchool) {
+                                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                                colors = audienceChipColors,
+                                border = FilterChipDefaults.filterChipBorder(
+                                    borderColor = GlassBorder,
+                                    selectedBorderColor = Teal.copy(alpha = 0.4f),
+                                    enabled = true,
+                                    selected = wholeSchool
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            audienceOptions.forEach { option ->
+                                val isSel = option.token in selectedAudience
+                                FilterChip(
+                                    selected = isSel,
+                                    onClick = { onToggleAudience(option.token) },
+                                    label = { Text(option.label) },
+                                    leadingIcon = if (isSel) {
+                                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    } else null,
+                                    colors = audienceChipColors,
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        borderColor = GlassBorder,
+                                        selectedBorderColor = Teal.copy(alpha = 0.4f),
+                                        enabled = true,
+                                        selected = isSel
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (selectedAudience.isEmpty())
+                            "Everyone in your school will see this story."
+                        else if (audienceOptions.isEmpty())
+                            "You have no assigned class-sections yet — this will post to the whole school."
+                        else
+                            "Only parents of the selected class-section(s) will see this story.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
                     )
                 }
 
@@ -608,102 +776,14 @@ private fun UploadStoryDialog(
                     value = caption,
                     onValueChange = onCaptionChange,
                     label = { Text("Caption") },
+                    placeholder = { Text("Write a caption…  (optional)", color = TextTertiary) },
                     minLines = 2,
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = textFieldColors
+                    colors = textFieldColors,
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                // Type selector
-                Column {
-                    Text(
-                        text = "Media Type",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = type == "image",
-                            onClick = { onTypeChange("image") },
-                            label = { Text("Image") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Filled.Image,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TealSurface,
-                                selectedLabelColor = Teal,
-                                selectedLeadingIconColor = Teal,
-                                containerColor = Color.Transparent,
-                                labelColor = TextSecondary,
-                                iconColor = TextSecondary
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                borderColor = GlassBorder,
-                                selectedBorderColor = Teal.copy(alpha = 0.4f),
-                                enabled = true,
-                                selected = type == "image"
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-
-                        FilterChip(
-                            selected = type == "video",
-                            onClick = { onTypeChange("video") },
-                            label = { Text("Video") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Filled.Videocam,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TealSurface,
-                                selectedLabelColor = Teal,
-                                selectedLeadingIconColor = Teal,
-                                containerColor = Color.Transparent,
-                                labelColor = TextSecondary,
-                                iconColor = TextSecondary
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                borderColor = GlassBorder,
-                                selectedBorderColor = Teal.copy(alpha = 0.4f),
-                                enabled = true,
-                                selected = type == "video"
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-
-                // Preview
-                if (url.isNotBlank()) {
-                    Text(
-                        text = "Preview",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextSecondary
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(SurfaceDark)
-                            .border(1.dp, GlassBorder, RoundedCornerShape(10.dp))
-                    ) {
-                        AsyncImage(
-                            model = url,
-                            contentDescription = "Preview",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                }
             }
         },
         confirmButton = {
@@ -725,7 +805,7 @@ private fun UploadStoryDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text(
-                    if (isUploading) "Uploading..." else "Upload",
+                    if (isUploading) "Sharing…" else "Share Story",
                     fontWeight = FontWeight.SemiBold
                 )
             }

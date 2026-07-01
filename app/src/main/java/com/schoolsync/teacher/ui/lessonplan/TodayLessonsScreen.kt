@@ -73,8 +73,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.schoolsync.teacher.data.repository.firestore.LessonPlanFirestoreRepository.SlotWithPlan
+import com.schoolsync.teacher.ui.theme.ErrorRed
 import com.schoolsync.teacher.ui.theme.GradientBackground
+import com.schoolsync.teacher.ui.theme.SuccessGreen
 import com.schoolsync.teacher.ui.theme.Teal
+import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
@@ -215,9 +218,9 @@ private fun SlotCard(
     val plan = slot.plan
     val status = plan?.status ?: "planned"
     val statusColor = when (status) {
-        "completed"   -> Color(0xFF16A34A)
-        "skipped"     -> Color(0xFFDC2626)
-        "rescheduled" -> Color(0xFFD97706)
+        "completed"   -> SuccessGreen
+        "skipped"     -> ErrorRed
+        "rescheduled" -> WarningAmber
         else          -> Teal
     }
     Card(

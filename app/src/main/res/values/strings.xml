@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Zenz Teacher</string>
+    <string name="app_name">ZenXii Teacher</string>
 
     <!-- Common actions / content descriptions -->
     <string name="action_refresh">Refresh</string>

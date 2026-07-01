@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Class
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Group
@@ -86,9 +88,12 @@ import java.util.Locale
 @Composable
 fun DashboardScreen(
     onNotificationsClick: () -> Unit = {},
-    viewModel: DashboardViewModel = hiltViewModel()
+    onOpenStory: (authorId: String) -> Unit = {},
+    viewModel: DashboardViewModel = hiltViewModel(),
+    storyViewerViewModel: com.schoolsync.teacher.ui.stories.StoryViewerViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val storyGroups by storyViewerViewModel.groups.collectAsStateWithLifecycle()
 
     // Refresh when the dashboard becomes visible again (e.g. after coming
     // back from Red Flags screen) so counts like "Flags: N active" reflect
@@ -158,6 +163,16 @@ fun DashboardScreen(
                     }
                 }
 
+                // Stories ring carousel — everyone's active stories.
+                // Tap a ring to open the full-screen viewer. Hidden when
+                // there are none (the Stories screen has the empty state).
+                com.schoolsync.teacher.ui.stories.StoriesSection(
+                    groups = storyGroups,
+                    onOpenStory = onOpenStory,
+                    title = "Stories",
+                    showWhenEmpty = false
+                )
+
                 // Two-column landscape layout
                 Row(
                     modifier = Modifier
@@ -171,7 +186,11 @@ fun DashboardScreen(
                             .weight(0.45f)
                             .fillMaxHeight()
                     ) {
-                        SchedulePanel(schedule = state.todaySchedule)
+                        SchedulePanel(
+                            schedule = state.todaySchedule,
+                            isError = state.scheduleError,
+                            onRetry = viewModel::refresh
+                        )
                     }
 
                     // Right panel: Stats + Activity
@@ -340,7 +359,11 @@ private fun ClassTeacherBadgeRow(sections: List<String>) {
 }
 
 @Composable
-private fun SchedulePanel(schedule: List<PeriodItem>) {
+private fun SchedulePanel(
+    schedule: List<PeriodItem>,
+    isError: Boolean = false,
+    onRetry: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -400,7 +423,56 @@ private fun SchedulePanel(schedule: List<PeriodItem>) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (schedule.isEmpty()) {
+        if (isError) {
+            // Distinct from the empty state: the fetch FAILED (network /
+            // permission / missing index). Show an error + retry affordance
+            // so the teacher knows the schedule is unknown, not absent.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Filled.CloudOff,
+                        contentDescription = null,
+                        tint = ErrorRed,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Couldn't load your schedule",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onRetry() }
+                            .background(TealSurface)
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = null,
+                            tint = Teal,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Retry",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Teal,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        } else if (schedule.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

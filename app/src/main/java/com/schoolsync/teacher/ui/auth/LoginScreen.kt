@@ -3,9 +3,13 @@ package com.schoolsync.teacher.ui.auth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,15 +18,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -42,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.schoolsync.teacher.R
 import com.schoolsync.teacher.ui.theme.BgEnd
 import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.ErrorRed
@@ -69,123 +76,113 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
+    onRequiresPasswordChange: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
+    val showForgotState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
                 is LoginEvent.LoginSuccess -> onLoginSuccess()
+                is LoginEvent.LoginRequiresPasswordChange -> onRequiresPasswordChange()
             }
         }
     }
 
+    if (showForgotState.value) {
+        ForgotPasswordDialog(onDismiss = { showForgotState.value = false })
+    }
+
     GradientBackground {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // ---- Left half: Branding ----
+        // Branding panel — `compact` trims the logo, type scale and drops the
+        // feature bullets so it fits above the form on a narrow phone.
+        val branding: @Composable (Boolean) -> Unit = { compact ->
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(end = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // App icon
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Teal.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.School,
-                        contentDescription = "SchoolSync",
-                        tint = Teal,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
+                Image(
+                    painter = painterResource(id = R.drawable.zenxii_logo),
+                    contentDescription = "ZenXii",
+                    modifier = Modifier.size(if (compact) 72.dp else 96.dp)
+                )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(if (compact) 16.dp else 24.dp))
 
                 Text(
-                    text = "SchoolSync",
-                    style = MaterialTheme.typography.displayMedium,
+                    text = "ZenXii",
+                    style = if (compact) MaterialTheme.typography.displaySmall
+                    else MaterialTheme.typography.displayMedium,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
 
                 Text(
                     text = "Teacher",
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = if (compact) MaterialTheme.typography.titleLarge
+                    else MaterialTheme.typography.headlineMedium,
                     color = Teal,
                     fontWeight = FontWeight.Medium
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(if (compact) 10.dp else 16.dp))
 
                 Text(
                     text = "Manage your classes, attendance, and marks\nall in one place.",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = if (compact) MaterialTheme.typography.bodyMedium
+                    else MaterialTheme.typography.bodyLarge,
                     color = TextSecondary,
                     textAlign = TextAlign.Center,
                     lineHeight = 22.sp
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                if (!compact) {
+                    Spacer(modifier = Modifier.height(32.dp))
 
-                // Feature highlights
-                listOf(
-                    "Take attendance in seconds",
-                    "Upload marks with auto-calculation",
-                    "Communicate with parents instantly"
-                ).forEach { feature ->
-                    Row(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(Teal)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = feature,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
-                        )
+                    // Feature highlights
+                    listOf(
+                        "Take attendance in seconds",
+                        "Upload marks with auto-calculation",
+                        "Communicate with parents instantly"
+                    ).forEach { feature ->
+                        Row(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(Teal)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = feature,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary
+                            )
+                        }
                     }
                 }
             }
+        }
 
-            // ---- Right half: Login Form ----
-            Column(
+        // Login form card — capped width so it never stretches edge-to-edge on
+        // a tablet, full-width within its parent otherwise.
+        val loginCard: @Composable () -> Unit = {
+            Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .fillMaxWidth()
+                    .widthIn(max = 420.dp)
+                    .glassCard()
+                    .padding(28.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .glassCard()
-                        .padding(32.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
                         Text(
                             text = "Welcome Back",
                             style = MaterialTheme.typography.headlineMedium,
@@ -325,15 +322,66 @@ fun LoginScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        Text(
-                            text = "Contact admin if you forgot your credentials",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextTertiary,
-                            textAlign = TextAlign.Center
-                        )
+                        androidx.compose.material3.TextButton(
+                            onClick = { showForgotState.value = true }
+                        ) {
+                            Text(
+                                text = "Forgot password?",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Teal,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
+                }
+        }
+
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            if (maxWidth >= 640.dp) {
+                // Wide (tablet / landscape): branding and form side by side
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .padding(end = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) { branding(false) }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .imePadding(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) { loginCard() }
+                }
+            } else {
+                // Narrow (phone portrait): branding stacked above a full-width
+                // form; the whole screen scrolls so nothing is ever clipped.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .imePadding()
+                        .padding(horizontal = 24.dp, vertical = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    branding(true)
+                    Spacer(modifier = Modifier.height(28.dp))
+                    loginCard()
                 }
             }
         }

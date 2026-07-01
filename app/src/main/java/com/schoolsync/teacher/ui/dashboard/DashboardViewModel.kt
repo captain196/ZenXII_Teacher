@@ -21,6 +21,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
@@ -76,6 +77,13 @@ data class DashboardUiState(
     val recentActivity: List<ActivityItem> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
+    /**
+     * True when the timetable fetch itself FAILED (network / permission /
+     * missing index), as opposed to a genuinely empty schedule. Lets the UI
+     * show a distinct "couldn't load — retry" state instead of the calm
+     * "no classes today" empty state, which previously looked identical.
+     */
+    val scheduleError: Boolean = false,
     val currentDate: String = "",
     val assignedClasses: List<String> = emptyList(),
     /** Today's attendance summary across all class-teacher sections. */
@@ -119,11 +127,26 @@ class DashboardViewModel @Inject constructor(
                     if (!session.isNullOrBlank()) loadDashboard()
                 }
         }
+
+        // LIVE: silently re-load when the admin changes this teacher's subject
+        // assignments, so "My Classes" / class-teacher info update without a
+        // manual refresh. Skip the first emission — the session collector above
+        // already performs the initial load.
+        viewModelScope.launch {
+            var first = true
+            teacherRepository.observeAssignedClasses()
+                .distinctUntilChanged()
+                .catch { android.util.Log.e("DashboardVM", "observeAssignedClasses failed", it) }
+                .collect {
+                    if (first) first = false
+                    else loadDashboard(showLoading = false)
+                }
+        }
     }
 
-    fun loadDashboard() {
+    fun loadDashboard(showLoading: Boolean = true) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            if (showLoading) _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 // Teacher name + assignments are the gating prereqs — every
                 // other fetch needs the assigned class+section list. Run
@@ -131,8 +154,11 @@ class DashboardViewModel @Inject constructor(
                 val name = tokenManager.userName.firstOrNull() ?: ""
                 _uiState.update { it.copy(teacherName = name) }
 
-                val assignedClasses = teacherRepository.getAssignedClasses()
-                    .getOrNull() ?: emptyList()
+                val assignedResult = teacherRepository.getAssignedClasses()
+                assignedResult.exceptionOrNull()?.let {
+                    android.util.Log.e("DashboardVM", "getAssignedClasses failed", it)
+                }
+                val assignedClasses = assignedResult.getOrNull() ?: emptyList()
                 val classLabels = assignedClasses.map { it.classKey }.distinct()
                 val classTeacherOf = assignedClasses
                     .filter { it.classTeacher }
@@ -199,7 +225,10 @@ class DashboardViewModel @Inject constructor(
                         )
                     }
 
-                    // 2. Timetable — independent.
+                    // 2. Timetable — independent. Returns (periods, failed):
+                    //    `failed=true` means the fetch errored (network /
+                    //    permission / missing index), which the UI must
+                    //    distinguish from a genuinely empty schedule.
                     val timetableJob = async {
                         timetableFirestoreRepo.getMyTimetable(classSectionsDistinct).fold(
                             onSuccess = { dayTimetables ->
@@ -218,9 +247,12 @@ class DashboardViewModel @Inject constructor(
                                         section = entry.section,
                                         isCurrent = entry.periodNumber == currentPeriod
                                     )
-                                }
+                                } to false
                             },
-                            onFailure = { emptyList() }
+                            onFailure = { e ->
+                                android.util.Log.e("DashboardVM", "getMyTimetable failed", e)
+                                emptyList<PeriodItem>() to true
+                            }
                         )
                     }
 
@@ -260,7 +292,7 @@ class DashboardViewModel @Inject constructor(
                     // Await everything in parallel — total wall time is the
                     // slowest single fetch, not the sum.
                     val attendance = attendanceJob.await()
-                    val schedule = timetableJob.await()
+                    val (schedule, scheduleFailed) = timetableJob.await()
                     val homeworkDueToday = homeworkDueJobs.awaitAll().sum()
                     val activeFlagCount = flagJobs.awaitAll().sum()
                     val subInfo = subInfoJob.await()
@@ -277,6 +309,7 @@ class DashboardViewModel @Inject constructor(
                         it.copy(
                             todayAttendance = attendance,
                             todaySchedule = schedule,
+                            scheduleError = scheduleFailed,
                             quickStats = stats,
                             substituteInfo = subInfo,
                             isLoading = false
@@ -357,9 +390,7 @@ class DashboardViewModel @Inject constructor(
         } catch (_: Exception) { null }
     }
 
-    private fun todayDayName(): String {
-        return SimpleDateFormat("EEEE", Locale.getDefault()).format(Date())
-    }
+    private fun todayDayName(): String = com.schoolsync.teacher.util.englishDayName()
 
     private fun calculateCurrentPeriod(periods: List<TimetableEntry>): Int {
         val cal = Calendar.getInstance()

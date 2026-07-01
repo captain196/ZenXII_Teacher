@@ -29,8 +29,8 @@ class FCMService : FirebaseMessagingService() {
     companion object {
         private const val TAG = "FCMService"
         private const val CHANNEL_ID = "school_sync_channel"
-        private const val CHANNEL_NAME = "SchoolSync Notifications"
-        private const val CHANNEL_DESCRIPTION = "Notifications from SchoolSync Teacher app"
+        private const val CHANNEL_NAME = "ZenXii Notifications"
+        private const val CHANNEL_DESCRIPTION = "Notifications from ZenXii Teacher app"
     }
 
     @Inject
@@ -73,7 +73,7 @@ class FCMService : FirebaseMessagingService() {
 
         // Handle notification payload
         remoteMessage.notification?.let { notification ->
-            val title = notification.title ?: "SchoolSync"
+            val title = notification.title ?: "ZenXii"
             val body = notification.body ?: ""
             showNotification(title, body, remoteMessage.data)
         }
@@ -138,7 +138,7 @@ class FCMService : FirebaseMessagingService() {
                 showNotification(title, body, data)
             }
             else -> {
-                val title = data["title"] ?: "SchoolSync"
+                val title = data["title"] ?: "ZenXii"
                 val body = data["body"] ?: ""
                 if (title.isNotEmpty() || body.isNotEmpty()) {
                     showNotification(title, body, data)
@@ -185,7 +185,7 @@ class FCMService : FirebaseMessagingService() {
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
