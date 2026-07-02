@@ -7,6 +7,7 @@ import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.MarksDoc
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.ExamFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.StudentFirestoreRepository
 import com.schoolsync.teacher.util.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -68,6 +69,7 @@ sealed class MarksEvent {
 class MarksViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
     private val examFirestoreRepo: ExamFirestoreRepository,
+    private val studentFirestoreRepo: StudentFirestoreRepository,
     private val tokenManager: TokenManager
 ) : ViewModel() {
 
@@ -177,7 +179,12 @@ class MarksViewModel @Inject constructor(
                             doc.applicableClasses.isEmpty() ||
                                 doc.applicableClasses.any { it.equals(state.selectedClassName, ignoreCase = true) }
                         }
-                        val exams = filtered.map { ExamInfo(it.id, it.examName) }
+                        // Use the bare examId field (NOT it.id, which is the
+                        // schoolId-prefixed doc-id) so downstream examSchedule /
+                        // marks doc-ids resolve without doubling the schoolId.
+                        val exams = filtered.map {
+                            ExamInfo(it.examId.ifBlank { it.id }, it.examName)
+                        }
                         _uiState.update { it.copy(availableExams = exams) }
                     },
                     onFailure = { e ->
@@ -206,12 +213,23 @@ class MarksViewModel @Inject constructor(
                     onSuccess = { scheduleDoc ->
                         if (scheduleDoc != null && scheduleDoc.subjects.isNotEmpty()) {
                             val subjects = scheduleDoc.subjects.map { subjectSchedule ->
+                                val maxTheory = subjectSchedule.maxTheory.toInt()
+                                val maxPractical = subjectSchedule.maxPractical.toInt()
+                                val maxTotal = subjectSchedule.maxTotal.toInt()
+                                // Total-only datesheet (no theory/practical split):
+                                // treat the whole paper as Theory so the teacher can
+                                // actually enter marks — Total is read-only and is
+                                // derived from theory + practical, so a 0/0 split
+                                // would otherwise lock entry at 0.
+                                val effTheory =
+                                    if (maxTheory == 0 && maxPractical == 0 && maxTotal > 0) maxTotal
+                                    else maxTheory
                                 SubjectInfo(
                                     subjectId = subjectSchedule.subjectName,
                                     subjectName = subjectSchedule.subjectName,
-                                    maxTheory = subjectSchedule.maxTheory.toInt(),
-                                    maxPractical = subjectSchedule.maxPractical.toInt(),
-                                    maxTotal = subjectSchedule.maxTotal.toInt()
+                                    maxTheory = effTheory,
+                                    maxPractical = maxPractical,
+                                    maxTotal = maxTotal
                                 )
                             }
                             _uiState.update { it.copy(availableSubjects = subjects) }
@@ -240,38 +258,54 @@ class MarksViewModel @Inject constructor(
             try {
                 val sectionKey = "${Constants.classKey(state.selectedClassName)}/${Constants.sectionKey(state.selectedSection)}"
 
-                // Primary: Firestore student marks
-                examFirestoreRepo.getStudentMarks(
+                // 1) Class roster — the source of truth for WHO appears in the
+                //    grid. Without this the teacher could never enter the FIRST
+                //    marks: the old code only listed students who already had a
+                //    saved marks doc (a chicken-and-egg empty grid).
+                val roster = studentFirestoreRepo.getStudentsByClass(
+                    state.selectedClassName,
+                    state.selectedSection
+                ).getOrElse { e ->
+                    Log.e(TAG, "Failed to load roster: ${e.message}")
+                    _uiState.update { it.copy(isLoading = false, error = e.message) }
+                    return@launch
+                }
+
+                // 2) Any marks already saved for this exam + section + subject.
+                val existing = examFirestoreRepo.getStudentMarks(
                     examId = exam.examId,
                     sectionKey = sectionKey,
                     subject = subject.subjectId
-                ).fold(
-                    onSuccess = { marksDocs ->
-                        if (marksDocs.isNotEmpty()) {
-                            val marks = marksDocs.map { doc ->
-                                StudentMark(
-                                    studentId = doc.studentId,
-                                    rollNo = doc.studentName.hashCode() % 1000, // Will be overwritten below
-                                    name = doc.studentName,
-                                    theory = if (!doc.absent) doc.theory.toInt().toString() else "",
-                                    practical = if (!doc.absent) doc.practical.toInt().toString() else "",
-                                    total = if (!doc.absent) doc.total.toInt().toString()
-                                    else "AB",
-                                    isAbsent = doc.absent
-                                )
-                            }.sortedBy { it.rollNo }
-                            _uiState.update {
-                                it.copy(studentMarks = marks, isLoading = false, hasUnsavedChanges = false)
-                            }
-                        } else {
-                            _uiState.update { it.copy(studentMarks = emptyList(), isLoading = false) }
-                        }
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Failed to load student marks: ${e.message}")
-                        _uiState.update { it.copy(isLoading = false, error = e.message) }
+                ).getOrElse { e ->
+                    Log.w(TAG, "Marks fetch failed, showing blank roster: ${e.message}")
+                    emptyList()
+                }.associateBy { it.studentId }
+
+                // 3) Merge saved marks onto the full roster so every student is
+                //    present and editable, with previously-entered values filled.
+                val marks = roster
+                    .sortedWith(compareBy({ it.rollNo.toIntOrNull() ?: Int.MAX_VALUE }, { it.name }))
+                    .mapIndexed { idx, stu ->
+                        val sid = stu.studentId.ifBlank { stu.userId }
+                        val m = existing[sid]
+                        StudentMark(
+                            studentId = sid,
+                            rollNo = stu.rollNo.toIntOrNull() ?: (idx + 1),
+                            name = stu.name,
+                            theory = if (m != null && !m.absent) m.theory.toInt().toString() else "",
+                            practical = if (m != null && !m.absent) m.practical.toInt().toString() else "",
+                            total = when {
+                                m == null -> ""
+                                m.absent -> "AB"
+                                else -> m.total.toInt().toString()
+                            },
+                            isAbsent = m?.absent ?: false
+                        )
                     }
-                )
+
+                _uiState.update {
+                    it.copy(studentMarks = marks, isLoading = false, hasUnsavedChanges = false)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load marks", e)
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
@@ -312,7 +346,13 @@ class MarksViewModel @Inject constructor(
     fun toggleAbsent(studentId: String) {
         updateMark(studentId) { mark ->
             if (mark.isAbsent) {
-                mark.copy(isAbsent = false)
+                // Un-marking absent: clear the "AB" total too. Theory/practical
+                // were emptied when AB was set, so the recomputed total is blank
+                // and the teacher can enter fresh marks.
+                mark.copy(
+                    isAbsent = false,
+                    total = calculateTotal(mark.theory, mark.practical)
+                )
             } else {
                 mark.copy(
                     isAbsent = true,

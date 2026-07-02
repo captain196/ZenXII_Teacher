@@ -11,6 +11,11 @@ import com.google.firebase.firestore.DocumentId
 data class ExamDoc(
     @DocumentId
     val id: String = "",
+    // Bare exam identifier (e.g. "EXM_20260604_151507_83f453"). The Firestore
+    // doc-id is "{schoolId}_{examId}", so `id` carries the schoolId prefix and
+    // must NOT be used to build other doc-ids (examSchedule/marks/results) — use
+    // this field instead, otherwise the schoolId gets doubled and reads miss.
+    val examId: String = "",
     val schoolId: String = "",
     val session: String = "",
     val examName: String = "",

@@ -50,6 +50,8 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Grade
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.LocalLibrary
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -111,6 +113,7 @@ import com.schoolsync.teacher.ui.splash.WalkthroughScreen
 import com.schoolsync.teacher.ui.dashboard.DashboardScreen
 import com.schoolsync.teacher.ui.leave.LeaveScreen
 import com.schoolsync.teacher.ui.marks.MarksScreen
+import com.schoolsync.teacher.ui.myattendance.MyAttendanceScreen
 import com.schoolsync.teacher.ui.messages.MessagesScreen
 import com.schoolsync.teacher.ui.events.EventsTeacherScreen
 import com.schoolsync.teacher.ui.notices.NoticesScreen
@@ -153,6 +156,7 @@ sealed class Route(val route: String) {
     // Main tabs
     data object Dashboard : Route("dashboard")
     data object Attendance : Route("attendance")
+    data object MyAttendance : Route("my_attendance")
     data object Marks : Route("marks")
     data object Timetable : Route("timetable")
     data object Students : Route("students")
@@ -196,6 +200,7 @@ val mainNavItems = listOf(
 
 /** Sub-items revealed when "More" is expanded. */
 val moreSubItems = listOf(
+    NavRailItem(Route.MyAttendance, "My Att.", Icons.Filled.MyLocation, Icons.Outlined.MyLocation),
     NavRailItem(Route.Homework, "HW", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
     NavRailItem(Route.Fees, "Fees", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet),
     NavRailItem(Route.RedFlags, "Flags", Icons.Filled.Flag, Icons.Outlined.Flag),
@@ -555,6 +560,7 @@ fun MainScaffold(navController: NavHostController) {
                 )
             }
             composable(Route.Attendance.route) { AttendanceScreen() }
+            composable(Route.MyAttendance.route) { MyAttendanceScreen() }
             composable(Route.Marks.route) { MarksScreen() }
             composable(Route.Timetable.route) { TimetableScreen() }
             composable(Route.LessonPlan.route) { TodayLessonsScreen() }

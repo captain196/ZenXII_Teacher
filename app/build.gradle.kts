@@ -49,14 +49,15 @@ android {
         //   "https://api.yourdomain.com/Grader/school/".
         //
         // Quick reference:
-        //   - same-WiFi LAN access:    http://<PC_LAN_IP>/Grader/school/
-        //   - emulator:                http://10.0.2.2/Grader/school/
+        //   - same-WiFi LAN access:    http://<PC_LAN_IP>/ZenX/school/
+        //   - emulator:                http://10.0.2.2/ZenX/school/
         //   - USB tether (legacy):     localhost:8080 + `adb reverse tcp:8080 tcp:80`
-        // Production: ZenXii backend on Lightsail, fronted by https://www.zenxii.com.
-        // The /Grader/school/ subpath serves the legacy PHP REST endpoints; the
-        // host root serves the Node auth routes (e.g. /auth/clear_must_change),
-        // which AuthApi reaches via leading-slash paths.
-        buildConfigField("String", "BASE_URL", "\"https://www.zenxii.com/Grader/school/\"")
+        // Production: ZenXii admin panel + Node backend on Lightsail, served at the
+        // host ROOT of https://www.zenxii.com (verified: /attendance/* and /admin_login
+        // resolve at root; the legacy /Grader/school/ and /ZenX/school/ subpaths 404).
+        // ApiService uses relative paths (attendance/*, staff_attendance/*) -> host root;
+        // AuthApi uses leading-slash paths (/auth/*) -> also host root (Node backend).
+        buildConfigField("String", "BASE_URL", "\"https://www.zenxii.com/\"")
     }
 
     buildTypes {
@@ -139,6 +140,9 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+
+    // Location — FusedLocationProviderClient (GPS staff attendance, Phase 11)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")

@@ -127,12 +127,13 @@ class AuthRepository @Inject constructor(
                 Log.w(TAG, "login: currentSession absent/empty on schools/$schoolId — observeSchool will self-heal")
             }
 
-            // 7. Phase 7z — register the current FCM token now that the
-            // user is logged in. FCMService.onNewToken usually fires
-            // BEFORE login (token generated at install time), so the
-            // token registration silently bails. Pulling the current
-            // token here on every successful login guarantees that
-            // Users/Devices/{userId}/{deviceId}/fcmToken is populated.
+            // 7. Register the current FCM token now that the user is
+            // logged in. FCMService.onNewToken usually fires BEFORE
+            // login (token generated at install time), so the token
+            // registration silently bails. Pulling the current token
+            // here on every successful login guarantees that the
+            // canonical Firestore userDevices/{userId}_{safeDeviceId}
+            // doc is populated.
             try {
                 val token = com.google.firebase.messaging.FirebaseMessaging.getInstance()
                     .token
@@ -293,9 +294,9 @@ class AuthRepository @Inject constructor(
     /**
      * Register the FCM token for this device.
      *
-     * Phase 8a (2026-04-09): canonical store is the Firestore
-     * `userDevices` collection. RTDB Users/Devices/{userId}/{deviceId}
-     * stays as a mirror until Phase 9.
+     * Firestore `userDevices` is the sole canonical store. Doc id pattern
+     * is `{userId}_{safeDeviceId}` to match the Push_service prune path
+     * and the admin Device_management lookup.
      */
     suspend fun registerFcmToken(fcmToken: String, userId: String, deviceId: String): Result<Unit> {
         return try {
@@ -315,33 +316,14 @@ class AuthRepository @Inject constructor(
                 "appRole"    to "teacher"
             )
 
-            // ── Phase 8a: WRITE Firestore FIRST (canonical) ──
-            var firestoreOk = false
             try {
                 firestoreService.setDocument("userDevices", docId, payload, merge = true)
-                firestoreOk = true
                 Log.d(TAG, "FCM token written to Firestore userDevices/$docId")
+                Result.success(Unit)
             } catch (e: Exception) {
                 Log.e(TAG, "FCM token Firestore write failed", e)
+                Result.failure(Exception("FCM token write failed"))
             }
-
-            // ── RTDB mirror (best-effort, stays until Phase 9) ──
-            try {
-                firebaseService.setValue(
-                    "Users/Devices/$userId/$deviceId",
-                    mapOf(
-                        "fcmToken"   to fcmToken,
-                        "status"     to "active",
-                        "platform"   to "android",
-                        "lastActive" to now
-                    )
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "FCM token RTDB mirror failed (non-fatal)", e)
-            }
-
-            if (firestoreOk) Result.success(Unit)
-            else Result.failure(Exception("FCM token write failed in both Firestore and RTDB"))
         } catch (e: Exception) {
             Log.e(TAG, "registerFcmToken exception", e)
             Result.failure(e)

@@ -442,8 +442,8 @@ private fun MarksGrid(
     val horizontalScrollState = rememberScrollState()
     val subject = state.selectedSubject ?: return
 
-    val rollWidth = 40.dp
-    val nameWidth = 130.dp
+    val rollWidth = 60.dp
+    val nameWidth = 150.dp
     val markCellWidth = 80.dp
     val totalWidth = 70.dp
     val absentWidth = 50.dp
@@ -463,8 +463,8 @@ private fun MarksGrid(
                     .border(0.5.dp, DividerColor)
             ) {
                 // Fixed headers
-                HeaderCell("#", rollWidth, headerHeight)
-                HeaderCell("Student Name", nameWidth, headerHeight)
+                HeaderCell("Roll No", rollWidth, headerHeight)
+                HeaderCell("Student (ID)", nameWidth, headerHeight)
 
                 // Scrollable headers
                 Row(modifier = Modifier.horizontalScroll(horizontalScrollState)) {
@@ -513,15 +513,24 @@ private fun MarksGrid(
                                 .border(0.5.dp, DividerColor.copy(alpha = 0.3f)),
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            Text(
-                                text = mark.name,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (mark.isAbsent) TextTertiary else TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 6.dp)
-                            )
+                            Column(modifier = Modifier.padding(horizontal = 6.dp)) {
+                                Text(
+                                    text = mark.name,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (mark.isAbsent) TextTertiary else TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = mark.studentId,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextTertiary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontSize = 9.sp
+                                )
+                            }
                         }
 
                         // Scrollable mark fields

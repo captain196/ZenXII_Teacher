@@ -1,13 +1,9 @@
 package com.schoolsync.teacher.ui.attendance
 
-import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +33,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Refresh
@@ -62,13 +60,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -98,10 +94,19 @@ import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.glassCard
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+
+/* ════════════════════════════════════════════════════════════════════════
+   ATTENDANCE SCREEN — Today-first commercial-ERP redesign
+   ────────────────────────────────────────────────────────────────────────
+   Two presentation modes over the SAME ViewModel state + APIs:
+     • Today   (default) → fast per-student marking for TODAY
+     • History          → the original month spreadsheet (view + edit)
+   No ViewModel / Repository / API / Firestore changes. Stage governance,
+   the reason field, the tardy dialog and the correction flow are unchanged.
+   ════════════════════════════════════════════════════════════════════════ */
 
 @Composable
 fun AttendanceScreen(
@@ -109,27 +114,18 @@ fun AttendanceScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+
+    // Presentation-only view switch. Today is always the default landing view.
+    var showHistory by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
-                is AttendanceEvent.SaveSuccess -> {
-                    snackbarHostState.showSnackbar(event.message)
-                }
-                is AttendanceEvent.SaveError -> {
-                    snackbarHostState.showSnackbar("Error: ${event.message}")
-                }
-                is AttendanceEvent.Locked -> {
-                    snackbarHostState.showSnackbar("Attendance is locked. File a correction request.")
-                }
-                is AttendanceEvent.ReasonRequired -> {
-                    snackbarHostState.showSnackbar("A reason (10+ chars) is required after 10:30 AM.")
-                }
-                is AttendanceEvent.CorrectionSubmitted -> {
-                    snackbarHostState.showSnackbar(event.message)
-                }
+                is AttendanceEvent.SaveSuccess -> snackbarHostState.showSnackbar(event.message)
+                is AttendanceEvent.SaveError -> snackbarHostState.showSnackbar("Error: ${event.message}")
+                is AttendanceEvent.Locked -> snackbarHostState.showSnackbar("Attendance is locked. File a correction request.")
+                is AttendanceEvent.ReasonRequired -> snackbarHostState.showSnackbar("A reason (10+ chars) is required after 10:30 AM.")
+                is AttendanceEvent.CorrectionSubmitted -> snackbarHostState.showSnackbar(event.message)
             }
         }
     }
@@ -148,6 +144,7 @@ fun AttendanceScreen(
                 }
             },
             floatingActionButton = {
+                // Sticky Save / Request-Correction FAB (same logic in both views).
                 when {
                     state.isSaving -> {
                         ExtendedFloatingActionButton(
@@ -162,11 +159,9 @@ fun AttendanceScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Saving...", fontWeight = FontWeight.SemiBold)
+                            Text("Saving…", fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    // Locked: replace Save with "Request Correction" (opens dialog
-                    // for the first student with a current 'A' if any, else any student)
                     state.isClassTeacher && state.stage == Stage.S3_LOCKED -> {
                         ExtendedFloatingActionButton(
                             onClick = {
@@ -204,140 +199,42 @@ fun AttendanceScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Top bar with class selector, month navigation, bulk actions
-                AttendanceTopBar(
-                    state = state,
-                    onClassSelected = viewModel::selectClass,
-                    onPreviousMonth = viewModel::previousMonth,
-                    onNextMonth = viewModel::nextMonth,
-                    onMarkAllPresent = viewModel::markAllPresentToday,
-                    onMarkAllAbsent = viewModel::markAllAbsentToday,
-                    onRefresh = viewModel::refresh
-                )
-
-                // Stage banner — server-driven; never UI-decided.
-                if (state.selectedClass != null && state.stage != Stage.UNKNOWN) {
-                    StageBanner(
-                        stage = state.stage,
-                        lockedBy = state.lockedBy,
-                        editReason = state.editReason,
-                        onReasonChange = viewModel::setEditReason
-                    )
-                }
-
-                // Class teacher permission warning
-                if (!state.isClassTeacher && state.selectedClass != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                            .background(
-                                WarningAmberSurface,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .border(
-                                1.dp,
-                                WarningAmber.copy(alpha = 0.3f),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            tint = WarningAmber,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Only class teachers can mark attendance. You are viewing in read-only mode.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = WarningAmber,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                // Attendance spreadsheet grid
-                if (state.isLoading) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = Teal)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Loading attendance...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-                } else if (state.students.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Filled.PersonOff,
-                                contentDescription = null,
-                                tint = TextTertiary,
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "No students found",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = TextSecondary
-                            )
-                            Text(
-                                text = "Select a class to view attendance",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextTertiary
-                            )
-                        }
-                    }
-                } else {
-                    AttendanceGrid(
+                if (showHistory) {
+                    HistoryView(
                         state = state,
-                        onCellClick = viewModel::cycleStatus
+                        viewModel = viewModel,
+                        onBackToToday = { showHistory = false }
                     )
-                }
-
-                // Legend
-                if (state.students.isNotEmpty()) {
-                    AttendanceLegend()
+                } else {
+                    TodayView(
+                        state = state,
+                        viewModel = viewModel,
+                        onOpenHistory = { showHistory = true }
+                    )
                 }
             }
         }
 
-        // Error dialog
+        // ── Dialogs (unchanged behaviour) ────────────────────────────────
         state.error?.let { error ->
             AlertDialog(
                 onDismissRequest = viewModel::clearError,
                 title = { Text("Error", color = TextPrimary) },
                 text = { Text(error, color = TextSecondary) },
                 confirmButton = {
-                    TextButton(onClick = viewModel::clearError) {
-                        Text("OK", color = Teal)
-                    }
+                    TextButton(onClick = viewModel::clearError) { Text("OK", color = Teal) }
                 },
                 containerColor = SurfaceDark,
                 shape = RoundedCornerShape(16.dp)
             )
         }
 
-        // Phase 10f: Tardy arrival time dialog
         if (state.showTardyDialog) {
-            var timeInput by remember { mutableStateOf(
-                java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                    .format(java.util.Date())
-            ) }
-
+            var timeInput by remember {
+                mutableStateOf(
+                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date())
+                )
+            }
             AlertDialog(
                 onDismissRequest = viewModel::dismissTardyDialog,
                 title = { Text("Arrival Time", color = TextPrimary, fontWeight = FontWeight.Bold) },
@@ -367,9 +264,7 @@ fun AttendanceScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.confirmTardyTime(timeInput)
-                    }) {
+                    TextButton(onClick = { viewModel.confirmTardyTime(timeInput) }) {
                         Text("OK", color = Teal, fontWeight = FontWeight.Bold)
                     }
                 },
@@ -383,13 +278,10 @@ fun AttendanceScreen(
             )
         }
 
-        // Correction Request dialog (locked-state path or past-day fixes)
         if (state.showCorrectionDialog) {
             AlertDialog(
                 onDismissRequest = viewModel::closeCorrectionDialog,
-                title = {
-                    Text("Request Correction", color = TextPrimary, fontWeight = FontWeight.Bold)
-                },
+                title = { Text("Request Correction", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
@@ -479,7 +371,564 @@ fun AttendanceScreen(
     }
 }
 
-/* ── Stage banner (Phase 1+2 server-driven UI hint) ────────────── */
+/* ════════════════════════════════════════════════════════════════════════
+   TODAY VIEW — the default, marking-optimised surface
+   ════════════════════════════════════════════════════════════════════════ */
+
+@Composable
+private fun TodayView(
+    state: AttendanceUiState,
+    viewModel: AttendanceViewModel,
+    onOpenHistory: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        TodayHeader(
+            state = state,
+            onClassSelected = viewModel::selectClass,
+            onOpenHistory = onOpenHistory,
+            onRefresh = viewModel::refresh
+        )
+
+        // Stage governance banner (unchanged) — includes the S2 reason field.
+        if (state.selectedClass != null && state.stage != Stage.UNKNOWN) {
+            StageBanner(
+                stage = state.stage,
+                lockedBy = state.lockedBy,
+                editReason = state.editReason,
+                onReasonChange = viewModel::setEditReason
+            )
+        }
+
+        if (!state.isClassTeacher && state.selectedClass != null) {
+            ReadOnlyWarning()
+        }
+
+        when {
+            state.isLoading -> LoadingState()
+            state.students.isEmpty() -> EmptyState()
+            else -> {
+                TodaySummaryCard(state = state)
+
+                if (state.isClassTeacher && state.stage != Stage.S3_LOCKED) {
+                    BulkActionsRow(
+                        onAllPresent = viewModel::markAllPresentToday,
+                        onAllAbsent = viewModel::markAllAbsentToday
+                    )
+                }
+
+                RosterList(
+                    state = state,
+                    onStudentTap = { studentId ->
+                        when {
+                            !state.isClassTeacher -> Unit
+                            state.stage == Stage.S3_LOCKED ->
+                                viewModel.openCorrectionDialog(studentId, state.todayDay)
+                            else ->
+                                viewModel.cycleStatus(studentId, state.todayDay)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayHeader(
+    state: AttendanceUiState,
+    onClassSelected: (ClassSection) -> Unit,
+    onOpenHistory: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    var classDropdownExpanded by remember { mutableStateOf(false) }
+
+    val todayLabel = remember {
+        SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault())
+            .format(Calendar.getInstance().time)
+    }
+    val cls = state.selectedClass
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Today's Attendance",
+                    color = TextTertiary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = cls?.let { "${it.className} · ${it.section}" } ?: "Select a class",
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = todayLabel,
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                }
+                // Month history entry point
+                OutlinedButton(
+                    onClick = onOpenHistory,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Teal),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(Teal.copy(alpha = 0.4f))
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("History", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // Class switcher — only when the teacher has more than one class.
+        if (state.availableClasses.size > 1) {
+            Spacer(Modifier.height(10.dp))
+            Box {
+                OutlinedButton(
+                    onClick = { classDropdownExpanded = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(GlassBorder)
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = cls?.displayName ?: "Select Class",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+                DropdownMenu(
+                    expanded = classDropdownExpanded,
+                    onDismissRequest = { classDropdownExpanded = false },
+                    modifier = Modifier.background(SurfaceDark)
+                ) {
+                    state.availableClasses.forEach { classSection ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    classSection.displayName,
+                                    color = if (classSection == state.selectedClass) Teal else TextPrimary
+                                )
+                            },
+                            onClick = {
+                                onClassSelected(classSection)
+                                classDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodaySummaryCard(state: AttendanceUiState) {
+    val today = state.todayDay
+    val marks = remember(state.students, today) { state.students.map { it.dayStatuses[today] } }
+    val present = marks.count { it == AttendanceStatus.PRESENT }
+    val absent = marks.count { it == AttendanceStatus.ABSENT }
+    val leave = marks.count { it == AttendanceStatus.LEAVE }
+    val tardy = marks.count { it == AttendanceStatus.TARDY }
+    val total = state.students.size
+    val marked = marks.count { it != null }
+    val remaining = (total - marked).coerceAtLeast(0)
+    val fraction = if (total > 0) marked.toFloat() / total.toFloat() else 0f
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .glassCard(cornerRadius = 16.dp)
+            .padding(16.dp)
+    ) {
+        // Statistics
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            StatPill("Present", present, AttendancePresent, Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            StatPill("Absent", absent, AttendanceAbsent, Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            StatPill("Leave", leave, AttendanceLeave, Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            StatPill("Late", tardy, AttendanceTardy, Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // Progress: Marked / Remaining / Total
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "$marked of $total marked",
+                color = TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = if (remaining == 0) "All marked ✓" else "$remaining remaining",
+                color = if (remaining == 0) AttendancePresent else WarningAmber,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        // Custom progress track (no dependency on LinearProgressIndicator API surface)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Glass.copy(alpha = 0.25f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (remaining == 0) AttendancePresent else Teal)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatPill(label: String, count: Int, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.14f))
+            .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(count.toString(), color = color, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun BulkActionsRow(
+    onAllPresent: () -> Unit,
+    onAllAbsent: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Button(
+            onClick = onAllPresent,
+            modifier = Modifier
+                .weight(1f)
+                .height(48.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AttendancePresent.copy(alpha = 0.18f),
+                contentColor = AttendancePresent
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Filled.DoneAll, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("All Present", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Button(
+            onClick = onAllAbsent,
+            modifier = Modifier
+                .weight(1f)
+                .height(48.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AttendanceAbsent.copy(alpha = 0.18f),
+                contentColor = AttendanceAbsent
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("All Absent", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun RosterList(
+    state: AttendanceUiState,
+    onStudentTap: (studentId: String) -> Unit
+) {
+    val today = state.todayDay
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = if (state.isClassTeacher)
+                "Tap a student's status to change it (cycles through the states)."
+            else
+                "Read-only — only the class teacher can mark attendance.",
+            color = TextTertiary,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+        )
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            contentPadding = PaddingValues(bottom = 96.dp) // clear the FAB
+        ) {
+            items(state.students, key = { it.studentId }) { student ->
+                StudentRow(
+                    rollNo = student.rollNo,
+                    name = student.name,
+                    status = student.dayStatuses[today],
+                    enabled = state.isClassTeacher,
+                    onClick = { onStudentTap(student.studentId) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudentRow(
+    rollNo: Int,
+    name: String,
+    status: AttendanceStatus?,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val statusColor = status?.let { getStatusColor(it) } ?: TextTertiary
+    val initial = name.trim().firstOrNull()?.uppercase() ?: "?"
+    val rollText = if (rollNo > 0) rollNo.toString().padStart(2, '0') else "—"
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Glass.copy(alpha = 0.10f))
+            .border(1.dp, GlassBorder.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Avatar (initial)
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Teal.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(initial, color = Teal, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(12.dp))
+        // Roll + name
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text("Roll $rollText", color = TextTertiary, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(8.dp))
+        // Status chip (tap to cycle)
+        StatusChip(status = status, color = statusColor, enabled = enabled)
+    }
+}
+
+@Composable
+private fun StatusChip(status: AttendanceStatus?, color: Color, enabled: Boolean) {
+    val bg by animateColorAsState(
+        targetValue = if (status != null) color.copy(alpha = 0.20f) else Glass.copy(alpha = 0.2f),
+        animationSpec = tween(150),
+        label = "chipBg"
+    )
+    Row(
+        modifier = Modifier
+            .heightIn(min = 40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .border(1.5.dp, color.copy(alpha = if (status != null) 0.6f else 0.25f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(9.dp)
+                .clip(CircleShape)
+                .background(if (status != null) color else TextTertiary)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = status?.label ?: "Not marked",
+            color = if (status != null) color else TextTertiary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (enabled) {
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = "Tap to change",
+                tint = (if (status != null) color else TextTertiary).copy(alpha = 0.7f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+/* ── Shared small states ─────────────────────────────────────────────── */
+
+@Composable
+private fun LoadingState() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = Teal)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Loading attendance…", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun EmptyState() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                Icons.Filled.PersonOff,
+                contentDescription = null,
+                tint = TextTertiary,
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("No students found", style = MaterialTheme.typography.titleMedium, color = TextSecondary)
+            Text("Select a class to view attendance", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+        }
+    }
+}
+
+@Composable
+private fun ReadOnlyWarning() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .background(WarningAmberSurface, shape = RoundedCornerShape(8.dp))
+            .border(1.dp, WarningAmber.copy(alpha = 0.3f), shape = RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = WarningAmber, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "Only class teachers can mark attendance. You are viewing in read-only mode.",
+            style = MaterialTheme.typography.bodySmall,
+            color = WarningAmber,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   HISTORY VIEW — the original month spreadsheet (view + edit where permitted)
+   ════════════════════════════════════════════════════════════════════════ */
+
+@Composable
+private fun HistoryView(
+    state: AttendanceUiState,
+    viewModel: AttendanceViewModel,
+    onBackToToday: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Back-to-today bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBackToToday) {
+                Icon(Icons.Filled.ChevronLeft, contentDescription = null, tint = Teal, modifier = Modifier.size(20.dp))
+                Text("Today", color = Teal, fontWeight = FontWeight.SemiBold)
+            }
+            Text(
+                text = "Attendance History",
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+        }
+
+        AttendanceTopBar(
+            state = state,
+            onClassSelected = viewModel::selectClass,
+            onPreviousMonth = viewModel::previousMonth,
+            onNextMonth = viewModel::nextMonth,
+            onMarkAllPresent = viewModel::markAllPresentToday,
+            onMarkAllAbsent = viewModel::markAllAbsentToday,
+            onRefresh = viewModel::refresh
+        )
+
+        if (state.selectedClass != null && state.stage != Stage.UNKNOWN) {
+            StageBanner(
+                stage = state.stage,
+                lockedBy = state.lockedBy,
+                editReason = state.editReason,
+                onReasonChange = viewModel::setEditReason
+            )
+        }
+
+        if (!state.isClassTeacher && state.selectedClass != null) {
+            ReadOnlyWarning()
+        }
+
+        when {
+            state.isLoading -> LoadingState()
+            state.students.isEmpty() -> EmptyState()
+            else -> {
+                AttendanceGrid(state = state, onCellClick = viewModel::cycleStatus)
+                AttendanceLegend()
+            }
+        }
+    }
+}
+
+/* ── Stage banner (Phase 1+2 server-driven UI hint) — unchanged ────────── */
 
 @Composable
 private fun StageBanner(
@@ -579,7 +1028,6 @@ private fun AttendanceTopBar(
     onRefresh: () -> Unit
 ) {
     var classDropdownExpanded by remember { mutableStateOf(false) }
-    var showBulkActions by remember { mutableStateOf(false) }
 
     val monthYear = remember(state.selectedMonth, state.selectedYear) {
         val cal = Calendar.getInstance().apply {
@@ -596,13 +1044,10 @@ private fun AttendanceTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Class selector
         Box {
             OutlinedButton(
                 onClick = { classDropdownExpanded = true },
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = TextPrimary
-                ),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
                 border = ButtonDefaults.outlinedButtonBorder.copy(
                     brush = androidx.compose.ui.graphics.SolidColor(GlassBorder)
                 ),
@@ -613,13 +1058,8 @@ private fun AttendanceTopBar(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
-                Icon(
-                    Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(20.dp))
             }
-
             DropdownMenu(
                 expanded = classDropdownExpanded,
                 onDismissRequest = { classDropdownExpanded = false },
@@ -642,17 +1082,12 @@ private fun AttendanceTopBar(
             }
         }
 
-        // Month navigation
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
             IconButton(onClick = onPreviousMonth, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Filled.ChevronLeft,
-                    contentDescription = "Previous month",
-                    tint = TextSecondary
-                )
+                Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous month", tint = TextSecondary)
             }
             Text(
                 text = monthYear,
@@ -662,20 +1097,14 @@ private fun AttendanceTopBar(
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
             IconButton(onClick = onNextMonth, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Filled.ChevronRight,
-                    contentDescription = "Next month",
-                    tint = TextSecondary
-                )
+                Icon(Icons.Filled.ChevronRight, contentDescription = "Next month", tint = TextSecondary)
             }
         }
 
-        // Bulk actions + Refresh
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Mark All Present (only for class teachers)
             OutlinedButton(
                 onClick = onMarkAllPresent,
                 enabled = state.isClassTeacher,
@@ -696,8 +1125,6 @@ private fun AttendanceTopBar(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("All P", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
-
-            // Mark All Absent (only for class teachers)
             OutlinedButton(
                 onClick = onMarkAllAbsent,
                 enabled = state.isClassTeacher,
@@ -718,7 +1145,6 @@ private fun AttendanceTopBar(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("All A", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
-
             IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
             }
@@ -744,15 +1170,12 @@ private fun AttendanceGrid(
             .glassCard(cornerRadius = 12.dp)
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
-            // Fixed columns: Roll No + Name
             Column(modifier = Modifier.fillMaxHeight()) {
-                // Header row for fixed columns
                 Row(
                     modifier = Modifier
                         .background(SurfaceDark)
                         .border(0.5.dp, DividerColor)
                 ) {
-                    // Roll No header
                     Box(
                         modifier = Modifier
                             .width(rollWidth)
@@ -760,15 +1183,8 @@ private fun AttendanceGrid(
                             .border(0.5.dp, DividerColor),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "#",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextTertiary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
-                        )
+                        Text("#", style = MaterialTheme.typography.labelMedium, color = TextTertiary, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     }
-                    // Name header
                     Box(
                         modifier = Modifier
                             .width(nameWidth)
@@ -776,25 +1192,12 @@ private fun AttendanceGrid(
                             .border(0.5.dp, DividerColor),
                         contentAlignment = Alignment.CenterStart
                     ) {
-                        Text(
-                            text = "Student",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextTertiary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            modifier = Modifier.padding(start = 6.dp)
-                        )
+                        Text("Student", style = MaterialTheme.typography.labelMedium, color = TextTertiary, fontWeight = FontWeight.Bold, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp))
                     }
                 }
-
-                // Student rows - fixed part
                 LazyColumn {
                     items(state.students, key = { it.studentId }) { student ->
-                        Row(
-                            modifier = Modifier
-                                .border(0.5.dp, DividerColor.copy(alpha = 0.5f))
-                        ) {
-                            // Roll number
+                        Row(modifier = Modifier.border(0.5.dp, DividerColor.copy(alpha = 0.5f))) {
                             Box(
                                 modifier = Modifier
                                     .width(rollWidth)
@@ -803,15 +1206,8 @@ private fun AttendanceGrid(
                                     .border(0.5.dp, DividerColor.copy(alpha = 0.3f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = student.rollNo.toString(),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = TextSecondary,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 11.sp
-                                )
+                                Text(student.rollNo.toString(), style = MaterialTheme.typography.labelMedium, color = TextSecondary, fontWeight = FontWeight.Medium, fontSize = 11.sp)
                             }
-                            // Student name
                             Box(
                                 modifier = Modifier
                                     .width(nameWidth)
@@ -820,28 +1216,18 @@ private fun AttendanceGrid(
                                     .border(0.5.dp, DividerColor.copy(alpha = 0.3f)),
                                 contentAlignment = Alignment.CenterStart
                             ) {
-                                Text(
-                                    text = student.name,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = TextPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(start = 6.dp, end = 2.dp)
-                                )
+                                Text(student.name, style = MaterialTheme.typography.labelMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp, modifier = Modifier.padding(start = 6.dp, end = 2.dp))
                             }
                         }
                     }
                 }
             }
 
-            // Scrollable day columns (1 to daysInMonth)
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .horizontalScroll(horizontalScrollState)
             ) {
-                // Day number headers
                 Row(
                     modifier = Modifier
                         .background(SurfaceDark)
@@ -853,9 +1239,7 @@ private fun AttendanceGrid(
                             modifier = Modifier
                                 .width(dayCellSize)
                                 .height(dayCellSize)
-                                .background(
-                                    if (isToday) Teal.copy(alpha = 0.12f) else Color.Transparent
-                                )
+                                .background(if (isToday) Teal.copy(alpha = 0.12f) else Color.Transparent)
                                 .border(0.5.dp, if (isToday) Teal.copy(alpha = 0.3f) else DividerColor),
                             contentAlignment = Alignment.Center
                         ) {
@@ -879,18 +1263,13 @@ private fun AttendanceGrid(
                         }
                     }
                 }
-
-                // Student attendance cells
                 LazyColumn {
                     items(state.students, key = { it.studentId }) { student ->
                         Row {
                             for (day in 1..state.daysInMonth) {
-                                val status = student.dayStatuses[day]
-                                val isToday = day == state.todayDay
-
                                 AttendanceCell(
-                                    status = status,
-                                    isToday = isToday,
+                                    status = student.dayStatuses[day],
+                                    isToday = day == state.todayDay,
                                     size = dayCellSize,
                                     onClick = { onCellClick(student.studentId, day) }
                                 )
@@ -922,7 +1301,6 @@ private fun AttendanceCell(
         animationSpec = tween(150),
         label = "cellBg"
     )
-
     val borderColor by animateColorAsState(
         targetValue = when {
             isToday && status != null -> statusColor.copy(alpha = 0.4f)
@@ -944,21 +1322,9 @@ private fun AttendanceCell(
         contentAlignment = Alignment.Center
     ) {
         if (status != null) {
-            Text(
-                text = status.code,
-                style = MaterialTheme.typography.labelMedium,
-                color = statusColor,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-                textAlign = TextAlign.Center
-            )
+            Text(status.code, style = MaterialTheme.typography.labelMedium, color = statusColor, fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.Center)
         } else {
-            Text(
-                text = "-",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary.copy(alpha = 0.3f),
-                fontSize = 9.sp
-            )
+            Text("-", style = MaterialTheme.typography.labelSmall, color = TextTertiary.copy(alpha = 0.3f), fontSize = 9.sp)
         }
     }
 }
@@ -984,12 +1350,7 @@ private fun AttendanceLegend() {
                         .background(getStatusColor(status))
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "${status.code}=${status.label}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
-                    fontSize = 9.sp
-                )
+                Text("${status.code}=${status.label}", style = MaterialTheme.typography.labelSmall, color = TextTertiary, fontSize = 9.sp)
             }
         }
     }

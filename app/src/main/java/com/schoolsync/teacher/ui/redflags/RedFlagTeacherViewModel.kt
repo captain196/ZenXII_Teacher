@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -96,7 +97,21 @@ class RedFlagTeacherViewModel @Inject constructor(
         // screen can decide which delete buttons to render. Auth UID is the
         // only thing the Firestore rule will accept for soft-delete RBAC.
         _uiState.update { it.copy(currentTeacherUid = firebaseAuth.currentUser?.uid.orEmpty()) }
-        loadAssignedClasses()
+        // React to academic-session changes. When the admin switches the
+        // school's active session, SchoolFirestoreRepository.observeSchool()
+        // propagates the new value into TokenManager; we reload the teacher's
+        // assigned classes + roster for that session so nothing shows stale
+        // data from the previous session. The first (current) emission performs
+        // the initial load. Mirrors AttendanceViewModel.
+        viewModelScope.launch {
+            tokenManager.session
+                .distinctUntilChanged()
+                .collect { session ->
+                    if (!session.isNullOrBlank()) {
+                        loadAssignedClasses()
+                    }
+                }
+        }
     }
 
     private fun loadAssignedClasses() {

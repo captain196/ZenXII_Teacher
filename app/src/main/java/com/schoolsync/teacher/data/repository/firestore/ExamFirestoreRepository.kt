@@ -130,7 +130,9 @@ class ExamFirestoreRepository @Inject constructor(
 
         val cls = Constants.classKey(className)
         val sec = Constants.sectionKey(section)
-        val docId = "${schoolCode}_${examId}_${sectionKey}_${subject}_${studentId}"
+        // Match the admin's Exam_result_store::marksDocId exactly: hashed
+        // class/section/subject tokens (NO raw '/' which is an invalid id).
+        val docId = "${schoolCode}_${examId}_${Constants.idToken(cls)}_${Constants.idToken(sec)}_${Constants.idToken(subject)}_${studentId}"
         val data = hashMapOf(
             "schoolId" to schoolCode,
             "session" to session,
@@ -190,10 +192,17 @@ class ExamFirestoreRepository @Inject constructor(
         val sec = Constants.sectionKey(section)
 
         return try {
-            var count = 0
-            for (entry in marksList) {
-                val docId = "${schoolCode}_${examId}_${sectionKey}_${subject}_${entry.studentId}"
-                val data = hashMapOf(
+            // Build every student's marks doc, then commit them in ONE atomic
+            // batch (single round-trip, all-or-nothing) instead of N sequential
+            // setDocument calls. NOTE: marksAudit + examResultMeta are SERVER-ONLY
+            // collections (Firestore rules deny client writes) — the admin compute
+            // owns the audit trail + staleness flag, so the teacher writes marks
+            // ONLY here. savedBy + savedAt record who last changed each mark.
+            val items = marksList.map { entry ->
+                // Match the admin's Exam_result_store::marksDocId exactly: hashed
+                // class/section/subject tokens (NO raw '/' which is an invalid id).
+                val docId = "${schoolCode}_${examId}_${Constants.idToken(cls)}_${Constants.idToken(sec)}_${Constants.idToken(subject)}_${entry.studentId}"
+                val data: Any = hashMapOf(
                     "schoolId" to schoolCode,
                     "session" to session,
                     "examId" to examId,
@@ -211,15 +220,13 @@ class ExamFirestoreRepository @Inject constructor(
                     "savedAt" to firestoreService.serverTimestamp(),
                     "status" to "draft"
                 )
-                firestoreService.setDocument(
-                    Constants.Firestore.MARKS,
-                    docId,
-                    data,
-                    merge = true
-                )
-                count++
+                Triple(Constants.Firestore.MARKS, docId, data)
             }
-            Result.success(count)
+            // Firestore caps a batch at 500 ops; chunk defensively for huge sections.
+            items.chunked(450).forEach { chunk ->
+                firestoreService.setDocumentsBatch(chunk, merge = true)
+            }
+            Result.success(items.size)
         } catch (e: Exception) {
             Result.failure(e)
         }
