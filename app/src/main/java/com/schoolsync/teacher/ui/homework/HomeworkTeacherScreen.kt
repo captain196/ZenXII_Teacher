@@ -2278,7 +2278,23 @@ private fun CreateHomeworkDialog(
                 }
             }
         ) {
-            DatePicker(state = datePickerState)
+            // The default DatePicker is tall (large title + headline + grid) and
+            // overflowed / clipped inside the dialog on short screens and in
+            // landscape. Drop the title/headline/mode-toggle to shrink it, and
+            // cap its height with a scroll fallback so it always fits on-screen
+            // with the OK/Cancel row visible.
+            Column(
+                modifier = Modifier
+                    .heightIn(max = (config.screenHeightDp * 0.68f).dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                DatePicker(
+                    state = datePickerState,
+                    title = null,
+                    headline = null,
+                    showModeToggle = false
+                )
+            }
         }
     }
 }

@@ -11,6 +11,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -201,6 +204,33 @@ private fun AuthorStoryPage(
     var imageElapsed by remember(index, group.authorId) { mutableLongStateOf(0L) }
     var videoProgress by remember(index, group.authorId) { mutableFloatStateOf(0f) }
 
+    // Pinch-to-zoom for VIDEO (images already zoom via Telephoto). Two-
+    // finger pinch scales/pans the video and springs back to normal when
+    // the fingers lift — the same feel as a WhatsApp video status.
+    val videoZoom = remember(index, group.authorId) { androidx.compose.animation.core.Animatable(1f) }
+    val videoOffsetX = remember(index, group.authorId) { androidx.compose.animation.core.Animatable(0f) }
+    val videoOffsetY = remember(index, group.authorId) { androidx.compose.animation.core.Animatable(0f) }
+    val isVideoZoomed = videoZoom.value > 1.01f
+    // Combined "media is zoomed" — hides chrome for both image and video.
+    val mediaZoomed = isZoomed || isVideoZoomed
+
+    // Chrome (progress/time bar + header) visibility. On hold-to-pause we
+    // DON'T yank the bar away instantly — we keep it for a beat (4s) then
+    // fade, which reads far less abruptly. Zooming hides it immediately;
+    // releasing the hold brings it back at once.
+    var chromeVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(isPaused, mediaZoomed) {
+        when {
+            mediaZoomed -> chromeVisible = false
+            !isPaused -> chromeVisible = true
+            else -> {
+                chromeVisible = true
+                kotlinx.coroutines.delay(4000)
+                chromeVisible = false
+            }
+        }
+    }
+
     // Image progress driver.
     LaunchedEffect(index, isCurrentPage, isPaused, isVideo, isZoomed, imageState.isImageDisplayed) {
         if (isVideo || !isCurrentPage || isPaused || isZoomed) return@LaunchedEffect
@@ -227,18 +257,60 @@ private fun AuthorStoryPage(
             val widthPx = constraints.maxWidth.toFloat()
 
             if (isVideo) {
-                VideoStoryPlayer(
-                    url = story.mediaUrl,
-                    isCurrentPage = isCurrentPage,
-                    isPaused = isPaused,
-                    isMuted = isMuted,
-                    onProgress = { videoProgress = it },
-                    onEnded = { if (index < stories.size - 1) index++ else onGroupFinished() }
-                )
-                // Gesture overlay for video: tap zones, hold-to-pause, swipe-down dismiss.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = videoZoom.value
+                            scaleY = videoZoom.value
+                            translationX = videoOffsetX.value
+                            translationY = videoOffsetY.value
+                        }
+                ) {
+                    VideoStoryPlayer(
+                        url = story.mediaUrl,
+                        isCurrentPage = isCurrentPage,
+                        // Pause playback while the user is pinch-zooming.
+                        isPaused = isPaused || isVideoZoomed,
+                        isMuted = isMuted,
+                        onProgress = { videoProgress = it },
+                        onEnded = { if (index < stories.size - 1) index++ else onGroupFinished() }
+                    )
+                }
+                // Gesture overlay for video: pinch-zoom (2 fingers), tap
+                // zones, hold-to-pause, swipe-down dismiss.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Pinch-zoom FIRST so it claims multi-touch before the
+                        // single-finger drag/tap detectors below. It only acts
+                        // on 2+ pointers, leaving 1-finger gestures intact.
+                        .pointerInput(index, group.authorId) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                var didZoom = false
+                                do {
+                                    val event = awaitPointerEvent()
+                                    if (event.changes.count { it.pressed } >= 2) {
+                                        didZoom = true
+                                        val newScale = (videoZoom.value * event.calculateZoom()).coerceIn(1f, 4f)
+                                        val pan = event.calculatePan()
+                                        val maxX = widthPx * (newScale - 1f) / 2f
+                                        val maxY = constraints.maxHeight.toFloat() * (newScale - 1f) / 2f
+                                        scope.launch { videoZoom.snapTo(newScale) }
+                                        scope.launch { videoOffsetX.snapTo((videoOffsetX.value + pan.x).coerceIn(-maxX, maxX)) }
+                                        scope.launch { videoOffsetY.snapTo((videoOffsetY.value + pan.y).coerceIn(-maxY, maxY)) }
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                } while (event.changes.any { it.pressed })
+                                if (didZoom) {
+                                    // Spring back to normal when the fingers lift.
+                                    scope.launch { videoZoom.animateTo(1f, tween(200)) }
+                                    scope.launch { videoOffsetX.animateTo(0f, tween(200)) }
+                                    scope.launch { videoOffsetY.animateTo(0f, tween(200)) }
+                                }
+                            }
+                        }
                         .pointerInput(Unit) {
                             detectVerticalDragGestures(
                                 onVerticalDrag = { _, dy ->
@@ -293,11 +365,12 @@ private fun AuthorStoryPage(
             }
         }
 
-        // ── Chrome — fades while paused/zoomed ─────────────────────
+        // ── Chrome — stays through a hold for 4s, then fades; hides at
+        //    once while zooming (see chromeVisible above). ────────────
         AnimatedVisibility(
-            visible = !isPaused && !isZoomed,
+            visible = chromeVisible,
             enter = fadeIn(tween(150)),
-            exit = fadeOut(tween(150)),
+            exit = fadeOut(tween(400)),
             modifier = Modifier.align(Alignment.TopCenter)
         ) {
             TopChrome(
@@ -319,9 +392,9 @@ private fun AuthorStoryPage(
 
         if (story.caption.isNotBlank()) {
             AnimatedVisibility(
-                visible = !isPaused && !isZoomed,
+                visible = chromeVisible,
                 enter = fadeIn(tween(150)),
-                exit = fadeOut(tween(150)),
+                exit = fadeOut(tween(400)),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 // WhatsApp-style caption: centered, sitting just above the
