@@ -40,11 +40,6 @@ class TokenManager @Inject constructor(
         val KEY_SCHOOL_ID = stringPreferencesKey("school_id")
         val KEY_SCHOOL_CODE = stringPreferencesKey("school_code")
         val KEY_SCHOOL_DISPLAY_NAME = stringPreferencesKey("school_display_name")
-        // parent_db_key: numeric login code used for Users/Parents/{key} and
-        // Users/Admin/{key} RTDB paths. Distinct from KEY_SCHOOL_CODE which now
-        // stores the schoolId (= the path segment under Schools/...).
-        val KEY_PARENT_DB_KEY = stringPreferencesKey("parent_db_key")
-
         // Teacher-specific
         val KEY_POSITION = stringPreferencesKey("position")
         val KEY_DESIGNATION = stringPreferencesKey("designation")
@@ -71,7 +66,6 @@ class TokenManager @Inject constructor(
     val schoolId: Flow<String?> = dataStore.data.map { it[KEY_SCHOOL_ID] }
     val schoolCode: Flow<String?> = dataStore.data.map { it[KEY_SCHOOL_CODE] }
     val schoolDisplayName: Flow<String?> = dataStore.data.map { it[KEY_SCHOOL_DISPLAY_NAME] }
-    val parentDbKey: Flow<String?> = dataStore.data.map { it[KEY_PARENT_DB_KEY] }
     val session: Flow<String?> = dataStore.data.map { it[KEY_SESSION] }
     val deviceId: Flow<String?> = dataStore.data.map { it[KEY_DEVICE_ID] }
     val profilePic: Flow<String?> = dataStore.data.map { it[KEY_PROFILE_PIC] }
@@ -112,22 +106,11 @@ class TokenManager @Inject constructor(
 
     /**
      * Save the Firebase school code. NOTE: as of the 2026-04-08 fix, this
-     * stores the schoolId (= the path segment under Schools/...) — NOT the
-     * numeric login code. Use [saveParentDbKey] for the login code.
+     * stores the schoolId (= the path segment under Schools/...).
      */
     suspend fun saveSchoolCode(schoolCode: String) {
         dataStore.edit { prefs ->
             prefs[KEY_SCHOOL_CODE] = schoolCode
-        }
-    }
-
-    /**
-     * Save the parent_db_key (login code, e.g. "10001"). Used for
-     * Users/Parents/{key} and Users/Admin/{key} RTDB paths.
-     */
-    suspend fun saveParentDbKey(parentDbKey: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_PARENT_DB_KEY] = parentDbKey
         }
     }
 

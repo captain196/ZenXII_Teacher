@@ -1,55 +1,9 @@
 package com.schoolsync.teacher.util
 
 /**
- * Application-wide constants: Firebase RTDB paths, API endpoints, etc.
+ * Application-wide constants: Firestore collection names + doc-id/key helpers.
  */
 object Constants {
-
-    /** Firebase Realtime Database path segments. */
-    object Firebase {
-        // Root nodes
-        const val SCHOOLS = "Schools"
-        const val TEACHERS = "Users/Teachers"
-        const val USERS_PARENTS = "Users/Parents"
-        const val SCHOOL_CODES_INDEX = "Indexes/School_codes"
-
-        // Under a school node
-        const val STUDENTS = "Students"
-        const val STUDENT_LIST = "Students/List"
-        const val ATTENDANCE = "Attendance"
-        const val TIMETABLE = "Time_table"
-        const val EXAMS = "Exams"
-        const val SUBJECT_ASSIGNMENTS = "Academic/Subject_Assignments"
-        const val RESULTS_MARKS = "Results/Marks"
-        const val NOTICES = "Communication/Notices"
-        const val MESSAGES_INBOX = "Communication/Messages/Inbox"
-        const val MESSAGES_CHAT = "Communication/Messages/Chat"
-        const val SOCIAL_STORIES = "Social/Stories"
-        const val SOCIAL_STORY_VIEWS = "Social/StoryViews"
-        const val SOCIAL_HIGHLIGHTS = "Social/Highlights"
-
-        // HR / Staff
-        const val STAFF_LEAVE_RECORDS = "HR/Staff_Leave/Records"
-        const val STAFF_LEAVE_BALANCE = "HR/Staff_Leave/Balance"
-
-        // Fees
-        const val CLASSES_FEES = "Accounts/Fees/Classes Fees"
-        const val PENDING_FEES = "Accounts/Pending_fees"
-        const val FEE_DEMANDS = "Fees/Demands"
-        const val FEE_DEFAULTERS = "Fees/Defaulters"
-        const val STUDENT_FEE_ITEMS = "Fees/Student_Fee_Items"
-
-        // Homework
-        const val HOMEWORK = "Homework"
-        const val HOMEWORK_STATUS = "HomeworkStatus"
-
-        // Red Flags
-        const val STUDENT_FLAGS = "StudentFlags"
-
-        // Gallery
-        const val GALLERY_ALBUMS = "Gallery/Albums"
-        const val GALLERY_MEDIA = "Gallery/Media"
-    }
 
     /** Firestore collection names */
     object Firestore {
@@ -152,14 +106,10 @@ object Constants {
         const val TEACHER_MARKS = "teacherMarks"
     }
 
-    /** RTDB URL */
-    const val FIREBASE_DATABASE_URL =
-        "https://graders-1c047-default-rtdb.asia-southeast1.firebasedatabase.app"
-
-    // ── RTDB key helpers ─────────────────────────────────────────────
-    // RTDB stores classes as "Class 8th/Section A". These ensure the
-    // prefix is always present regardless of what format the backend
-    // returns (raw "8th"/"A" or already-prefixed "Class 8th"/"Section A").
+    // ── Class/section key helpers ────────────────────────────────────
+    // The admin panel stores classes as "Class 8th" / "Section A". These
+    // ensure the prefix is always present regardless of what format the
+    // backend returns (raw "8th"/"A" or already-prefixed).
 
     /**
      * Ensure className is in canonical form: "8" → "Class 8th",

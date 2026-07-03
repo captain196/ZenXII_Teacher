@@ -9,7 +9,6 @@ import com.schoolsync.teacher.data.model.LeaveBalance as ModelLeaveBalance
 import com.schoolsync.teacher.data.model.LeaveRequest as ModelLeaveRequest
 import com.schoolsync.teacher.data.model.LeaveStatus as ModelLeaveStatus
 import com.schoolsync.teacher.data.model.firestore.LeaveApplicationDoc
-import com.schoolsync.teacher.data.repository.LeaveRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.LeaveFirestoreRepository
 import com.schoolsync.teacher.util.RoleHelper
@@ -95,7 +94,6 @@ sealed class LeaveEvent {
 
 @HiltViewModel
 class LeaveViewModel @Inject constructor(
-    private val leaveRepository: LeaveRepository,
     private val leaveFirestoreRepo: LeaveFirestoreRepository,
     private val teacherRepository: TeacherRepository,
     private val tokenManager: TokenManager
@@ -263,8 +261,8 @@ class LeaveViewModel @Inject constructor(
                 // legacy RTDB fallback (`leaveRepository.getLeaveBalance()`)
                 // was removed because admin no longer writes that path —
                 // calling it would surface stale or seeded data and violate
-                // the absolute NO-RTDB rule. `LeaveRepository` itself stays
-                // as orphaned code per the prior "dead code stays" decision.
+                // the absolute NO-RTDB rule. `LeaveRepository` (RTDB) was
+                // deleted outright in Phase 1 Logical Change 4A (2026-07-03).
                 //
                 // Apply-dropdown alignment: the dropdown should only offer
                 // the leave types this teacher has been allocated. Earlier

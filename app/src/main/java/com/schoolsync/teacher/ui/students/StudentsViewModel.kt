@@ -207,14 +207,15 @@ class StudentsViewModel @Inject constructor(
                                 )
                             }
                         } else {
-                            // No data in Firestore, fallback to RTDB
-                            loadStudentsFromRtdb()
+                            // Primary Firestore query returned nothing — retry via the
+                            // repository (also Firestore-only; RTDB fully removed).
+                            loadStudentsFallback()
                         }
                     },
                     onFailure = { firestoreError ->
-                        Log.e(TAG, "Firestore getStudentsByClass failed, falling back: ${firestoreError.message}")
-                        // Fallback: RTDB student data
-                        loadStudentsFromRtdb()
+                        Log.e(TAG, "Firestore getStudentsByClass failed, retrying via repository: ${firestoreError.message}")
+                        // Fallback: repository read (Firestore-only)
+                        loadStudentsFallback()
                     }
                 )
             } catch (e: Exception) {
@@ -223,7 +224,7 @@ class StudentsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadStudentsFromRtdb() {
+    private suspend fun loadStudentsFallback() {
         val state = _uiState.value
         studentRepository.getStudentsForClass(
             className = state.selectedClassName,

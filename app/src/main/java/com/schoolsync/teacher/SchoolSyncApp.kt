@@ -4,7 +4,6 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
-import com.google.firebase.database.FirebaseDatabase
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -12,7 +11,6 @@ class SchoolSyncApp : Application() {
     override fun onCreate() {
         super.onCreate()
         com.schoolsync.teacher.util.initDebugLog(this)
-        FirebaseDatabase.getInstance().setPersistenceEnabled(true)
         createNotificationChannel()
     }
 

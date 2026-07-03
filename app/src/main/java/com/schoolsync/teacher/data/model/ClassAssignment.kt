@@ -1,10 +1,8 @@
 package com.schoolsync.teacher.data.model
 
-import com.google.firebase.database.PropertyName
-
 /**
  * Represents a class/section/subject assignment for a teacher.
- * Source: Schools/{schoolCode}/{session}/Academic/Subject_Assignments/
+ * Built in-code from Firestore `subjectAssignments` docs (the only datastore).
  * Each entry maps a teacher to a class + section + subject.
  */
 data class ClassAssignment(
@@ -14,10 +12,9 @@ data class ClassAssignment(
     val className: String = "",
     val section: String = "",
     val subject: String = "",
-    @get:PropertyName("isClassTeacher") @set:PropertyName("isClassTeacher")
-    var classTeacher: Boolean = false
+    val classTeacher: Boolean = false
 ) {
-    /** No-arg constructor for Firebase deserialization */
+    /** No-arg constructor retained for callers that build an empty instance. */
     constructor() : this(assignmentId = "")
 
     /**

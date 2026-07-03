@@ -2,7 +2,6 @@ package com.schoolsync.teacher.data.repository
 
 import android.util.Log
 import com.schoolsync.teacher.data.firebase.FirebaseAuthManager
-import com.schoolsync.teacher.data.firebase.FirebaseService
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.LoginUser
@@ -14,13 +13,13 @@ import javax.inject.Singleton
 
 /**
  * Handles authentication via Firebase Auth directly (email/password).
- * No Node.js API dependency — reads profile and claims from Firebase.
+ * Firestore-only: reads profile + claims from Firebase Auth and Firestore.
+ * No RTDB dependency (removed in Phase 1 Logical Change 4B).
  */
 @Singleton
 class AuthRepository @Inject constructor(
     private val tokenManager: TokenManager,
     private val firebaseAuthManager: FirebaseAuthManager,
-    private val firebaseService: FirebaseService,
     private val firestoreService: FirestoreService
 ) {
     companion object { private const val TAG = "AuthRepository" }
@@ -30,9 +29,8 @@ class AuthRepository @Inject constructor(
      * On success:
      * 1. Signs in via Firebase Auth (synthetic email)
      * 2. Reads custom claims from ID token for role + school_id
-     * 3. Resolves Firebase school code from Indexes/School_codes
-     * 4. Reads teacher profile from RTDB
-     * 5. Saves profile to TokenManager
+     * 3. Reads teacher profile from Firestore (staff/{schoolId}_{userId})
+     * 4. Saves profile to TokenManager
      */
     suspend fun login(
         userId: String,
@@ -52,19 +50,10 @@ class AuthRepository @Inject constructor(
                 ?: claims["schoolId"] as? String
                 ?: return Result.failure(Exception("No school_id in claims"))
 
-            // 3. Resolve parent_db_key for Users/Admin & Users/Parents paths.
-            //    For new SCH_* schools this is the numeric login code (e.g. "10001").
-            //    For legacy "Demo" school it's also the login code (e.g. "10004").
-            //    Stored at Indexes/School_codes/{schoolId}.
-            val parentDbKey = resolveParentDbKey(schoolId) ?: schoolId
-            Log.d(TAG, "login: schoolId=$schoolId parentDbKey=$parentDbKey")
-
-            // 4. Read teacher profile — Firestore-first per migration contract.
-            //    Firestore: staff/{schoolId}_{userId}
-            //    RTDB fallback: Users/Admin/{parentDbKey}/{userId}
-            //    (The previous Schools/{schoolCode}/Teachers/{userId} path is
-            //     never written by the admin panel — it was always missing.)
-            val staffData = readStaffProfile(schoolId, parentDbKey, userId)
+            // 3. Read teacher profile from Firestore: staff/{schoolId}_{userId}.
+            //    Firestore is the only datastore — the legacy RTDB profile
+            //    fallback was removed in Phase 1 Logical Change 4B.
+            val staffData = readStaffProfile(schoolId, userId)
 
             // Belt-and-braces: explicit status gate. Firebase Auth's
             // `disabled=true` covers the normal deactivation path, but if
@@ -92,17 +81,13 @@ class AuthRepository @Inject constructor(
                 department = (staffData["Department"] ?: staffData["department"]) as? String,
                 classesAssigned = extractStringList(staffData, "ClassesAssigned", "classesAssigned"),
                 subjects = extractStringList(staffData, "teaching_subjects", "Subjects", "subjects"),
-                parentDbKey = parentDbKey,
-                // schoolCode is the school root key (= schoolId for new schools,
-                // = "Demo" for legacy). Used by every Schools/{schoolCode}/... path
-                // in the rest of the app. NOT the numeric login code anymore.
+                // schoolCode = schoolId — the canonical school key used across the app.
                 schoolCode = schoolId
             )
 
             // 5. Save profile + identifiers to TokenManager
             tokenManager.saveProfile(loginUser)
             tokenManager.saveSchoolCode(schoolId)        // = schoolId now
-            tokenManager.saveParentDbKey(parentDbKey)    // for Users/Parents/Admin paths
             tokenManager.saveDeviceId(deviceId)
 
             // 6. Seed active academic session from Firestore schools/{schoolId}.currentSession.
@@ -154,10 +139,9 @@ class AuthRepository @Inject constructor(
      */
     private suspend fun readStaffProfile(
         schoolId: String,
-        parentDbKey: String,
         userId: String
     ): Map<String, Any?> {
-        // Firestore first: staff/{schoolId}_{userId}
+        // Firestore is the only datastore: staff/{schoolId}_{userId}
         try {
             val doc = firestoreService.getDocumentMap(
                 Constants.Firestore.STAFF,
@@ -168,39 +152,11 @@ class AuthRepository @Inject constructor(
                 return doc
             }
         } catch (e: Exception) {
-            Log.w(TAG, "readStaffProfile: Firestore lookup failed, falling back to RTDB", e)
+            Log.w(TAG, "readStaffProfile: Firestore lookup failed for staff/${schoolId}_$userId", e)
         }
 
-        // RTDB fallback: Users/Admin/{parentDbKey}/{userId}
-        try {
-            val rtdbPath = "Users/Admin/$parentDbKey/$userId"
-            val snap = firebaseService.readSnapshot(rtdbPath)
-            val map = snap.value as? Map<*, *>
-            if (map != null) {
-                Log.d(TAG, "readStaffProfile: hit RTDB $rtdbPath")
-                @Suppress("UNCHECKED_CAST")
-                return map as Map<String, Any?>
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "readStaffProfile: RTDB lookup failed", e)
-        }
-
-        Log.w(TAG, "readStaffProfile: no profile found for $userId in Firestore OR RTDB")
+        Log.w(TAG, "readStaffProfile: no Firestore profile found for $userId")
         return emptyMap()
-    }
-
-    /**
-     * Resolve the parent_db_key (login code, e.g. "10001") for a school.
-     * Stored at Indexes/School_codes/{schoolId}.
-     */
-    private suspend fun resolveParentDbKey(schoolId: String): String? {
-        return try {
-            val path = "${Constants.Firebase.SCHOOL_CODES_INDEX}/$schoolId"
-            firebaseService.readValue<String>(path)
-        } catch (e: Exception) {
-            Log.w(TAG, "resolveParentDbKey failed for $schoolId", e)
-            null
-        }
     }
 
     /**

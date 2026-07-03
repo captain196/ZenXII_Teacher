@@ -1,10 +1,7 @@
 package com.schoolsync.teacher.data.model
 
-import com.google.firebase.database.ServerValue
-
 /**
  * Leave request model for teachers.
- * Path: Schools/{schoolCode}/HR/Staff_Leave/Records/{teacherId}/
  */
 data class LeaveRequest(
     val leaveId: String = "",
@@ -21,22 +18,8 @@ data class LeaveRequest(
     val remarks: String = "",
     val numberOfDays: Int = 0
 ) {
-    /** No-arg constructor for Firebase deserialization */
+    /** No-arg constructor retained for callers that build an empty instance. */
     constructor() : this(leaveId = "")
-
-    fun toFirebaseMap(): Map<String, Any> {
-        return mapOf(
-            "teacherId" to teacherId,
-            "teacherName" to teacherName,
-            "leaveType" to leaveType,
-            "startDate" to startDate,
-            "endDate" to endDate,
-            "reason" to reason,
-            "status" to status.value,
-            "appliedOn" to ServerValue.TIMESTAMP,
-            "numberOfDays" to numberOfDays
-        )
-    }
 }
 
 enum class LeaveStatus(val value: String, val label: String) {

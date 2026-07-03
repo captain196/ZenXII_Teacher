@@ -2,12 +2,10 @@ package com.schoolsync.teacher.di
 
 import android.content.Context
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
 import com.google.gson.Gson
 import com.schoolsync.teacher.BuildConfig
 import com.google.firebase.firestore.FirebaseFirestore
 import com.schoolsync.teacher.data.firebase.FirebaseAuthManager
-import com.schoolsync.teacher.data.firebase.FirebaseService
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.remote.AuthInterceptor
@@ -15,13 +13,10 @@ import com.schoolsync.teacher.data.remote.ApiService
 import com.schoolsync.teacher.data.repository.AuthRepository
 import com.schoolsync.teacher.data.repository.FeeRepository
 import com.schoolsync.teacher.data.repository.HomeworkTeacherRepository
-import com.schoolsync.teacher.data.repository.LeaveRepository
 import com.schoolsync.teacher.data.repository.RedFlagRepository
-import com.schoolsync.teacher.data.repository.DataRepository
 import com.schoolsync.teacher.data.repository.StudentRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.AttendanceFirestoreRepository
-import com.schoolsync.teacher.data.repository.firestore.ChatRtdbRepository
 import com.schoolsync.teacher.data.repository.firestore.CommunicationFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.ExamFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.FeeFirestoreRepository
@@ -38,7 +33,6 @@ import com.schoolsync.teacher.data.repository.firestore.LibraryFirestoreReposito
 import com.schoolsync.teacher.data.repository.firestore.HRFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.InventoryFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.AnalyticsFirestoreRepository
-import com.schoolsync.teacher.data.local.OfflineQueueManager
 import com.schoolsync.teacher.util.NetworkMonitor
 import dagger.Module
 import dagger.Provides
@@ -62,21 +56,12 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideFirebaseDatabase(): FirebaseDatabase = FirebaseDatabase.getInstance()
-
-    @Provides
-    @Singleton
     fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
 
     @Provides
     @Singleton
     fun provideTokenManager(@ApplicationContext context: Context): TokenManager =
         TokenManager(context)
-
-    @Provides
-    @Singleton
-    fun provideFirebaseService(database: FirebaseDatabase): FirebaseService =
-        FirebaseService(database)
 
     @Provides
     @Singleton
@@ -136,17 +121,8 @@ object AppModule {
     fun provideAuthRepository(
         tokenManager: TokenManager,
         firebaseAuthManager: FirebaseAuthManager,
-        firebaseService: FirebaseService,
         firestoreService: FirestoreService
-    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firebaseService, firestoreService)
-
-    @Provides
-    @Singleton
-    fun provideDataRepository(
-        firestoreService: FirestoreService,
-        firebaseService: FirebaseService,
-        tokenManager: TokenManager
-    ): DataRepository = DataRepository(firestoreService, firebaseService, tokenManager)
+    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firestoreService)
 
     @Provides
     @Singleton
@@ -158,21 +134,13 @@ object AppModule {
     @Provides
     @Singleton
     fun provideTeacherRepository(
-        firebaseService: FirebaseService,
         firestoreService: FirestoreService,
         tokenManager: TokenManager
-    ): TeacherRepository = TeacherRepository(firebaseService, firestoreService, tokenManager)
+    ): TeacherRepository = TeacherRepository(firestoreService, tokenManager)
 
     // MessagesRepository binding removed — Direct Messaging retired (Package 2A).
     // The Messages screen now renders a Coming Soon Composable that does not
     // instantiate any ViewModel or repository.
-
-    @Provides
-    @Singleton
-    fun provideLeaveRepository(
-        firebaseService: FirebaseService,
-        tokenManager: TokenManager
-    ): LeaveRepository = LeaveRepository(firebaseService, tokenManager)
 
     @Provides
     @Singleton
@@ -284,26 +252,15 @@ object AppModule {
     ): CommunicationFirestoreRepository =
         CommunicationFirestoreRepository(firestoreService, tokenManager)
 
-    @Provides
-    @Singleton
-    fun provideChatRtdbRepository(
-        firestoreService: FirestoreService,
-        tokenManager: TokenManager
-    ): ChatRtdbRepository =
-        // Phase 5 — name retained for DI back-compat; backing store
-        // moved to Firestore (notifBadges / presence collections).
-        ChatRtdbRepository(firestoreService, tokenManager)
-
     // ── Phase 7–12 Firestore Repositories ────────────────────────────────
 
     @Provides
     @Singleton
     fun provideTransportFirestoreRepository(
         firestoreService: FirestoreService,
-        firebaseService: FirebaseService,
         tokenManager: TokenManager
     ): TransportFirestoreRepository =
-        TransportFirestoreRepository(firestoreService, firebaseService, tokenManager)
+        TransportFirestoreRepository(firestoreService, tokenManager)
 
     @Provides
     @Singleton
@@ -352,12 +309,4 @@ object AppModule {
     fun provideNetworkMonitor(
         @ApplicationContext context: Context
     ): NetworkMonitor = NetworkMonitor(context)
-
-    @Provides
-    @Singleton
-    fun provideOfflineQueueManager(
-        @ApplicationContext context: Context,
-        firebaseService: FirebaseService,
-        gson: Gson
-    ): OfflineQueueManager = OfflineQueueManager(context, firebaseService, gson)
 }

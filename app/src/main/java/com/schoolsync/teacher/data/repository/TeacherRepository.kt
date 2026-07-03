@@ -2,11 +2,9 @@ package com.schoolsync.teacher.data.repository
 
 import android.util.Log
 import com.google.firebase.firestore.Query
-import com.schoolsync.teacher.data.firebase.FirebaseService
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.ClassAssignment
-import com.schoolsync.teacher.data.model.User
 import com.schoolsync.teacher.data.model.firestore.SubjectAssignmentDoc
 import com.schoolsync.teacher.util.Constants
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +18,6 @@ import javax.inject.Singleton
  */
 @Singleton
 class TeacherRepository @Inject constructor(
-    private val firebaseService: FirebaseService,
     private val firestoreService: FirestoreService,
     private val tokenManager: TokenManager
 ) {
@@ -28,45 +25,9 @@ class TeacherRepository @Inject constructor(
         private const val TAG = "TeacherRepo"
     }
     /**
-     * Fetch teacher profile from Firebase.
-     * Path: Users/Teachers/{schoolCode}/{teacherId}/
-     */
-    suspend fun getTeacherProfile(): Result<User> {
-        return try {
-            val schoolCode = tokenManager.schoolCode.firstOrNull()
-                ?: return Result.failure(Exception("School code not available"))
-            val teacherId = tokenManager.userId.firstOrNull()
-                ?: return Result.failure(Exception("User ID not available"))
-
-            val path = "${Constants.Firebase.TEACHERS}/$schoolCode/$teacherId"
-            val user = firebaseService.readValue<User>(path)
-                ?: return Result.failure(Exception("Teacher profile not found"))
-
-            Result.success(user)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Listen to teacher profile changes in real-time.
-     */
-    fun observeTeacherProfile(): Flow<User?> {
-        return kotlinx.coroutines.flow.flow {
-            val schoolCode = tokenManager.schoolCode.firstOrNull() ?: return@flow
-            val teacherId = tokenManager.userId.firstOrNull() ?: return@flow
-            val path = "${Constants.Firebase.TEACHERS}/$schoolCode/$teacherId"
-
-            firebaseService.listen(path).collect { snapshot ->
-                emit(snapshot.getValue(User::class.java))
-            }
-        }
-    }
-
-    /**
-     * Fetch classes assigned to this teacher.
-     * Phase 5: Reads from Firestore subjectAssignments collection (single source of truth),
-     *          falls back to legacy RTDB Academic/Subject_Assignments if Firestore is empty.
+     * Fetch classes assigned to this teacher from the Firestore
+     * subjectAssignments collection — the only datastore. The legacy RTDB
+     * Academic/Subject_Assignments fallback was removed in Phase 1 4B.
      */
     suspend fun getAssignedClasses(): Result<List<ClassAssignment>> {
         return try {
@@ -165,41 +126,15 @@ class TeacherRepository @Inject constructor(
                     Log.d(TAG, "getAssignedClasses: Loaded ${assignments.size} from Firestore (after class-wide expand)")
                     return Result.success(assignments)
                 }
-                Log.d(TAG, "getAssignedClasses: Firestore empty, falling back to RTDB")
+                Log.d(TAG, "getAssignedClasses: no Firestore subjectAssignments for this teacher")
             } catch (e: Exception) {
-                Log.w(TAG, "getAssignedClasses: Firestore failed, falling back to RTDB", e)
+                Log.w(TAG, "getAssignedClasses: Firestore subjectAssignments query failed", e)
             }
 
-            // ── 2. RTDB fallback (legacy path) ──
-            val schoolCode = tokenManager.schoolCode.firstOrNull()
-                ?: return Result.failure(Exception("School code not available"))
-
-            val path = "${Constants.Firebase.SCHOOLS}/$schoolCode/$session/${Constants.Firebase.SUBJECT_ASSIGNMENTS}"
-            val snapshot = firebaseService.readSnapshot(path)
-
-            val assignments = mutableListOf<ClassAssignment>()
-            for (classChild in snapshot.children) {
-                val classKey = classChild.key ?: continue
-                for (subjectChild in classChild.children) {
-                    val subjectCode = subjectChild.key ?: continue
-                    val data = subjectChild.value as? Map<*, *> ?: continue
-                    val tId = (data["teacher_id"] as? String) ?: ""
-                    if (tId != teacherId) continue
-                    assignments.add(
-                        ClassAssignment(
-                            assignmentId = "${classKey}_${subjectCode}",
-                            teacherId = tId,
-                            teacherName = (data["teacher_name"] as? String) ?: "",
-                            className = Constants.classKey(classKey),
-                            section = "",  // RTDB legacy is class-wide
-                            subject = (data["name"] as? String) ?: subjectCode,
-                            classTeacher = false
-                        )
-                    )
-                }
-            }
-            Log.d(TAG, "getAssignedClasses: Loaded ${assignments.size} from RTDB fallback")
-            Result.success(assignments)
+            // Firestore is the only datastore — an empty result means the teacher
+            // has no assignments this session. The legacy RTDB Subject_Assignments
+            // fallback was removed in Phase 1 Logical Change 4B.
+            Result.success(emptyList())
         } catch (e: Exception) {
             Log.e(TAG, "getAssignedClasses failed", e)
             Result.failure(e)

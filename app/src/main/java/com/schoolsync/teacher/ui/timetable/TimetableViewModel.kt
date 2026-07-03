@@ -68,7 +68,7 @@ class TimetableViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                // Get assigned classes from TeacherRepository (still RTDB for assignments)
+                // Get assigned classes from TeacherRepository (Firestore-only)
                 val assignmentsResult = teacherRepository.getAssignedClasses()
                 val classSections = assignmentsResult.getOrNull()
                     ?.map { it.className to it.section }?.distinct()

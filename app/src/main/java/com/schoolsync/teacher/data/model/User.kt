@@ -1,8 +1,7 @@
 package com.schoolsync.teacher.data.model
 
 /**
- * Teacher profile model, maps to Firebase RTDB at:
- * Users/Teachers/{schoolCode}/{teacherId}/
+ * Teacher profile model (in-memory; hydrated from the Firestore staff doc).
  */
 data class User(
     val userId: String = "",

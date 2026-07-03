@@ -2,7 +2,6 @@ package com.schoolsync.teacher.data.repository.firestore
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
-import com.schoolsync.teacher.data.firebase.FirebaseService
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.RouteDoc
@@ -10,33 +9,28 @@ import com.schoolsync.teacher.data.model.firestore.SosAlertDoc
 import com.schoolsync.teacher.data.model.firestore.StudentRouteDoc
 import com.schoolsync.teacher.data.model.firestore.VehicleDoc
 import com.schoolsync.teacher.util.Constants
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Repository for transport-related data from the teacher side.
- * Supports reading routes, vehicles, live GPS tracking, SOS alerts, and triggering SOS.
+ * Supports reading routes, vehicles, SOS alerts, and triggering SOS.
  *
- * Collections used (Firestore):
+ * Collections used (Firestore — the only datastore):
  * - studentRoutes: per-student route assignment
  * - routes: route definitions with stops
  * - vehicles: vehicle metadata
  * - sosAlerts: emergency alerts from transport staff
  *
- * RTDB paths used:
- * - /VehicleLive/{schoolId}/{vehicleId}: real-time GPS location of vehicles
- * - /SOSAlerts/{schoolId}/{alertId}: instant SOS delivery for real-time listeners
+ * Phase 1 Logical Change 4A (2026-07-03): the legacy RTDB touchpoints
+ * (observeVehicleLive → /VehicleLive, and the SOSAlerts RTDB mirror in
+ * triggerSos) were removed — both were dead code and violated the absolute
+ * "RTDB does not exist" rule. SOS now persists to Firestore only.
  */
 @Singleton
 class TransportFirestoreRepository @Inject constructor(
     private val firestoreService: FirestoreService,
-    private val firebaseService: FirebaseService,
     private val tokenManager: TokenManager
 ) {
 
@@ -132,33 +126,6 @@ class TransportFirestoreRepository @Inject constructor(
     }
 
     /**
-     * Observe real-time GPS location of a vehicle from RTDB.
-     * Path: /VehicleLive/{schoolId}/{vehicleId}
-     * Emits a Map containing lat, lng, speed, heading, updatedAt, etc.
-     * Emits null when no live data is available.
-     */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeVehicleLive(vehicleId: String): Flow<Map<String, Any?>?> {
-        return tokenManager.schoolCode
-            .map { it?.takeIf { code -> code.isNotBlank() } }
-            .flatMapLatest { schoolCode ->
-                if (schoolCode == null) {
-                    flowOf(null)
-                } else {
-                    val path = "VehicleLive/$schoolCode/$vehicleId"
-                    firebaseService.listen(path).map { snapshot ->
-                        @Suppress("UNCHECKED_CAST")
-                        if (snapshot.exists()) {
-                            snapshot.value as? Map<String, Any?>
-                        } else {
-                            null
-                        }
-                    }
-                }
-            }
-    }
-
-    /**
      * Fetch active SOS alerts for the current school, ordered by most recent first.
      */
     suspend fun getSosAlerts(): Result<List<SosAlertDoc>> {
@@ -181,7 +148,7 @@ class TransportFirestoreRepository @Inject constructor(
 
     /**
      * Trigger an SOS alert from the teacher/transport staff side.
-     * Creates a Firestore document for persistence and writes to RTDB for instant delivery.
+     * Persists a Firestore document (the only datastore).
      *
      * @return The generated alert document ID.
      */
@@ -213,28 +180,11 @@ class TransportFirestoreRepository @Inject constructor(
         )
 
         return try {
-            // Write to Firestore for persistence
             firestoreService.setDocument(
                 Constants.Firestore.SOS_ALERTS,
                 docId,
                 data
             )
-
-            // Write to RTDB for instant real-time delivery
-            val rtdbData = mapOf(
-                "schoolId" to schoolCode,
-                "vehicleId" to vehicleId,
-                "routeId" to routeId,
-                "lat" to lat,
-                "lng" to lng,
-                "message" to message,
-                "triggeredBy" to teacherId,
-                "triggeredByName" to teacherName,
-                "active" to true,
-                "createdAt" to System.currentTimeMillis()
-            )
-            firebaseService.setValue("SOSAlerts/$schoolCode/$docId", rtdbData)
-
             Result.success(docId)
         } catch (e: Exception) {
             Result.failure(e)

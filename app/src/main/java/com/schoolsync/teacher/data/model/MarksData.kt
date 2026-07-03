@@ -1,10 +1,7 @@
 package com.schoolsync.teacher.data.model
 
-import com.google.firebase.database.ServerValue
-
 /**
  * Marks entry for a student in a specific exam/subject.
- * Path: Schools/{schoolCode}/{session}/Results/Marks/{examId}/{class}/{section}/{subject}/{studentId}
  * Fields: Theory, Practical, Total, Absent, SavedAt
  */
 data class MarksData(
@@ -14,21 +11,8 @@ data class MarksData(
     val Absent: Boolean = false,
     val SavedAt: Any? = null
 ) {
-    /** No-arg constructor for Firebase deserialization */
+    /** No-arg constructor retained for callers that build an empty instance. */
     constructor() : this(Theory = 0.0)
-
-    /**
-     * Convert to a Firebase-writable map with server timestamp.
-     */
-    fun toFirebaseMap(): Map<String, Any> {
-        return mapOf(
-            "Theory" to Theory,
-            "Practical" to Practical,
-            "Total" to Total,
-            "Absent" to Absent,
-            "SavedAt" to ServerValue.TIMESTAMP
-        )
-    }
 
     companion object {
         /**

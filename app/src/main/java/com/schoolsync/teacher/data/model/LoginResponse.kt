@@ -42,8 +42,6 @@ data class LoginUser(
     val classesAssigned: List<String>?,
     @SerializedName("subjects")
     val subjects: List<String>?,
-    @SerializedName("parentDbKey")
-    val parentDbKey: String?,
     @SerializedName("schoolCode")
     val schoolCode: String?
 )
