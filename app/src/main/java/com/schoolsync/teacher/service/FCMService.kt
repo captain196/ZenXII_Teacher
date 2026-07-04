@@ -68,17 +68,22 @@ class FCMService : FirebaseMessagingService() {
         super.onMessageReceived(remoteMessage)
         Log.d(TAG, "Message received from: ${remoteMessage.from}")
 
-        // Handle data payload
+        // If the message carries a notification block, show exactly that and
+        // stop — otherwise running the data-type switch as well double-posts the
+        // same push. Data-only messages fall through to handleDataPayload.
+        val notification = remoteMessage.notification
+        if (notification != null) {
+            showNotification(
+                notification.title ?: "ZenXii",
+                notification.body ?: "",
+                remoteMessage.data
+            )
+            return
+        }
+
         if (remoteMessage.data.isNotEmpty()) {
             Log.d(TAG, "Data payload: ${remoteMessage.data}")
             handleDataPayload(remoteMessage.data)
-        }
-
-        // Handle notification payload
-        remoteMessage.notification?.let { notification ->
-            val title = notification.title ?: "ZenXii"
-            val body = notification.body ?: ""
-            showNotification(title, body, remoteMessage.data)
         }
     }
 

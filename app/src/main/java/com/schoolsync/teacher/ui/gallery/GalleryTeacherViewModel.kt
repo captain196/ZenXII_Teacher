@@ -31,7 +31,11 @@ data class GalleryUiState(
     val isCreatingAlbum: Boolean = false,
     val showCreateAlbumDialog: Boolean = false,
     val showUploadMediaDialog: Boolean = false,
-    val error: String? = null
+    /** Set when the ALBUMS load fails (network / permission / index) — drives a
+     *  distinct error+retry state so a failure isn't masked as "no albums yet". */
+    val albumsError: String? = null,
+    /** Set when the MEDIA load for the open album fails — same rationale. */
+    val mediaError: String? = null
 )
 
 sealed class GalleryEvent {
@@ -61,25 +65,25 @@ class GalleryTeacherViewModel @Inject constructor(
 
     fun loadAlbums() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingAlbums = true, error = null) }
+            _uiState.update { it.copy(isLoadingAlbums = true, albumsError = null) }
             try {
                 galleryRepository.getAlbums().fold(
                     onSuccess = { albums ->
                         Log.d(TAG, "Loaded ${albums.size} albums")
                         _uiState.update {
-                            it.copy(albums = albums, isLoadingAlbums = false)
+                            it.copy(albums = albums, isLoadingAlbums = false, albumsError = null)
                         }
                     },
                     onFailure = { e ->
                         Log.e(TAG, "Failed to load albums: ${e.message}", e)
                         _uiState.update {
-                            it.copy(isLoadingAlbums = false, error = e.message)
+                            it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums")
                         }
                     }
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load albums", e)
-                _uiState.update { it.copy(isLoadingAlbums = false, error = e.message) }
+                _uiState.update { it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums") }
             }
         }
     }
@@ -96,15 +100,15 @@ class GalleryTeacherViewModel @Inject constructor(
                 selectAlbum(album)
                 return@launch
             }
-            _uiState.update { it.copy(isLoadingAlbums = true, error = null) }
+            _uiState.update { it.copy(isLoadingAlbums = true, albumsError = null) }
             galleryRepository.getAlbums().fold(
                 onSuccess = { albums ->
-                    _uiState.update { it.copy(albums = albums, isLoadingAlbums = false) }
+                    _uiState.update { it.copy(albums = albums, isLoadingAlbums = false, albumsError = null) }
                     albums.firstOrNull { it.albumId == albumId }?.let { selectAlbum(it) }
                 },
                 onFailure = { e ->
                     Log.e(TAG, "openAlbumById failed: ${e.message}", e)
-                    _uiState.update { it.copy(isLoadingAlbums = false, error = e.message) }
+                    _uiState.update { it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums") }
                 }
             )
         }
@@ -119,21 +123,21 @@ class GalleryTeacherViewModel @Inject constructor(
 
     private fun loadMedia(albumId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingMedia = true) }
+            _uiState.update { it.copy(isLoadingMedia = true, mediaError = null) }
             try {
                 galleryRepository.getAlbumMedia(albumId).fold(
                     onSuccess = { media ->
                         Log.d(TAG, "Loaded ${media.size} media for album $albumId")
-                        _uiState.update { it.copy(media = media, isLoadingMedia = false) }
+                        _uiState.update { it.copy(media = media, isLoadingMedia = false, mediaError = null) }
                     },
                     onFailure = { e ->
                         Log.e(TAG, "Failed to load media: ${e.message}", e)
-                        _uiState.update { it.copy(isLoadingMedia = false, error = e.message) }
+                        _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: "Couldn't load photos") }
                     }
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load media", e)
-                _uiState.update { it.copy(isLoadingMedia = false, error = e.message) }
+                _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: "Couldn't load photos") }
             }
         }
     }
@@ -222,7 +226,21 @@ class GalleryTeacherViewModel @Inject constructor(
                 )
                 Log.d(TAG, "uploadMediaFile: storage upload OK")
 
-                galleryRepository.uploadMedia(album.albumId, upload.downloadUrl, declaredType, caption).fold(
+                // For videos, generate + upload a poster frame and read the
+                // duration so the Parent app / admin gallery don't show a blank
+                // video tile (cross-system thumbnail contract). Best-effort.
+                val poster = if (declaredType == "video") {
+                    GalleryMediaUploader.uploadVideoPoster(context, uri, schoolId, album.albumId)
+                } else null
+
+                galleryRepository.uploadMedia(
+                    albumId   = album.albumId,
+                    url       = upload.downloadUrl,
+                    type      = declaredType,
+                    caption   = caption,
+                    thumbnail = poster?.thumbnailUrl.orEmpty(),
+                    duration  = poster?.duration.orEmpty()
+                ).fold(
                     onSuccess = { mediaId ->
                         Log.d(TAG, "uploadMediaFile: firestore write OK mediaId=$mediaId")
                         _uiState.update { it.copy(isUploading = false, showUploadMediaDialog = false) }
@@ -232,10 +250,11 @@ class GalleryTeacherViewModel @Inject constructor(
                     },
                     onFailure = { e ->
                         Log.e(TAG, "uploadMediaFile: firestore write failed: ${e.message}", e)
-                        // Roll back the orphaned Storage object so a failed
-                        // Firestore write doesn't leave a billed, unreferenced file.
+                        // Roll back the orphaned Storage object(s) so a failed
+                        // Firestore write doesn't leave billed, unreferenced files.
                         val deleted = GalleryMediaUploader.deleteByPath(upload.storagePath)
                         if (!deleted) Log.w(TAG, "uploadMediaFile: orphan rollback failed for uploaded object")
+                        poster?.storagePath?.let { GalleryMediaUploader.deleteByPath(it) }
                         _uiState.update { it.copy(isUploading = false) }
                         _events.emit(GalleryEvent.Error(e.message ?: "Failed to save media"))
                     }
@@ -249,6 +268,14 @@ class GalleryTeacherViewModel @Inject constructor(
     }
 
     fun clearError() {
-        _uiState.update { it.copy(error = null) }
+        _uiState.update { it.copy(albumsError = null, mediaError = null) }
+    }
+
+    /** Retry the albums load after a failure (from the inline error state). */
+    fun retryAlbums() = loadAlbums()
+
+    /** Retry the current album's media load after a failure. */
+    fun retryMedia() {
+        _uiState.value.selectedAlbum?.let { loadMedia(it.albumId) }
     }
 }

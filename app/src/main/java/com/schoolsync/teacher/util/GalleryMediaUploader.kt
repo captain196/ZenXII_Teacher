@@ -1,9 +1,12 @@
 package com.schoolsync.teacher.util
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
+import java.io.ByteArrayOutputStream
 
 /**
  * Uploads gallery media (image or video) to Firebase Cloud Storage and
@@ -80,6 +83,61 @@ object GalleryMediaUploader {
         val ref = FirebaseStorage.getInstance().reference.child(path)
         ref.putFile(uri).await()
         return UploadResult(ref.downloadUrl.await().toString(), path)
+    }
+
+    /** Poster frame + duration for an uploaded video. */
+    data class PosterResult(val thumbnailUrl: String, val duration: String, val storagePath: String?)
+
+    /**
+     * Generate a poster frame (~1s in) + duration label for a video and upload
+     * the poster to Storage. Writing `thumbnail`/`duration` into the galleryMedia
+     * doc is a CROSS-SYSTEM contract — without it the Parent app and admin gallery
+     * show a blank tile for every teacher-uploaded video. Best-effort: returns
+     * whatever it could produce (poster may be blank if extraction fails), never
+     * throws, so a poster hiccup can't fail the upload.
+     */
+    suspend fun uploadVideoPoster(
+        context: Context,
+        uri: Uri,
+        schoolId: String,
+        albumId: String
+    ): PosterResult {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, uri)
+            val durationMs = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            val durationLabel = formatDuration(durationMs)
+
+            val frame: Bitmap? = retriever.getFrameAtTime(
+                1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+            ) ?: retriever.frameAtTime
+            if (frame == null) return PosterResult("", durationLabel, null)
+
+            val baos = ByteArrayOutputStream()
+            frame.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+            val bytes = baos.toByteArray()
+
+            val path = "galleryMedia/${schoolId}/${albumId}/thumb_${System.currentTimeMillis()}.jpg"
+            val ref = FirebaseStorage.getInstance().reference.child(path)
+            ref.putBytes(bytes).await()
+            val url = ref.downloadUrl.await().toString()
+            return PosterResult(url, durationLabel, path)
+        } catch (_: Exception) {
+            return PosterResult("", "", null)
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
+    }
+
+    /** milliseconds → "m:ss" (e.g. 95000 → "1:35"). Blank when unknown. */
+    private fun formatDuration(ms: Long): String {
+        if (ms <= 0L) return ""
+        val totalSec = (ms / 1000L).toInt()
+        val m = totalSec / 60
+        val s = totalSec % 60
+        return "%d:%02d".format(m, s)
     }
 
     /**

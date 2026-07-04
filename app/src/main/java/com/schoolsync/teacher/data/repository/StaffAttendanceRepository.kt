@@ -103,6 +103,8 @@ class StaffAttendanceRepository @Inject constructor(
                 HistoryDay(
                     date = m["date"] as? String ?: return@mapNotNull null,
                     status = m["status"] as? String ?: "V",
+                    checkInAt = m["checkInAt"] as? String,
+                    checkOutAt = m["checkOutAt"] as? String,
                 )
             },
         )
@@ -183,6 +185,8 @@ data class MonthSummary(
 data class HistoryDay(
     val date: String,
     val status: String,
+    val checkInAt: String? = null,
+    val checkOutAt: String? = null,
 )
 
 // ── Typed errors (network / auth / timeout / server validation) ───

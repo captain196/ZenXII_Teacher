@@ -103,7 +103,11 @@ data class DashboardUiState(
     /** Substitute info for today — shows if someone is covering this teacher's classes */
     val substituteInfo: String? = null,
     /** Upcoming school events (soonest first) for the dashboard events rail. */
-    val upcomingEvents: List<com.schoolsync.teacher.data.model.firestore.EventDoc> = emptyList()
+    val upcomingEvents: List<com.schoolsync.teacher.data.model.firestore.EventDoc> = emptyList(),
+    /** True until the first events fetch completes — drives the events-rail
+     *  shimmer. Events load in a SEPARATE un-awaited coroutine, so they arrive
+     *  after the main dashboard `isLoading` flips; this flag covers that gap. */
+    val eventsLoading: Boolean = true
 )
 
 @HiltViewModel
@@ -479,7 +483,7 @@ class DashboardViewModel @Inject constructor(
                 }
                 .sortedBy { it.startDate }
                 .take(8)
-            _uiState.value = _uiState.value.copy(upcomingEvents = events)
+            _uiState.value = _uiState.value.copy(upcomingEvents = events, eventsLoading = false)
         }
     }
 }

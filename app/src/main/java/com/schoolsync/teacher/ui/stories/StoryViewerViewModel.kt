@@ -12,9 +12,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -80,6 +82,11 @@ class StoryViewerViewModel @Inject constructor(
         emit(myId to keys)
     }
 
+    /** True until the first grouped snapshot arrives — drives the dashboard
+     *  stories shimmer so the ring row fades in instead of popping. */
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     val groups: StateFlow<List<StoryGroup>> =
         combine(storyRepo.observeActiveStories(), seenIds, audienceContext) { docs, seen, ctx ->
             val (myId, myKeys) = ctx
@@ -89,11 +96,13 @@ class StoryViewerViewModel @Inject constructor(
                 d.effectiveAuthorId == myId                      // my own post
             }
             groupByAuthor(visible, seen)
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = emptyList()
-        )
+        }
+            .onEach { _isLoading.value = false }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = emptyList()
+            )
 
     /**
      * Mark a story seen. Updates the ring's seen-state immediately, and

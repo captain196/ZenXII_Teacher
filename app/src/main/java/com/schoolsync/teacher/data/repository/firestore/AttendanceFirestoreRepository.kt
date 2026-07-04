@@ -54,6 +54,15 @@ class AttendanceFirestoreRepository @Inject constructor(
             for ((studentId, statusPair) in studentStatuses) {
                 val (status, studentName) = statusPair
                 val docId = "${schoolCode}_${date}_${studentId}"
+                // Prior status for this student+date — used to notify the parent
+                // ONLY when the status actually changes to A/T, so re-saving the
+                // same attendance (or correcting an unrelated field) never
+                // re-sends a duplicate "Absent/Late" push.
+                val prevStatus = try {
+                    firestoreService.getDocumentAs<AttendanceDoc>(
+                        Constants.Firestore.ATTENDANCE, docId
+                    )?.status
+                } catch (_: Exception) { null }
                 val data = hashMapOf(
                     "schoolId" to schoolCode,
                     "session" to session,
@@ -76,11 +85,10 @@ class AttendanceFirestoreRepository @Inject constructor(
                 )
                 count++
 
-                // Phase 10: fire parent push for A/T marks via Firestore
-                // pushRequests collection (cloud-hosted, no admin IP needed).
-                // Rules now allow authenticated writes. Admin processes
-                // pending requests on dashboard_stats load.
-                if (status == "A" || status == "T") {
+                // Fire parent push for A/T marks via the Firestore pushRequests
+                // collection (admin poller dispatches). Only on a real status
+                // change (see prevStatus above) to avoid duplicate alerts.
+                if ((status == "A" || status == "T") && status != prevStatus) {
                     try {
                         val parts = sectionKey.split("/")
                         val cls = parts.getOrNull(0)?.trim() ?: ""

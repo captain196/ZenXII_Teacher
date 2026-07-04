@@ -201,7 +201,9 @@ class GalleryFirestoreRepository @Inject constructor(
         albumId: String,
         url: String,
         type: String = "image",
-        caption: String = ""
+        caption: String = "",
+        thumbnail: String = "",
+        duration: String = ""
     ): Result<String> {
         val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
@@ -210,12 +212,17 @@ class GalleryFirestoreRepository @Inject constructor(
         val mediaId = "${albumId}_${System.currentTimeMillis()}"
         val nowIso  = nowIso()
 
+        // `thumbnail`/`duration` are the cross-system video poster contract — the
+        // Parent app + admin gallery read these to render video tiles. Always
+        // written (blank for images / when extraction failed) for a stable shape.
         val data = hashMapOf(
             "schoolId"   to schoolId,
             "albumId"    to albumId,
             "url"        to url,
             "type"       to type,
             "caption"    to caption,
+            "thumbnail"  to thumbnail,
+            "duration"   to duration,
             "isArchived" to false,
             "uploadedBy" to teacherId,
             "uploadedAt" to nowIso,

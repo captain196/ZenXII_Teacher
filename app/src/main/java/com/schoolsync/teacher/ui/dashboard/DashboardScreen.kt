@@ -1,6 +1,7 @@
 package com.schoolsync.teacher.ui.dashboard
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -124,6 +125,7 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val storyGroups by storyViewerViewModel.groups.collectAsStateWithLifecycle()
+    val storiesLoading by storyViewerViewModel.isLoading.collectAsStateWithLifecycle()
 
     // Refresh when the dashboard becomes visible again (e.g. after coming
     // back from Red Flags screen) so counts like "Flags: N active" reflect
@@ -200,15 +202,19 @@ fun DashboardScreen(
                     }
                 }
 
-                // Stories ring carousel — everyone's active stories.
-                // Tap a ring to open the full-screen viewer. Hidden when
-                // there are none (the Stories screen has the empty state).
-                com.schoolsync.teacher.ui.stories.StoriesSection(
-                    groups = storyGroups,
-                    onOpenStory = onOpenStory,
-                    title = "Stories",
-                    showWhenEmpty = false
-                )
+                // Stories ring carousel — everyone's active stories. Tap a
+                // ring to open the full-screen viewer. Shimmer while the first
+                // snapshot loads; hidden once loaded with nothing to show.
+                if (storyGroups.isNotEmpty()) {
+                    com.schoolsync.teacher.ui.stories.StoriesSection(
+                        groups = storyGroups,
+                        onOpenStory = onOpenStory,
+                        title = "Stories",
+                        showWhenEmpty = false
+                    )
+                } else if (storiesLoading) {
+                    StoriesRowShimmer()
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -244,10 +250,17 @@ fun DashboardScreen(
 
                 // ── Upcoming events (horizontal rail) ──
                 DashSectionHeader(title = "Upcoming events", onViewAll = { onNavigate(Route.Events.route) })
-                UpcomingEventsRail(
-                    events = state.upcomingEvents,
-                    onClick = { onNavigate(Route.Events.route) }
-                )
+                if (state.upcomingEvents.isEmpty() && state.eventsLoading) {
+                    // Shimmer while the (separately-launched) events fetch is
+                    // still in flight, so the rail fades in instead of showing
+                    // "No upcoming events" then popping to real cards.
+                    EventsRailShimmer()
+                } else {
+                    UpcomingEventsRail(
+                        events = state.upcomingEvents,
+                        onClick = { onNavigate(Route.Events.route) }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -1027,6 +1040,85 @@ private fun QuickActionsRail(onNavigate: (String) -> Unit) {
                     fontSize = 11.sp
                 )
             }
+        }
+    }
+}
+
+// ── Dashboard skeletons (shimmer) ────────────────────────────────────────
+// Lightweight pulse-alpha placeholders shown while the stories/events data
+// is still arriving (both load in separate coroutines that finish AFTER the
+// main dashboard spinner clears). Only composed while loading — no cost once
+// data lands. Shapes mirror the real ring row / event rail so the fade-in
+// doesn't shift layout.
+
+@Composable
+private fun rememberShimmerAlpha(): Float {
+    val transition = rememberInfiniteTransition(label = "dashShimmer")
+    val alpha by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dashShimmerAlpha"
+    )
+    return alpha
+}
+
+@Composable
+private fun StoriesRowShimmer() {
+    val alpha = rememberShimmerAlpha()
+    val base = TextTertiary
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .padding(start = 16.dp, top = 8.dp)
+                .width(70.dp).height(14.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(base.copy(alpha = alpha))
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            repeat(4) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        modifier = Modifier.size(62.dp).clip(CircleShape)
+                            .background(base.copy(alpha = alpha))
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier.width(44.dp).height(9.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(base.copy(alpha = alpha))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventsRailShimmer() {
+    val alpha = rememberShimmerAlpha()
+    val base = TextTertiary
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        repeat(3) {
+            Box(
+                modifier = Modifier
+                    .width(150.dp).height(92.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(base.copy(alpha = alpha))
+            )
         }
     }
 }

@@ -9,6 +9,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -64,6 +65,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -217,6 +222,9 @@ private fun HomeView(
     }
 
     val today = ui.me?.today
+    // First cold load (no data yet) — drives the shimmer skeletons instead of
+    // rendering a guessed "Clock in" / "V" state that then flips once me() lands.
+    val firstLoading = ui.me == null && ui.loading
     val checkInMs = parseIso(today?.checkInAt)
     val checkOutMs = parseIso(today?.checkOutAt)
     var showGpsDetail by remember { mutableStateOf(false) }
@@ -268,7 +276,9 @@ private fun HomeView(
                 .background(c.surfaceCard)
                 .border(BorderStroke(1.dp, c.divider), cardShape)
                 .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Location chip — stays at the top of the card, horizontally centered.
             GpsChip(
                 available = ui.gps?.available == true,
                 inside = ui.gps?.insideGeofence,
@@ -314,6 +324,9 @@ private fun HomeView(
         }
 
         // ══ RIGHT CARD — today's attendance + action ══
+        // Body scrolls: when a punch message / GPS prompt / error appears the
+        // content can exceed the card height, so it must scroll instead of
+        // clipping the action + calendar link off the bottom.
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -321,6 +334,7 @@ private fun HomeView(
                 .clip(cardShape)
                 .background(c.surfaceCard)
                 .border(BorderStroke(1.dp, c.divider), cardShape)
+                .verticalScroll(rememberScrollState())
                 .padding(28.dp),
         ) {
             Row(
@@ -329,17 +343,24 @@ private fun HomeView(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Today's Attendance", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
-                TodayStatusPill(pillStatus)
+                // Don't show a guessed status until today's data has loaded —
+                // otherwise the pill flashes "V" before settling on the real state.
+                when {
+                    ui.me != null -> TodayStatusPill(pillStatus)
+                    firstLoading -> Box(Modifier.width(72.dp).height(28.dp).shimmer(RoundedCornerShape(14.dp)))
+                }
             }
             Spacer(Modifier.height(20.dp))
-            InfoRow("Check-in", fmtHM(checkInMs))
+            InfoRow("Check-in", fmtHM(checkInMs), loading = firstLoading)
             Spacer(Modifier.height(12.dp))
-            InfoRow("Check-out", fmtHM(checkOutMs))
+            InfoRow("Check-out", fmtHM(checkOutMs), loading = firstLoading)
             Spacer(Modifier.height(12.dp))
-            InfoRow("Working duration", fmtDuration(checkInMs, checkOutMs, now))
+            InfoRow("Working duration", fmtDuration(checkInMs, checkOutMs, now), loading = firstLoading)
 
-            // Slack pushes the notices + action to the bottom of the card.
-            Spacer(Modifier.weight(1f))
+            // Separator before the notices + action. (A weight(1f) spacer can't
+            // be used here — the card body is now vertically scrollable, where a
+            // weighted child collapses to zero height.)
+            Spacer(Modifier.height(24.dp))
 
             ui.lastResult?.let { r ->
                 if (r.message.isNotBlank()) {
@@ -370,6 +391,10 @@ private fun HomeView(
             }
 
             when {
+                // First load not finished yet: show a shimmer skeleton instead of
+                // guessing the Clock-in state — prevents the "Clock in" button
+                // flashing for an already-clocked-in user before me() resolves.
+                firstLoading -> AttendanceActionSkeleton()
                 done -> InfoLine(
                     text = "All done for today · ${fmtHM(checkInMs)} — ${fmtHM(checkOutMs)}",
                     color = c.success, surface = c.successSurface, icon = Icons.Filled.CheckCircle,
@@ -415,11 +440,55 @@ private fun HomeView(
 /* ── Today panel pieces ─────────────────────────────────────────── */
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun InfoRow(label: String, value: String, loading: Boolean = false) {
     val c = LocalAppColors.current
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 13.5.sp, color = c.textSecondary)
-        Text(value, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = c.textPrimary)
+        if (loading) Box(Modifier.width(70.dp).height(13.dp).shimmer())
+        else Text(value, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = c.textPrimary)
+    }
+}
+
+/* ── Shimmer / skeleton loading ─────────────────────────────────── */
+
+/**
+ * Animated shimmer fill for skeleton placeholders — a highlight band that
+ * sweeps horizontally across the shape. Reusable across the attendance module.
+ */
+@Composable
+private fun Modifier.shimmer(shape: Shape = RoundedCornerShape(6.dp)): Modifier {
+    val c = LocalAppColors.current
+    val base = c.textTertiary.copy(alpha = 0.16f)
+    val highlight = c.textTertiary.copy(alpha = 0.38f)
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val translate by transition.animateFloat(
+        initialValue = -1.5f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1300, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmerTranslate",
+    )
+    return this
+        .clip(shape)
+        .drawBehind {
+            val w = size.width
+            drawRect(
+                Brush.linearGradient(
+                    colors = listOf(base, highlight, base),
+                    start = Offset(translate * w, 0f),
+                    end = Offset(translate * w + w, 0f),
+                )
+            )
+        }
+}
+
+/** Skeleton for the whole action area shown during the very first data load. */
+@Composable
+private fun AttendanceActionSkeleton() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.fillMaxWidth().height(64.dp).shimmer(RoundedCornerShape(18.dp)))
     }
 }
 
@@ -679,6 +748,14 @@ private fun CalendarView(
             today?.let { if (it.date.isNotBlank()) put(it.date, it.status) }
         }
     }
+    // Per-day check-in/out times (from me().history + today) so any day can
+    // show when the employee clocked in/out, not just today.
+    val timesByDate = remember(history, today) {
+        buildMap<String, Pair<String?, String?>> {
+            history.forEach { put(it.date, it.checkInAt to it.checkOutAt) }
+            today?.let { if (it.date.isNotBlank()) put(it.date, it.checkInAt to it.checkOutAt) }
+        }
+    }
 
     val isThisMonth = year == nowCal.get(Calendar.YEAR) && month == nowCal.get(Calendar.MONTH)
     val todayDay = nowCal.get(Calendar.DAY_OF_MONTH)
@@ -822,12 +899,14 @@ private fun CalendarView(
                             val key = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
                             val dowCal = Calendar.getInstance().apply { clear(); set(year, month, day) }
                             val weekend = dowCal.get(Calendar.DAY_OF_WEEK).let { it == Calendar.SATURDAY || it == Calendar.SUNDAY }
+                            val dayTimes = timesByDate[key]
                             DayCell(
                                 day = day,
                                 status = statusByDate[key],
                                 weekend = weekend,
                                 isToday = isThisMonth && day == todayDay,
-                                todayTimes = if (isThisMonth && day == todayDay) today else null,
+                                checkInAt = dayTimes?.first,
+                                checkOutAt = dayTimes?.second,
                             )
                         }
                     }
@@ -852,7 +931,8 @@ private fun DayCell(
     status: String?,
     weekend: Boolean,
     isToday: Boolean,
-    todayTimes: TodayAttendance?,
+    checkInAt: String?,
+    checkOutAt: String?,
 ) {
     val c = LocalAppColors.current
     val band = statusBand(status, weekend)
@@ -880,17 +960,15 @@ private fun DayCell(
                 Text(band.label, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = band.color, maxLines = 1)
             }
         }
-        // Only today carries check-in/out times in the current backend contract.
-        if (isToday && todayTimes != null) {
-            val tin = parseIso(todayTimes.checkInAt)
-            val tout = parseIso(todayTimes.checkOutAt)
-            if (tin != null) {
-                Spacer(Modifier.weight(1f))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(fmtClockOnly(tin), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = c.success)
-                    Text("→", fontSize = 10.sp, color = c.textTertiary)
-                    Text(if (tout != null) fmtClockOnly(tout) else "—", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
-                }
+        // Any day with an accepted clock-in shows its check-in → check-out time.
+        val tin = parseIso(checkInAt)
+        val tout = parseIso(checkOutAt)
+        if (tin != null) {
+            Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(fmtClockOnly(tin), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = c.success)
+                Text("→", fontSize = 10.sp, color = c.textTertiary)
+                Text(if (tout != null) fmtClockOnly(tout) else "—", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
             }
         }
     }

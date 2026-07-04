@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -104,6 +105,7 @@ import com.schoolsync.teacher.ui.theme.Divider as DividerColor
 import com.schoolsync.teacher.ui.theme.Glass
 import com.schoolsync.teacher.ui.theme.GlassBorder
 import com.schoolsync.teacher.ui.theme.GradientBackground
+import com.schoolsync.teacher.ui.theme.ErrorRed
 import com.schoolsync.teacher.ui.theme.SurfaceDark
 import com.schoolsync.teacher.ui.theme.Teal
 import com.schoolsync.teacher.ui.theme.TealSurface
@@ -148,6 +150,8 @@ fun GalleryTeacherScreen(
                     albums = state.albums,
                     selectedAlbum = state.selectedAlbum,
                     isLoading = state.isLoadingAlbums,
+                    errorMessage = state.albumsError,
+                    onRetry = viewModel::retryAlbums,
                     onAlbumClick = viewModel::selectAlbum,
                     onCreateAlbum = viewModel::showCreateAlbumDialog,
                     onRefresh = viewModel::loadAlbums,
@@ -170,6 +174,8 @@ fun GalleryTeacherScreen(
                     selectedAlbum = state.selectedAlbum,
                     media = state.media,
                     isLoading = state.isLoadingMedia,
+                    errorMessage = state.mediaError,
+                    onRetry = viewModel::retryMedia,
                     onUploadClick = viewModel::showUploadMediaDialog,
                     onBackClick = { viewModel.selectAlbum(null) },
                     modifier = Modifier
@@ -214,20 +220,55 @@ fun GalleryTeacherScreen(
             )
         }
 
-        // Error dialog
-        state.error?.let { error ->
-            AlertDialog(
-                onDismissRequest = viewModel::clearError,
-                title = { Text("Error", color = TextPrimary) },
-                text = { Text(error, color = TextSecondary) },
-                confirmButton = {
-                    TextButton(onClick = viewModel::clearError) {
-                        Text("OK", color = Teal)
-                    }
-                },
-                containerColor = SurfaceDark,
-                shape = RoundedCornerShape(16.dp)
+        // Load failures now render inline (error + Retry) inside the affected
+        // panel — see GalleryErrorState — instead of a blocking dialog that
+        // fell through to the "no albums yet" empty state after dismiss.
+    }
+}
+
+/**
+ * Inline load-failure state with a Retry button. Used by both panels so a
+ * failed fetch (network / permission / missing index / expired token) reads as
+ * an error the teacher can retry — never as a benign "empty" state.
+ */
+@Composable
+private fun GalleryErrorState(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Filled.CloudOff, null, tint = ErrorRed, modifier = Modifier.size(44.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Couldn't load",
+                style = MaterialTheme.typography.titleSmall,
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onRetry() }
+                    .background(TealSurface)
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Refresh, null, tint = Teal, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Retry", style = MaterialTheme.typography.labelLarge, color = Teal, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
@@ -237,6 +278,8 @@ private fun AlbumsPanel(
     albums: List<GalleryAlbum>,
     selectedAlbum: GalleryAlbum?,
     isLoading: Boolean,
+    errorMessage: String?,
+    onRetry: () -> Unit,
     onAlbumClick: (GalleryAlbum) -> Unit,
     onCreateAlbum: () -> Unit,
     onRefresh: () -> Unit,
@@ -294,6 +337,13 @@ private fun AlbumsPanel(
             ) {
                 CircularProgressIndicator(color = Teal)
             }
+        } else if (errorMessage != null && albums.isEmpty()) {
+            // Load FAILED — distinct from a genuinely empty gallery.
+            GalleryErrorState(
+                message = errorMessage,
+                onRetry = onRetry,
+                modifier = Modifier.fillMaxSize()
+            )
         } else if (albums.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -428,6 +478,8 @@ private fun MediaPanel(
     selectedAlbum: GalleryAlbum?,
     media: List<GalleryMedia>,
     isLoading: Boolean,
+    errorMessage: String?,
+    onRetry: () -> Unit,
     onUploadClick: () -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -489,6 +541,13 @@ private fun MediaPanel(
                 ) {
                     CircularProgressIndicator(color = Teal)
                 }
+            } else if (errorMessage != null && media.isEmpty()) {
+                // Load FAILED — distinct from an album that's genuinely empty.
+                GalleryErrorState(
+                    message = errorMessage,
+                    onRetry = onRetry,
+                    modifier = Modifier.fillMaxSize()
+                )
             } else if (media.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
