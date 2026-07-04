@@ -22,6 +22,13 @@ object GalleryMediaUploader {
     private const val MAX_VIDEO_BYTES = 50L * 1024 * 1024
 
     /**
+     * Result of a successful Storage upload. [storagePath] is retained so the
+     * caller can [deleteByPath] to roll back an orphan when the follow-up
+     * Firestore write fails.
+     */
+    data class UploadResult(val downloadUrl: String, val storagePath: String)
+
+    /**
      * Cheap server-free pre-checks. Returns null when OK, otherwise an
      * error message suitable for surfacing in a toast / dialog.
      */
@@ -48,7 +55,8 @@ object GalleryMediaUploader {
     }
 
     /**
-     * Suspending upload that returns the download URL. Throws on failure.
+     * Suspending upload that returns the download URL plus the storage path
+     * (for rollback). Throws on failure.
      */
     suspend fun uploadSuspending(
         context: Context,
@@ -56,7 +64,7 @@ object GalleryMediaUploader {
         schoolId: String,
         albumId: String,
         declaredType: String   // "image" | "video"
-    ): String {
+    ): UploadResult {
         val mime = context.contentResolver.getType(uri).orEmpty()
         val ext = when {
             mime.endsWith("/jpeg") || mime.endsWith("/jpg") -> "jpg"
@@ -71,7 +79,7 @@ object GalleryMediaUploader {
         val path = "galleryMedia/${schoolId}/${albumId}/${System.currentTimeMillis()}.${ext}"
         val ref = FirebaseStorage.getInstance().reference.child(path)
         ref.putFile(uri).await()
-        return ref.downloadUrl.await().toString()
+        return UploadResult(ref.downloadUrl.await().toString(), path)
     }
 
     /**

@@ -28,7 +28,15 @@ class TimetableFirestoreRepository @Inject constructor(
      * Fetch the timetable for a specific class/section.
      */
     suspend fun getTimetable(className: String, section: String): Result<List<DayTimetable>> {
+        // Prefer schoolCode but fall back to schoolId — every other Firestore
+        // reader (incl. getAssignedClasses and getMyTimetable below) keys on
+        // schoolId, and the two hold the same SCH_XXXXXX value. Without this
+        // fallback a blank/stale schoolCode (e.g. after an account switch)
+        // made EVERY timetable query return zero docs, and the failure was
+        // silently swallowed by getMyTimetable → a blank "No timetable yet"
+        // screen even though assignments loaded fine. See getMyTimetable.
         val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
         val session = tokenManager.session.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("Session not available"))
@@ -47,6 +55,18 @@ class TimetableFirestoreRepository @Inject constructor(
                     .whereEqualTo("sectionKey", sectionKey)
             }
             val docs = allDocs.filter { it.session == session }
+
+            // Diagnostic — pinpoints an empty timetable in one logcat pass:
+            //   rawDocs=0            → no docs for this schoolId+sectionKey
+            //                          (wrong school key, or timetable never
+            //                           generated for this class/section)
+            //   rawDocs>0, matched=0 → session-string mismatch (doc.session
+            //                          differs from the app's active session)
+            Log.d(
+                "TT_DEBUG",
+                "getTimetable[$sectionKey] school=$schoolCode session=$session " +
+                    "rawDocs=${allDocs.size} sessionMatched=${docs.size}"
+            )
 
             val dayTimetables = docs.map { doc ->
                 val periods = doc.periods.map { period ->
@@ -73,6 +93,16 @@ class TimetableFirestoreRepository @Inject constructor(
                 DayTimetable(day = doc.day, periods = periods)
             }
 
+            // Diagnostic — what teacherId do the periods actually carry? If this
+            // set doesn't contain the logged-in teacher's id, that's the
+            // identity mismatch behind an empty "My Timetable".
+            val periodTeacherIds = dayTimetables
+                .flatMap { it.periods }
+                .filter { !it.isBreak }
+                .map { "${it.teacherId}:${it.subject}" }
+                .distinct()
+            Log.d("TT_DEBUG", "getTimetable[$sectionKey] periodTeacherIds=$periodTeacherIds")
+
             Result.success(dayTimetables)
         } catch (e: Exception) {
             Result.failure(e)
@@ -83,8 +113,19 @@ class TimetableFirestoreRepository @Inject constructor(
      * Get this teacher's timetable across all assigned classes.
      * Fetches all timetables for assigned class/sections and filters by teacherId.
      */
+    /**
+     * @param classSections  distinct (className, section) pairs the teacher is
+     *   assigned to — used to fetch the right timetable docs.
+     * @param mySubjectKeys  optional set of `subjectKey(class, section, subject)`
+     *   for this teacher's assignments. When a period carries a BLANK teacherId
+     *   (the admin published the timetable without stamping a teacher on that
+     *   slot — a real data gap seen in prod, e.g. Computer Applications), we
+     *   still claim it for the teacher if its class/section/subject matches one
+     *   of their assignments. Empty set → strict teacherId matching only.
+     */
     suspend fun getMyTimetable(
-        classSections: List<Pair<String, String>>
+        classSections: List<Pair<String, String>>,
+        mySubjectKeys: Set<String> = emptySet()
     ): Result<List<DayTimetable>> {
         val teacherId = tokenManager.userId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("User ID not available"))
@@ -112,7 +153,15 @@ class TimetableFirestoreRepository @Inject constructor(
                         // Include this teacher's classes AND class-wide breaks/lunch
                         // (break periods are shared across all teachers of a section).
                         val mine = period.teacherId == teacherId || period.teacher == teacherId
-                        if (mine) {
+                        // Fallback for admin-side data gaps: a period with a
+                        // blank teacherId that matches one of my assigned
+                        // (class, section, subject) tuples is mine.
+                        val mineBySubject = !mine &&
+                            !period.isBreak &&
+                            period.teacherId.isBlank() &&
+                            mySubjectKeys.isNotEmpty() &&
+                            subjectKey(period.className, period.section, period.subject) in mySubjectKeys
+                        if (mine || mineBySubject) {
                             allPeriods.add(period)
                         } else if (period.isBreak) {
                             val k = "${period.day}|${period.periodNumber}"
@@ -238,6 +287,19 @@ class TimetableFirestoreRepository @Inject constructor(
                 }
             } catch (e: Exception) { Log.e("TT_SUB_OVERLAY", "Substitute overlay failed: ${e.message}", e) }
 
+            // Diagnostic companion to getTimetable's log:
+            //   classSections=0  → no (unarchived) subject assignments for this
+            //                      teacher in the active session
+            //   classSections>0 but periodsKept=0 → docs found but no period's
+            //                      teacherId matched this teacher (identity/
+            //                      account-switch mismatch), and no break rows
+            Log.d(
+                "TT_DEBUG",
+                "getMyTimetable: classSections=${classSections.size} " +
+                    "teacherId=$teacherId periodsKept=${allPeriods.size} " +
+                    "mySubjectKeys=$mySubjectKeys"
+            )
+
             // Group by day
             val grouped = allPeriods.groupBy { it.day }
             val result = grouped.map { (day, periods) ->
@@ -248,5 +310,20 @@ class TimetableFirestoreRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Normalized identity for a (class, section, subject) slot, used to match a
+     * blank-teacherId period to a teacher's assignment. Case/space-insensitive.
+     */
+    private fun subjectKey(className: String, section: String, subject: String): String =
+        "${className.trim().lowercase()}|${section.trim().lowercase()}|${subject.trim().lowercase()}"
+
+    companion object {
+        /** Build the [subjectKey] set from a teacher's assignments (class, section, subject). */
+        fun subjectKeysOf(assignments: List<Triple<String, String, String>>): Set<String> =
+            assignments.map { (c, s, subj) ->
+                "${c.trim().lowercase()}|${s.trim().lowercase()}|${subj.trim().lowercase()}"
+            }.toSet()
     }
 }

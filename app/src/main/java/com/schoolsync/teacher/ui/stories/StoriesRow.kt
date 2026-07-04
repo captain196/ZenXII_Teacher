@@ -104,7 +104,10 @@ private fun StoryAvatar(group: StoryGroup, onClick: () -> Unit) {
             isAdmin -> Brush.linearGradient(listOf(Color(0xFFE53935), Color(0xFFFF8F00)))
             else -> Brush.linearGradient(listOf(Teal, Teal.copy(alpha = 0.5f)))
         }
-        val showRing = group.hasUnviewed || isAdmin
+        // Instagram-style: colored ring ONLY while unseen; once every story
+        // in the group is viewed the ring greys out — for admin/whole-school
+        // posts too (previously `|| isAdmin` kept them colored forever).
+        val showRing = group.hasUnviewed
 
         Box(modifier = Modifier.size(62.dp), contentAlignment = Alignment.Center) {
             val ringModifier = if (showRing) {

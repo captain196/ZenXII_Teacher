@@ -64,6 +64,7 @@ object Constants {
         const val HOMEWORK = "homework"
         const val SUBMISSIONS = "submissions"
         const val LEAVE_APPLICATIONS = "leaveApplications"
+        const val ATTENDANCE_REGULARIZATIONS = "attendanceRegularizations"
         const val EXAMS = "exams"
         const val EXAM_SCHEDULE = "examSchedule"
         const val MARKS = "marks"

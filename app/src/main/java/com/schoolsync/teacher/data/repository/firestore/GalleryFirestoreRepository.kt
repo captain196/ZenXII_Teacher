@@ -52,6 +52,8 @@ class GalleryFirestoreRepository @Inject constructor(
         albumId    = albumId,
         url        = url,
         type       = type,
+        thumbnail  = thumbnail,
+        duration   = duration,
         caption    = caption,
         isArchived = isArchived,
         uploadedBy = uploadedBy,
@@ -65,18 +67,54 @@ class GalleryFirestoreRepository @Inject constructor(
      * All non-archived albums for the current school, newest first.
      */
     suspend fun getAlbums(): Result<List<GalleryAlbum>> {
-        val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
 
         return try {
             val docs = firestoreService.queryDocumentsAs<GalleryAlbumDoc>(
                 "galleryAlbums"
             ) { ref ->
-                ref.whereEqualTo("schoolId", schoolCode)
+                ref.whereEqualTo("schoolId", schoolId)
                     .whereEqualTo("isArchived", false)
                     .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .limit(200)
             }
             Result.success(docs.map { it.toAlbum() })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * The event-generated album for a given event, or null if none exists.
+     *
+     * Admin (Events.php) writes one `galleryAlbums` doc per event that has
+     * photos, with `source="event"` and `eventId` == the event's id. This
+     * looks that doc up so the Events UI can offer a "View Photos" jump.
+     *
+     * Same per-doc schoolId guard as the other reads: Firestore rules check
+     * resource.data.schoolId, so the query must be school-scoped.
+     */
+    suspend fun getEventAlbum(eventId: String): Result<GalleryAlbum?> {
+        if (eventId.isBlank()) return Result.success(null)
+        val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(Exception("School code not available"))
+
+        // Event albums store the RAW event id (e.g. "EVT0001"), but callers pass
+        // EventDoc.id which is the @DocumentId full doc id "{schoolId}_{EVT...}".
+        // Strip the prefix so the query matches the album's eventId.
+        val rawEventId = eventId.removePrefix("${schoolId}_")
+
+        return try {
+            val docs = firestoreService.queryDocumentsAs<GalleryAlbumDoc>(
+                "galleryAlbums"
+            ) { ref ->
+                ref.whereEqualTo("schoolId", schoolId)
+                    .whereEqualTo("eventId", rawEventId)
+                    .whereEqualTo("isArchived", false)
+                    .limit(1)
+            }
+            Result.success(docs.firstOrNull()?.toAlbum())
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -91,17 +129,18 @@ class GalleryFirestoreRepository @Inject constructor(
      * query is rejected with PERMISSION_DENIED.
      */
     suspend fun getAlbumMedia(albumId: String): Result<List<GalleryMedia>> {
-        val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
 
         return try {
             val docs = firestoreService.queryDocumentsAs<GalleryMediaDoc>(
                 "galleryMedia"
             ) { ref ->
-                ref.whereEqualTo("schoolId", schoolCode)
+                ref.whereEqualTo("schoolId", schoolId)
                     .whereEqualTo("albumId", albumId)
                     .whereEqualTo("isArchived", false)
                     .orderBy("uploadedAt", Query.Direction.DESCENDING)
+                    .limit(300)
             }
             Result.success(docs.map { it.toMedia() })
         } catch (e: Exception) {
@@ -121,16 +160,16 @@ class GalleryFirestoreRepository @Inject constructor(
         description: String = "",
         category: String = ""
     ): Result<String> {
-        val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
         val teacherId = tokenManager.userId.firstOrNull().orEmpty()
         val session   = tokenManager.session.firstOrNull().orEmpty()
 
-        val albumId = "${schoolCode}_${System.currentTimeMillis()}"
+        val albumId = "${schoolId}_${System.currentTimeMillis()}"
         val nowIso  = nowIso()
 
         val data = hashMapOf(
-            "schoolId"    to schoolCode,
+            "schoolId"    to schoolId,
             "albumId"     to albumId,
             "title"       to title,
             "description" to description,
@@ -164,7 +203,7 @@ class GalleryFirestoreRepository @Inject constructor(
         type: String = "image",
         caption: String = ""
     ): Result<String> {
-        val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
         val teacherId = tokenManager.userId.firstOrNull().orEmpty()
 
@@ -172,7 +211,7 @@ class GalleryFirestoreRepository @Inject constructor(
         val nowIso  = nowIso()
 
         val data = hashMapOf(
-            "schoolId"   to schoolCode,
+            "schoolId"   to schoolId,
             "albumId"    to albumId,
             "url"        to url,
             "type"       to type,
@@ -190,7 +229,7 @@ class GalleryFirestoreRepository @Inject constructor(
             // We have to find the album doc by `albumId` field because
             // the doc-ID format differs between admin-created event
             // albums ("{loginCode}_{albumId}") and teacher-created
-            // albums ("{schoolCode}_{millis}"). Failure here is logged
+            // albums ("{schoolId}_{millis}"). Failure here is logged
             // but doesn't fail the upload — the media row exists either
             // way, just the count display might be stale until the next
             // album refresh.
@@ -198,20 +237,23 @@ class GalleryFirestoreRepository @Inject constructor(
                 val albumDocs = firestoreService.queryDocumentsAs<GalleryAlbumDoc>(
                     "galleryAlbums"
                 ) { ref ->
-                    ref.whereEqualTo("schoolId", schoolCode)
+                    ref.whereEqualTo("schoolId", schoolId)
                         .whereEqualTo("albumId", albumId)
                         .limit(1)
                 }
-                val albumDocId = albumDocs.firstOrNull()?.id
+                val albumDoc = albumDocs.firstOrNull()
+                val albumDocId = albumDoc?.id
                 if (albumDocId != null) {
-                    firestoreService.updateDocument(
-                        "galleryAlbums",
-                        albumDocId,
-                        mapOf(
-                            "mediaCount" to FieldValue.increment(1L),
-                            "updatedAt"  to nowIso
-                        )
+                    val updates = hashMapOf<String, Any>(
+                        "mediaCount" to FieldValue.increment(1L),
+                        "updatedAt"  to nowIso
                     )
+                    // Back-fill the album cover from the first image upload
+                    // when it hasn't been set yet (createAlbum writes "").
+                    if (albumDoc.coverImage.isBlank() && type == "image" && url.isNotBlank()) {
+                        updates["coverImage"] = url
+                    }
+                    firestoreService.updateDocument("galleryAlbums", albumDocId, updates)
                 }
             } catch (_: Exception) { /* best-effort */ }
 

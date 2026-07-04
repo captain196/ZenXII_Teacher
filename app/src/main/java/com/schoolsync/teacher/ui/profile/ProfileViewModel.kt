@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.ClassAssignment
 import com.schoolsync.teacher.data.model.firestore.StaffDoc
+import com.schoolsync.teacher.data.repository.AuthRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.StaffFirestoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,14 +27,19 @@ data class ProfileUiState(
     val cachedPosition: String = "",
     val cachedDepartment: String = "",
     val cachedSchoolName: String = "",
-    val cachedProfilePic: String = ""
+    val cachedProfilePic: String = "",
+    // Logout flow (mirrors Parent app): confirm dialog → loading → success.
+    val showLogoutDialog: Boolean = false,
+    val isLoggingOut: Boolean = false,
+    val logoutSuccess: Boolean = false
 )
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val staffRepo: StaffFirestoreRepository,
     private val teacherRepo: TeacherRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -42,6 +48,34 @@ class ProfileViewModel @Inject constructor(
     init { loadProfile() }
 
     fun refresh() = loadProfile()
+
+    // ── Logout ────────────────────────────────────────────────────────────
+    // Same UX as the Parent app: tapping "Log out" opens a confirm dialog;
+    // confirming shows an in-button spinner while the session is cleared, then
+    // logoutSuccess flips so the screen can navigate back to Login.
+
+    fun setShowLogoutDialog(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showLogoutDialog = show)
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoggingOut = true)
+            val result = authRepository.logout()
+            _uiState.value = if (result.isSuccess) {
+                _uiState.value.copy(
+                    isLoggingOut = false,
+                    logoutSuccess = true,
+                    showLogoutDialog = false
+                )
+            } else {
+                _uiState.value.copy(
+                    isLoggingOut = false,
+                    error = result.exceptionOrNull()?.message ?: "Logout failed"
+                )
+            }
+        }
+    }
 
     private fun loadProfile() {
         viewModelScope.launch {

@@ -1,10 +1,8 @@
 package com.schoolsync.teacher
 
 import android.app.Application
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.os.Build
 import com.google.firebase.database.FirebaseDatabase
+import com.schoolsync.teacher.service.NotificationChannels
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -13,20 +11,11 @@ class SchoolSyncApp : Application() {
         super.onCreate()
         com.schoolsync.teacher.util.initDebugLog(this)
         FirebaseDatabase.getInstance().setPersistenceEnabled(true)
-        createNotificationChannel()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "school_sync_channel",
-                "ZenXii Notifications",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "School notifications"
-            }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
+        // Create all notification channels at process start so they exist
+        // (and persist through force-stop) before any push arrives — a
+        // notification-payload message delivered while the app is killed is
+        // shown by the OS against the manifest default channel WITHOUT running
+        // the app, so the channel must already exist. Idempotent.
+        NotificationChannels.ensureChannels(this)
     }
 }

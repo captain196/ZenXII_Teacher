@@ -273,6 +273,7 @@ fun RedFlagTeacherScreen(
                             students = state.students,
                             flagsByStudent = state.flagsByStudent,
                             currentTeacherUid = state.currentTeacherUid,
+                            busyFlagIds = state.busyFlagIds,
                             onResolve = viewModel::resolveFlag,
                             onDelete = viewModel::deleteFlag,
                             modifier = Modifier
@@ -303,8 +304,17 @@ fun RedFlagTeacherScreen(
         // Phase 6A — quick flag sheet, controlled by quickFlagState
         QuickFlagSheet(
             state = quickFlagState,
+            isSaving = state.savingFlag,
             onSubmit = viewModel::submitQuickFlag
         )
+        // Dismiss the sheet only once the create SUCCEEDS (lastCreatedFlagId is
+        // set on success). On failure the sheet stays open (spinner clears) so
+        // the teacher can retry without re-entering everything.
+        LaunchedEffect(state.lastCreatedFlagId) {
+            if (state.lastCreatedFlagId != null && quickFlagState.visible) {
+                quickFlagState.dismiss()
+            }
+        }
 
         // Phase 6A — 5-second Undo banner, anchored bottom-center.
         // Visible only while lastCreatedFlagId is non-null (auto-cleared
@@ -629,6 +639,7 @@ private fun FlagDetailPanel(
     students: List<StudentInfo>,
     flagsByStudent: Map<String, List<StudentFlag>>,
     currentTeacherUid: String,
+    busyFlagIds: Set<String>,
     onResolve: (studentId: String, flagId: String) -> Unit,
     onDelete: (flagId: String) -> Unit,
     modifier: Modifier = Modifier
@@ -718,13 +729,20 @@ private fun FlagDetailPanel(
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
                 items(displayFlags, key = { "${it.first}_${it.second.flagId}" }) { (studentId, flag) ->
-                    // Soft-delete is open to any school staff (mirrors the
-                    // resolve permission). Hide for already-deleted flags
-                    // since you can't delete a deleted doc again.
-                    val canDelete = flag.status != "deleted"
+                    // Only show actions this teacher can actually perform, so
+                    // the buttons match the Firestore rule instead of tapping
+                    // into a PERMISSION_DENIED. A (non-admin) teacher may
+                    // resolve/delete ONLY their own flags (teacherId == uid);
+                    // delete additionally requires it be a teacher-created flag
+                    // (admin-issued flags routed to them are resolve-only).
+                    val isOwn = currentTeacherUid.isNotBlank() && flag.teacherId == currentTeacherUid
+                    val canResolve = isOwn
+                    val canDelete = isOwn && flag.status != "deleted" && flag.createdByRole == "teacher"
                     FlagCard(
                         flag = flag,
                         showStudentName = selectedStudentId == null,
+                        canResolve = canResolve,
+                        isBusy = flag.flagId in busyFlagIds,
                         onResolve = { onResolve(studentId, flag.flagId) },
                         canDelete = canDelete,
                         onDelete = { onDelete(flag.flagId) }
@@ -752,6 +770,8 @@ private fun MiniChip(text: String, color: Color, bgColor: Color) {
 private fun FlagCard(
     flag: StudentFlag,
     showStudentName: Boolean,
+    canResolve: Boolean = false,
+    isBusy: Boolean = false,
     onResolve: () -> Unit,
     canDelete: Boolean = false,
     onDelete: () -> Unit = {}
@@ -942,15 +962,16 @@ private fun FlagCard(
         // Action column — Resolve (if not resolved) + Delete (own teacher
         // flags only). Stacked so the row layout doesn't get crowded on
         // narrow tablets.
-        if (!isResolved || canDelete) {
+        if ((!isResolved && canResolve) || canDelete) {
             Spacer(modifier = Modifier.width(8.dp))
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 horizontalAlignment = Alignment.End
             ) {
-                if (!isResolved) {
+                if (!isResolved && canResolve) {
                     OutlinedButton(
                         onClick = onResolve,
+                        enabled = !isBusy,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = SuccessGreen),
                         border = ButtonDefaults.outlinedButtonBorder.copy(
                             brush = SolidColor(SuccessGreen.copy(alpha = 0.4f))
@@ -958,14 +979,19 @@ private fun FlagCard(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp))
+                        if (isBusy) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = SuccessGreen)
+                        } else {
+                            Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Resolve", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (isBusy) "Resolving…" else "Resolve", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 if (canDelete) {
                     OutlinedButton(
                         onClick = { showDeleteConfirm = true },
+                        enabled = !isBusy,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
                         border = ButtonDefaults.outlinedButtonBorder.copy(
                             brush = SolidColor(ErrorRed.copy(alpha = 0.4f))
@@ -973,9 +999,13 @@ private fun FlagCard(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                        if (isBusy) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = ErrorRed)
+                        } else {
+                            Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Delete", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (isBusy) "Deleting…" else "Delete", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

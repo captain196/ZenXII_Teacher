@@ -38,6 +38,7 @@ class EventsFirestoreRepository @Inject constructor(
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolId)
                     .orderBy("startDate", Query.Direction.DESCENDING)
+                    .limit(300)
             }
             Result.success(events)
         } catch (e: Exception) {

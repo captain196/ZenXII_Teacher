@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -239,7 +240,7 @@ fun AttendanceScreen(
                 onDismissRequest = viewModel::dismissTardyDialog,
                 title = { Text("Arrival Time", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
-                    Column {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         Text(
                             "Enter the student's arrival time (HH:mm, 24-hour):",
                             color = TextSecondary,
@@ -283,7 +284,7 @@ fun AttendanceScreen(
                 onDismissRequest = viewModel::closeCorrectionDialog,
                 title = { Text("Request Correction", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                         Text(
                             "${state.correctionStudentName}  ·  ${state.correctionDate}",
                             color = TextSecondary, fontSize = 12.sp

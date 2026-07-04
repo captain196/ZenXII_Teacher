@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
             "circular", "circular_created"                     -> "notices"
             "message"                                          -> "messages"
             "attendance_reminder"                              -> "attendance"
-            "leave_update"                                     -> "leave"
+            "leave_update", "leave_approved", "leave_rejected" -> "leave"
             else -> null
         } ?: return
         DeepLinkBridge.publish(target)

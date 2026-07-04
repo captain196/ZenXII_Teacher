@@ -79,6 +79,40 @@ class HomeworkFirestoreRepository @Inject constructor(
             val suffix = random.joinToString("") { "%02x".format(it) }
             return "${schoolCode}_${System.currentTimeMillis()}_$suffix"
         }
+
+        /**
+         * Normalise a dueDate to ISO 8601 with timezone offset (school's
+         * local time, IST = +05:30). Inputs already in ISO-with-TZ form are
+         * passed through unchanged; date-only "YYYY-MM-DD" is pinned to end
+         * of day so date-picker UIs keep working. Reads on legacy docs are
+         * unaffected — this is write-side only.
+         *
+         * Pure string logic (no instance state / no Firebase). Lives in the
+         * companion so JVM unit tests (HomeworkDateLogicTest) can exercise it
+         * without a live Firestore/TokenManager. Call sites inside the class
+         * are unchanged — companion members resolve unqualified.
+         */
+        internal fun normalizeDueDate(input: String): String {
+            val s = input.trim()
+            if (s.isEmpty()) return s
+            val isoTz = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}([+-]\\d{2}:?\\d{2}|Z)$")
+            if (isoTz.matches(s)) return s
+            if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(s)) return "${s}T23:59:59+05:30"
+            return s
+        }
+
+        /**
+         * Whitelist a caller-supplied review status. Any value outside the
+         * accepted set falls back to "reviewed"; accepted values are
+         * lower-cased. Extracted from [reviewOrMark] so the whitelist can be
+         * unit-tested in isolation. Behaviour is identical to the previous
+         * inline `safeStatus` expression.
+         */
+        internal fun sanitizeReviewStatus(status: String): String =
+            when (status.lowercase()) {
+                "reviewed", "complete", "incomplete", "submitted", "pending" -> status.lowercase()
+                else -> "reviewed"
+            }
     }
 
     /**
@@ -443,16 +477,13 @@ class HomeworkFirestoreRepository @Inject constructor(
         // status flows through to both the submission (existing students) and
         // the teacherMark (non-submitters) so the displayed pill always
         // matches what the teacher selected.
-        val safeStatus = when (status.lowercase()) {
-            "reviewed", "complete", "incomplete", "submitted", "pending" -> status.lowercase()
-            else -> "reviewed"
-        }
+        val safeStatus = sanitizeReviewStatus(status)
 
         val firestore = FirebaseFirestore.getInstance()
         val docId = "${homeworkId}_${studentId}"
         val homeworkRef = firestore.collection(Constants.Firestore.HOMEWORK).document(homeworkId)
         val submissionRef = firestore.collection(Constants.Firestore.SUBMISSIONS).document(docId)
-        val markRef = firestore.collection("teacherMarks").document(docId)
+        val markRef = firestore.collection(Constants.Firestore.TEACHER_MARKS).document(docId)
         val trimmedRemark = remark.trim()
 
         return try {
@@ -653,21 +684,5 @@ class HomeworkFirestoreRepository @Inject constructor(
 
     private suspend fun getSession(): String? {
         return tokenManager.session.firstOrNull()?.takeIf { it.isNotBlank() }
-    }
-
-    /**
-     * Normalise a dueDate to ISO 8601 with timezone offset (school's
-     * local time, IST = +05:30). Inputs already in ISO-with-TZ form are
-     * passed through unchanged; date-only "YYYY-MM-DD" is pinned to end
-     * of day so date-picker UIs keep working. Reads on legacy docs are
-     * unaffected — this is write-side only.
-     */
-    private fun normalizeDueDate(input: String): String {
-        val s = input.trim()
-        if (s.isEmpty()) return s
-        val isoTz = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}([+-]\\d{2}:?\\d{2}|Z)$")
-        if (isoTz.matches(s)) return s
-        if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(s)) return "${s}T23:59:59+05:30"
-        return s
     }
 }

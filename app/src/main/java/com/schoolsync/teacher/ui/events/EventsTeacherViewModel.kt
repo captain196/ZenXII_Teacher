@@ -3,8 +3,10 @@ package com.schoolsync.teacher.ui.events
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.schoolsync.teacher.data.model.GalleryAlbum
 import com.schoolsync.teacher.data.model.firestore.EventDoc
 import com.schoolsync.teacher.data.repository.firestore.EventsFirestoreRepository
+import com.schoolsync.teacher.data.repository.firestore.GalleryFirestoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,7 +23,8 @@ data class EventsUiState(
 
 @HiltViewModel
 class EventsTeacherViewModel @Inject constructor(
-    private val repo: EventsFirestoreRepository
+    private val repo: EventsFirestoreRepository,
+    private val galleryRepo: GalleryFirestoreRepository
 ) : ViewModel() {
 
     companion object {
@@ -40,7 +43,7 @@ class EventsTeacherViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             repo.getEvents().fold(
                 onSuccess = { list ->
-                    _uiState.update { it.copy(events = list, isLoading = false) }
+                    _uiState.update { it.copy(events = injectAlbumCovers(list), isLoading = false) }
                 },
                 onFailure = { e ->
                     Log.e(TAG, "Failed to load events", e)
@@ -51,4 +54,37 @@ class EventsTeacherViewModel @Inject constructor(
     }
 
     fun refresh() = loadEvents()
+
+    /**
+     * Many events carry their photos in the linked gallery album (source=
+     * "event") rather than on the event doc's own `mediaUrls` (e.g. "Annual
+     * sport day" has an empty mediaUrls but its album holds the picture). For
+     * any such event, borrow the album's `coverImage` so the list card / detail
+     * dialog still show a cover. One extra album query, only when needed.
+     */
+    private suspend fun injectAlbumCovers(events: List<EventDoc>): List<EventDoc> {
+        if (events.none { it.mediaUrls.isEmpty() }) return events
+        val albums = galleryRepo.getAlbums().getOrNull().orEmpty()
+            .filter { it.source == "event" && it.coverImage.isNotBlank() }
+        if (albums.isEmpty()) return events
+        return events.map { evt ->
+            if (evt.mediaUrls.isNotEmpty()) evt
+            else {
+                // Album stores the RAW event id ("EVT0001"); evt.id is the full
+                // "{schoolId}_{EVT...}" doc id.
+                val cover = albums.firstOrNull { a ->
+                    evt.id == a.eventId || evt.id.endsWith("_${a.eventId}")
+                }?.coverImage
+                if (cover != null) evt.copy(mediaUrls = listOf(cover)) else evt
+            }
+        }
+    }
+
+    /**
+     * Look up the admin-generated gallery album for an event (source="event",
+     * eventId == the event's id), or null if the event has no photo album.
+     * Powers the Events detail "View Photos" jump.
+     */
+    suspend fun getEventAlbum(eventId: String): GalleryAlbum? =
+        galleryRepo.getEventAlbum(eventId).getOrNull()
 }

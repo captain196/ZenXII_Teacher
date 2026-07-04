@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class SplashState(
@@ -36,6 +37,20 @@ class SplashViewModel @Inject constructor(
         viewModelScope.launch {
             val loggedIn = tokenManager.isLoggedIn.first()
             val seenOnboarding = prefs.getBoolean("onboarding_seen", false)
+
+            // Force-refresh the Firebase ID token on cold start so security-
+            // rules claims (school_id, role) are current. Custom claims set
+            // AFTER the last fresh login only reach the token on refresh; a
+            // restored session with a stale token has no school_id claim, so
+            // tenantActive()/isSameSchool() reject every read with
+            // PERMISSION_DENIED until the token auto-refreshes. Best-effort.
+            if (loggedIn) {
+                try {
+                    com.google.firebase.auth.FirebaseAuth.getInstance()
+                        .currentUser?.getIdToken(true)?.await()
+                } catch (_: Exception) { }
+            }
+
             val mustChange = if (loggedIn) tokenManager.mustChangePassword.first() else false
             _state.value = SplashState(
                 isLoading = false,

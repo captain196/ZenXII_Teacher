@@ -12,6 +12,8 @@ import com.schoolsync.teacher.data.model.HomeworkStatusEntry
 import com.schoolsync.teacher.data.model.HomeworkTeacher
 import com.schoolsync.teacher.data.model.StudentInfo
 import com.schoolsync.teacher.data.model.firestore.Attachment
+import com.schoolsync.teacher.data.model.firestore.HomeworkDoc
+import com.schoolsync.teacher.data.model.firestore.parsedAttachments
 import com.schoolsync.teacher.data.repository.StudentRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.HomeworkFirestoreRepository
@@ -314,7 +316,13 @@ class HomeworkTeacherViewModel @Inject constructor(
                                 status = doc.status,
                                 className = doc.className,
                                 section = doc.section,
-                                attachments = doc.attachments
+                                // Merge legacy `attachments` + rich `attachmentObjects`
+                                // (same helper the Parent app uses) so docs written with
+                                // only attachmentObjects still surface their files. Keep
+                                // the downstream List<String> shape via downloadUrl.
+                                attachments = doc.parsedAttachments()
+                                    .map { it.downloadUrl }
+                                    .filter { it.isNotBlank() }
                             )
                         }
                         // Cache the full list, then derive the visible list via
@@ -607,6 +615,12 @@ class HomeworkTeacherViewModel @Inject constructor(
         val classSection = state.selectedClass ?: return
         val form = state.formState
 
+        // Re-entrancy guard — a programmatic double-invoke (or a rapid
+        // double-tap that slips past the button's disabled state) must not
+        // mint two homework docs. isSubmitting is set below for the duration
+        // of the upload + Firestore write.
+        if (form.isSubmitting) return
+
         if (form.title.isBlank()) {
             viewModelScope.launch { _events.emit(HomeworkEvent.Error("Title is required")) }
             return
@@ -784,7 +798,7 @@ class HomeworkTeacherViewModel @Inject constructor(
 
                 val schoolCode = tokenManager.schoolId.firstOrNull() ?: ""
                 val markDocs = try {
-                    fs.collection("teacherMarks")
+                    fs.collection(com.schoolsync.teacher.util.Constants.Firestore.TEACHER_MARKS)
                         .whereEqualTo("schoolId", schoolCode)
                         .whereEqualTo("homeworkId", hw.hwId)
                         .get()
@@ -799,6 +813,31 @@ class HomeworkTeacherViewModel @Inject constructor(
                     markDocs.map { it.reference }
                 ) { failedRefs ->
                     debugLog("ACC_HW_DELETE_CASCADE_MARK_BATCH_FAILED hwId=${hw.hwId} count=${failedRefs.size}")
+                }
+
+                // Best-effort Storage cleanup — remove this homework's uploaded
+                // attachment objects so deleting the doc doesn't orphan files in
+                // the bucket. Resolve storage paths from the doc's rich
+                // attachmentObjects/legacy attachments via parsedAttachments (the
+                // HomeworkTeacher model only carries download URLs, not paths).
+                // Mirrors the create-rollback path's deleteByPath use. A storage
+                // delete failure is logged (inside deleteByPath) but never blocks
+                // the doc delete.
+                val storagePaths: List<String> = try {
+                    fs.collection(com.schoolsync.teacher.util.Constants.Firestore.HOMEWORK)
+                        .document(hw.hwId)
+                        .get()
+                        .await()
+                        .toObject(HomeworkDoc::class.java)
+                        ?.parsedAttachments()
+                        ?.mapNotNull { it.storagePath.takeIf { p -> p.isNotBlank() } }
+                        ?: emptyList()
+                } catch (e: Exception) {
+                    debugLog("ACC_HW_DELETE_STORAGE_RESOLVE_FAILED hwId=${hw.hwId} err=${e.javaClass.simpleName}:${e.message}")
+                    emptyList()
+                }
+                for (path in storagePaths) {
+                    HomeworkAttachmentUploader.deleteByPath(path)
                 }
 
                 homeworkFirestoreRepo.deleteHomework(hw.hwId).fold(

@@ -179,5 +179,10 @@ dependencies {
 
     // Razorpay checkout
     implementation("com.razorpay:checkout:1.6.38")
+
+    // Unit tests (JVM). Pure-logic homework harness — no Firebase/Android runtime.
+    testImplementation("junit:junit:4.13.2")
+    // Matches the app's kotlinx-coroutines-core version (1.7.3, via -android).
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }
 

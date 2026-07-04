@@ -180,6 +180,7 @@ sealed class Route(val route: String) {
     data object More : Route("more")
     data object Profile : Route("profile")
     data object LessonPlan : Route("lesson_plan")
+    data object Search : Route("search")
 }
 
 data class NavRailItem(
@@ -369,6 +370,17 @@ fun MainScaffold(navController: NavHostController) {
         com.schoolsync.teacher.util.DeepLinkBridge.consume()
     }
 
+    // Story viewer is rendered as a FULL-SCREEN OVERLAY above the nav
+    // content (not a separate route) so the screen it was opened from
+    // stays composed behind it — when the viewer fades on swipe-down /
+    // pinch-out, that screen shows through (Instagram/WhatsApp-style).
+    var storyViewerAuthorId by remember { mutableStateOf<String?>(null) }
+
+    // Pending gallery album to preselect when arriving from the Events
+    // "View Photos" jump. Set by Events, consumed by the Gallery screen.
+    var pendingGalleryAlbumId by remember { mutableStateOf<String?>(null) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Row(modifier = Modifier.fillMaxSize()) {
         // ── Side Navigation Rail (scrollable) ──
         Column(
@@ -490,39 +502,8 @@ fun MainScaffold(navController: NavHostController) {
                 }
             }
 
+            // Logout moved to My Profile page (bottom) — see MyProfileScreen.
             Spacer(modifier = Modifier.weight(1f))
-
-            Divider(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                color = DividerColor
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // ── Logout ──
-            Column(
-                modifier = Modifier
-                    .padding(vertical = 4.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = rememberRipple(bounded = false, radius = 24.dp)
-                    ) { mainViewModel.logout() }
-                    .padding(horizontal = 4.dp, vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Logout,
-                    contentDescription = "Logout",
-                    tint = ErrorRed,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Logout",
-                    fontSize = 10.sp,
-                    color = ErrorRed,
-                    maxLines = 1
-                )
-            }
         }
 
         // Thin divider
@@ -552,11 +533,14 @@ fun MainScaffold(navController: NavHostController) {
                             restoreState = true
                         }
                     },
-                    onOpenStory = { authorId ->
-                        innerNavController.navigate(Route.StoryViewer.create(authorId)) {
+                    onNavigate = { route ->
+                        innerNavController.navigate(route) {
+                            popUpTo(Route.Dashboard.route) { saveState = true }
                             launchSingleTop = true
+                            restoreState = true
                         }
-                    }
+                    },
+                    onOpenStory = { authorId -> storyViewerAuthorId = authorId }
                 )
             }
             composable(Route.Attendance.route) { AttendanceScreen() }
@@ -567,7 +551,18 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.Students.route) { StudentsScreen() }
             composable(Route.Messages.route) { MessagesScreen() }
             composable(Route.Notices.route) { NoticesScreen() }
-            composable(Route.Events.route) { EventsTeacherScreen() }
+            composable(Route.Events.route) {
+                EventsTeacherScreen(
+                    onOpenAlbum = { albumId ->
+                        pendingGalleryAlbumId = albumId
+                        innerNavController.navigate(Route.Gallery.route) {
+                            popUpTo(Route.Dashboard.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
             composable(Route.Ptm.route) {
                 com.schoolsync.teacher.ui.ptm.MyPtmScreen()
             }
@@ -576,36 +571,55 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.RedFlags.route) { RedFlagTeacherScreen() }
             composable(Route.Stories.route) {
                 StoriesTeacherScreen(
-                    onOpenViewer = { authorId ->
-                        innerNavController.navigate(Route.StoryViewer.create(authorId)) {
+                    onOpenViewer = { authorId -> storyViewerAuthorId = authorId }
+                )
+            }
+            composable(Route.Fees.route) { FeesTeacherScreen() }
+            composable(Route.Gallery.route) {
+                GalleryTeacherScreen(
+                    initialAlbumId = pendingGalleryAlbumId,
+                    onInitialAlbumConsumed = { pendingGalleryAlbumId = null }
+                )
+            }
+            composable(Route.Library.route) { LibraryTeacherScreen() }
+            composable(Route.Payslips.route) { PayslipsScreen() }
+            composable(Route.Appraisals.route) { AppraisalsScreen() }
+            composable(Route.Recruitment.route) { RecruitmentScreen() }
+            composable(Route.Profile.route) {
+                MyProfileScreen(
+                    onLogout = {
+                        navController.navigate(Route.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
+            }
+            composable(Route.Search.route) {
+                com.schoolsync.teacher.ui.search.SearchScreen(
+                    onBack = { innerNavController.popBackStack() },
+                    onNavigateRoute = { route ->
+                        // Drop Search from the back stack so Back from the
+                        // target lands on the dashboard, not on search.
+                        innerNavController.navigate(route) {
+                            popUpTo(Route.Search.route) { inclusive = true }
                             launchSingleTop = true
                         }
                     }
                 )
             }
-            composable(
-                route = Route.StoryViewer.route,
-                arguments = listOf(
-                    androidx.navigation.navArgument("authorId") {
-                        type = androidx.navigation.NavType.StringType
-                    }
-                )
-            ) { backStackEntry ->
-                val authorId = backStackEntry.arguments?.getString("authorId").orEmpty()
-                com.schoolsync.teacher.ui.stories.StoryViewerScreen(
-                    initialAuthorId = authorId,
-                    onClose = { innerNavController.popBackStack() }
-                )
-            }
-            composable(Route.Fees.route) { FeesTeacherScreen() }
-            composable(Route.Gallery.route) { GalleryTeacherScreen() }
-            composable(Route.Library.route) { LibraryTeacherScreen() }
-            composable(Route.Payslips.route) { PayslipsScreen() }
-            composable(Route.Appraisals.route) { AppraisalsScreen() }
-            composable(Route.Recruitment.route) { RecruitmentScreen() }
-            composable(Route.Profile.route) { MyProfileScreen() }
         }
-    }
+        } // end Row (nav rail + content)
+
+        // Full-screen story overlay — the screen it was opened from stays
+        // composed behind, so it shows through as the viewer fades on a
+        // swipe-down / pinch-out dismiss.
+        storyViewerAuthorId?.let { authorId ->
+            com.schoolsync.teacher.ui.stories.StoryViewerScreen(
+                initialAuthorId = authorId,
+                onClose = { storyViewerAuthorId = null }
+            )
+        }
+    } // end overlay Box
 }
 
 /** Reusable nav rail entry (icon + label) with ripple feedback. */

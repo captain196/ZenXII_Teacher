@@ -64,7 +64,12 @@ class StaffAttendanceViewModel @Inject constructor(
             _ui.update { it.copy(loading = true, error = null) }
             repo.me()
                 .onSuccess { me -> _ui.update { it.copy(loading = false, me = me) } }
-                .onFailure { e -> _ui.update { it.copy(loading = false, error = e.asStaffError()) } }
+                .onFailure {
+                    // A LOAD failure (e.g. backend not yet deployed) must NOT surface as
+                    // the red action banner — that is reserved for an explicit Clock-In/Out
+                    // attempt. Fail quietly; the Today card simply shows "Not marked" / "—".
+                    _ui.update { it.copy(loading = false) }
+                }
         }
     }
 

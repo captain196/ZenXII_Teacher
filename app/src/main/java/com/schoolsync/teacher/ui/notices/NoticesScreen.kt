@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.WorkOutline
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Notifications
@@ -172,6 +173,47 @@ fun NoticesScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(color = c.accent)
+                    }
+                } else if (state.error != null && state.filteredNotices.isEmpty()) {
+                    // A load failure must NOT render as an empty inbox (C1) —
+                    // for a comms channel that false "all clear" is dangerous.
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Filled.Notifications,
+                                contentDescription = null,
+                                tint = c.error,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(sp.sm))
+                            Text(
+                                text = "Couldn't load notices",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = c.error,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Check your connection and try again.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.textSecondary
+                            )
+                            Spacer(modifier = Modifier.height(sp.md))
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(c.accent.copy(alpha = 0.15f))
+                                    .clickable { viewModel.refresh() }
+                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null, tint = c.accent, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(sp.xs))
+                                Text("Retry", color = c.accent, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
                 } else if (state.filteredNotices.isEmpty()) {
                     Box(
@@ -511,13 +553,22 @@ private fun NoticeDetailPanel(
                         .clip(RoundedCornerShape(8.dp))
                         .background(c.accentSurface)
                         .clickable {
-                            runCatching {
-                                ctx.startActivity(
-                                    android.content.Intent(
-                                        android.content.Intent.ACTION_VIEW,
-                                        android.net.Uri.parse(notice.attachmentUrl)
+                            // Only hand http(s) URLs to ACTION_VIEW — never
+                            // intent:/file:/custom schemes from server content.
+                            val url = notice.attachmentUrl.trim()
+                            if (url.startsWith("http://", true) || url.startsWith("https://", true)) {
+                                runCatching {
+                                    ctx.startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(url)
+                                        )
                                     )
-                                )
+                                }.onFailure {
+                                    android.widget.Toast.makeText(ctx, "No app can open this attachment", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                android.widget.Toast.makeText(ctx, "Attachment link is invalid", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -544,7 +595,11 @@ private fun NoticeDetailPanel(
             Spacer(modifier = Modifier.height(14.dp))
 
             if (notice.bodyHtml.isNotBlank()) {
-                // Rich HTML render via WebView (HR-styled posters etc.)
+                // Rich HTML render via WebView (HR-styled posters etc.).
+                // Theme-aware text color so the body is legible in dark mode.
+                val htmlTextColor = String.format(
+                    "#%06X", 0xFFFFFF and c.textPrimary.toArgb()
+                )
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { context ->
                         android.webkit.WebView(context).apply {
@@ -560,7 +615,7 @@ private fun NoticeDetailPanel(
                             <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
                             <style>
                               body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:0;
-                                   font-size:14px;line-height:1.5;color:#1e293b;}
+                                   font-size:14px;line-height:1.5;color:$htmlTextColor;}
                               img{max-width:100%;height:auto;}
                             </style></head>
                             <body>${notice.bodyHtml}</body></html>

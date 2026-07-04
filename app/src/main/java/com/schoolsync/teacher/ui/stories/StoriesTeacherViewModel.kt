@@ -34,12 +34,28 @@ data class AudienceOption(
 )
 
 data class StoriesUiState(
+    /** ACTIVE stories only (expiresAt > now). */
     val myStories: List<Story> = emptyList(),
+    /** EXPIRED stories (expiresAt <= now) — shown in the Archived
+     *  section so the teacher can still see past posts until Firestore
+     *  TTL cleans them up. Newest-first, same as active. */
+    val archivedStories: List<Story> = emptyList(),
     val viewCounts: Map<String, Int> = emptyMap(),
     /** Class-sections this teacher can target (from assignments). */
     val audienceOptions: List<AudienceOption> = emptyList(),
     /** Selected canonical tokens. EMPTY = whole school. */
     val selectedAudience: Set<String> = emptySet(),
+    // ── Insights sheet (who saw / reacted) ──
+    /** Story whose insights sheet is open; null = closed. */
+    val insightsStory: Story? = null,
+    val insights: com.schoolsync.teacher.data.repository.firestore.StoryInsights? = null,
+    val insightsLoading: Boolean = false,
+    // ── Archived gallery + viewer ──
+    /** Whether the full-screen archived gallery overlay is showing. */
+    val showArchivedGallery: Boolean = false,
+    /** Index into archivedStories of the story open in the full-screen
+     *  gallery viewer; null = closed. Enables swipe to prev/next. */
+    val archivedViewerIndex: Int? = null,
     val isLoading: Boolean = false,
     val isUploading: Boolean = false,
     val showUploadDialog: Boolean = false,
@@ -157,12 +173,19 @@ class StoriesTeacherViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             storyRepo.observeMyStories().collect { docs ->
-                val stories = docs.map { it.toStory() }
+                // Split into live vs expired so the UI can show an
+                // "Archived" section for past stories. Docs arrive
+                // already sorted newest-first; partition preserves order.
+                val now = System.currentTimeMillis()
+                val (activeDocs, expiredDocs) = docs.partition { it.expiresAtMillis > now }
+                val active = activeDocs.map { it.toStory() }
+                val archived = expiredDocs.map { it.toStory() }
                 val counts = docs.associate { it.id to it.viewCount }
-                Log.d(TAG, "snapshot: ${stories.size} stories")
+                Log.d(TAG, "snapshot: ${active.size} active, ${archived.size} archived")
                 _uiState.update {
                     it.copy(
-                        myStories = stories,
+                        myStories = active,
+                        archivedStories = archived,
                         viewCounts = counts,
                         isLoading = false,
                         error = null
@@ -258,6 +281,32 @@ class StoriesTeacherViewModel @Inject constructor(
             }
         }
     }
+
+    // ── Insights (who saw / reacted) ───────────────────────────────
+    fun openInsights(story: Story) {
+        _uiState.update { it.copy(insightsStory = story, insights = null, insightsLoading = true) }
+        viewModelScope.launch {
+            storyRepo.getStoryInsights(story.storyId).fold(
+                onSuccess = { data -> _uiState.update { it.copy(insights = data, insightsLoading = false) } },
+                onFailure = { e ->
+                    _uiState.update { it.copy(insightsLoading = false) }
+                    _events.emit(StoriesEvent.Error(e.message ?: "Couldn't load insights"))
+                }
+            )
+        }
+    }
+    fun closeInsights() {
+        _uiState.update { it.copy(insightsStory = null, insights = null, insightsLoading = false) }
+    }
+
+    // ── Archived gallery + viewer ──────────────────────────────────
+    fun openArchivedGallery() { _uiState.update { it.copy(showArchivedGallery = true) } }
+    fun closeArchivedGallery() { _uiState.update { it.copy(showArchivedGallery = false) } }
+    fun openArchivedViewer(story: Story) {
+        val idx = _uiState.value.archivedStories.indexOfFirst { it.storyId == story.storyId }
+        _uiState.update { it.copy(archivedViewerIndex = if (idx >= 0) idx else 0) }
+    }
+    fun closeArchivedViewer() { _uiState.update { it.copy(archivedViewerIndex = null) } }
 
     fun deleteStory(story: Story) {
         viewModelScope.launch {

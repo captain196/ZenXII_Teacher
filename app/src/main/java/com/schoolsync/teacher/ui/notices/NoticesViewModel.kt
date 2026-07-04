@@ -50,6 +50,9 @@ class NoticesViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(NoticesUiState())
     val uiState: StateFlow<NoticesUiState> = _uiState.asStateFlow()
 
+    /** IDs this teacher has opened (from circularReads), updated optimistically. */
+    private var readIds: Set<String> = emptySet()
+
     init {
         loadNotices()
     }
@@ -58,6 +61,7 @@ class NoticesViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
+                readIds = communicationFirestoreRepo.getReadCircularIds()
                 communicationFirestoreRepo.getCirculars().fold(
                     onSuccess = { circulars ->
                         val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
@@ -75,6 +79,7 @@ class NoticesViewModel @Inject constructor(
                                 authorRole = c.authorRole,
                                 date = c.sentAt.toDateOrNull()?.let { dateFormat.format(it) } ?: "",
                                 category = c.category.ifBlank { "General" },
+                                isRead = c.id in readIds,
                                 attachmentUrl = c.attachmentUrl
                             )
                         }
@@ -116,6 +121,21 @@ class NoticesViewModel @Inject constructor(
 
     fun selectNotice(notice: NoticeItem?) {
         _uiState.update { it.copy(selectedNotice = notice) }
+        // Opening a notice marks it read: optimistic local update (clears the
+        // unread dot everywhere it appears) + best-effort idempotent receipt.
+        val id = notice?.noticeId
+        if (id != null && id !in readIds) {
+            readIds = readIds + id
+            _uiState.update { st ->
+                fun mark(list: List<NoticeItem>) = list.map { if (it.noticeId == id) it.copy(isRead = true) else it }
+                st.copy(
+                    notices = mark(st.notices),
+                    filteredNotices = mark(st.filteredNotices),
+                    selectedNotice = st.selectedNotice?.let { if (it.noticeId == id) it.copy(isRead = true) else it }
+                )
+            }
+            viewModelScope.launch { communicationFirestoreRepo.markCircularRead(id) }
+        }
     }
 
     fun refresh() {

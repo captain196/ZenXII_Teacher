@@ -1,5 +1,7 @@
 package com.schoolsync.teacher.ui.stories
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,6 +10,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -15,21 +18,42 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.AddPhotoAlternate
@@ -57,10 +81,23 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -153,12 +190,17 @@ fun StoriesTeacherScreen(
                     showWhenEmpty = true
                 )
 
-                // Top bar (your own stories)
-                StoriesTopBar(onRefresh = viewModel::refresh)
+                // Top bar (your own stories) + Archived entry
+                StoriesTopBar(
+                    archivedCount = state.archivedStories.size,
+                    onOpenArchived = viewModel::openArchivedGallery,
+                    onRefresh = viewModel::refresh
+                )
 
-                // Content
+                // Active stories — tap a card to see who saw / reacted.
                 StoriesGridContent(
                     state = state,
+                    onCardClick = viewModel::openInsights,
                     onDelete = viewModel::deleteStory,
                     modifier = Modifier.weight(1f)
                 )
@@ -205,11 +247,44 @@ fun StoriesTeacherScreen(
                 shape = RoundedCornerShape(16.dp)
             )
         }
+
+        // Insights sheet — who saw the story + what they reacted.
+        state.insightsStory?.let { story ->
+            StoryInsightsSheet(
+                story = story,
+                insights = state.insights,
+                loading = state.insightsLoading,
+                onDismiss = viewModel::closeInsights
+            )
+        }
+
+        // Archived gallery — full-screen grid of expired stories.
+        if (state.showArchivedGallery) {
+            ArchivedGalleryOverlay(
+                stories = state.archivedStories,
+                viewCounts = state.viewCounts,
+                onOpen = viewModel::openArchivedViewer,
+                onClose = viewModel::closeArchivedGallery
+            )
+        }
+
+        // Archived full-screen gallery viewer — swipe between expired stories.
+        state.archivedViewerIndex?.let { idx ->
+            ArchivedStoryViewer(
+                stories = state.archivedStories,
+                initialIndex = idx,
+                onClose = viewModel::closeArchivedViewer
+            )
+        }
     }
 }
 
 @Composable
-private fun StoriesTopBar(onRefresh: () -> Unit) {
+private fun StoriesTopBar(
+    archivedCount: Int,
+    onOpenArchived: () -> Unit,
+    onRefresh: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -233,8 +308,41 @@ private fun StoriesTopBar(onRefresh: () -> Unit) {
             )
         }
 
-        IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Archived pill — opens the full-screen gallery of expired stories.
+            if (archivedCount > 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Glass)
+                        .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
+                        .clickable { onOpenArchived() }
+                        .padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp)
+                ) {
+                    Icon(Icons.Filled.Timer, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Archived", style = MaterialTheme.typography.labelLarge, color = TextPrimary)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Teal)
+                            .padding(horizontal = 7.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            "$archivedCount",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = BgStart,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+            }
         }
     }
 }
@@ -242,9 +350,11 @@ private fun StoriesTopBar(onRefresh: () -> Unit) {
 @Composable
 private fun StoriesGridContent(
     state: StoriesUiState,
+    onCardClick: (Story) -> Unit,
     onDelete: (Story) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val hasArchived = state.archivedStories.isNotEmpty()
     if (state.isLoading) {
         Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -268,12 +378,13 @@ private fun StoriesGridContent(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "No stories yet",
+                    text = if (hasArchived) "No active stories" else "No stories yet",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextSecondary
                 )
                 Text(
-                    text = "Tap + to upload your first story",
+                    text = if (hasArchived) "Your past stories are in Archived above."
+                           else "Tap + to upload your first story",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )
@@ -285,12 +396,15 @@ private fun StoriesGridContent(
             modifier = modifier.padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 8.dp)
+            // Bottom padding clears the "New Story" FAB so the last row
+            // is never hidden behind it.
+            contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
         ) {
             items(state.myStories, key = { it.storyId }) { story ->
                 StoryCard(
                     story = story,
                     viewCount = state.viewCounts[story.storyId] ?: 0,
+                    onClick = { onCardClick(story) },
                     onDelete = { onDelete(story) }
                 )
             }
@@ -302,10 +416,12 @@ private fun StoriesGridContent(
 private fun StoryCard(
     story: Story,
     viewCount: Int,
+    onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     val isExpired = story.isExpired
     val cardAlpha = if (isExpired) 0.5f else 1f
+    val reactionTotal = story.reactionCounts.values.sum()
 
     Column(
         modifier = Modifier
@@ -317,6 +433,7 @@ private fun StoryCard(
                 if (isExpired) ErrorRed.copy(alpha = 0.3f) else GlassBorder,
                 RoundedCornerShape(14.dp)
             )
+            .clickable { onClick() }
     ) {
         // Thumbnail
         Box(
@@ -432,45 +549,79 @@ private fun StoryCard(
             }
         }
 
-        // Caption and metadata row
-        Row(
+        // Footer — caption, reactions summary, insights cue + delete.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 6.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                if (story.caption.isNotBlank()) {
-                    Text(
-                        text = story.caption,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextPrimary.copy(alpha = cardAlpha),
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
+            if (story.caption.isNotBlank()) {
+                Text(
+                    text = story.caption,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary.copy(alpha = cardAlpha),
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (story.createdAt > 0) {
+                        Text(
+                            text = story.createdAt.toRelativeTime(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary.copy(alpha = cardAlpha),
+                            fontSize = 10.sp
+                        )
+                    }
+                    if (reactionTotal > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = story.reactionCounts.entries
+                                .filter { it.value > 0 }
+                                .sortedByDescending { it.value }
+                                .take(3)
+                                .joinToString("") { it.key },
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = reactionTotal.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary.copy(alpha = cardAlpha),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 10.sp
+                        )
+                    }
                 }
-                if (story.createdAt > 0) {
-                    Text(
-                        text = story.createdAt.toRelativeTime(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary.copy(alpha = cardAlpha),
-                        fontSize = 10.sp
+                IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Delete story",
+                        tint = ErrorRed.copy(alpha = 0.7f),
+                        modifier = Modifier.size(17.dp)
                     )
                 }
             }
-
-            // Delete button
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(32.dp)
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = "Delete story",
-                    tint = ErrorRed.copy(alpha = 0.7f),
-                    modifier = Modifier.size(18.dp)
+                    Icons.Filled.Visibility,
+                    contentDescription = null,
+                    tint = Teal.copy(alpha = 0.9f),
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Tap to see who viewed",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Teal.copy(alpha = 0.9f),
+                    fontSize = 10.sp
                 )
             }
         }
@@ -540,7 +691,12 @@ private fun UploadStoryDialog(
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Landscape two-column layout: media on the LEFT, the
+            // audience + caption controls on the RIGHT so the "Who can
+            // see this?" choice is ALWAYS visible without scrolling past
+            // the tall media card (the app is locked to landscape).
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+              Column(modifier = Modifier.weight(1f)) {
 
                 // ── HERO MEDIA CARD ───────────────────────────────
                 // One tappable surface: an inviting call-to-action when
@@ -694,72 +850,95 @@ private fun UploadStoryDialog(
                         }
                     }
                 }
+              } // end LEFT (media) column
 
-                // ── AUDIENCE PICKER ───────────────────────────────
-                // Who sees this story. Placed directly under the media so
-                // the teacher makes an explicit visibility choice BEFORE
-                // sharing. "Whole school" = empty target set (visible to
-                // all parents). Otherwise scoped to the selected class-
-                // sections (parents of those sections). Defaults to the
-                // teacher's class-teacher section(s). Always rendered — even
-                // if the teacher has no assigned sections yet, the "Whole
-                // school" option is shown so the picker is never blank.
+              // ── RIGHT COLUMN: audience + caption (scroll-safe) ──
+              Column(
+                  modifier = Modifier
+                      .weight(1f)
+                      .fillMaxHeight()
+                      .verticalScroll(rememberScrollState()),
+                  verticalArrangement = Arrangement.spacedBy(14.dp)
+              ) {
+
+                // ── AUDIENCE PICKER (prominent) ───────────────────
+                // Explicit, always-visible visibility choice. "Whole
+                // school" = empty target set (all parents). Otherwise
+                // scoped to the selected class-sections. Defaults to the
+                // teacher's class-teacher section(s). The "Whole school"
+                // option is always shown so the picker is never blank.
                 Column {
-                    Text(
-                        text = "Who can see this story?",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    run {
-                        val audienceChipColors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = TealSurface,
-                            selectedLabelColor = Teal,
-                            selectedLeadingIconColor = Teal,
-                            containerColor = Color.Transparent,
-                            labelColor = TextSecondary,
-                            iconColor = TextSecondary
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Public,
+                            contentDescription = null,
+                            tint = Teal,
+                            modifier = Modifier.size(18.dp)
                         )
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val wholeSchool = selectedAudience.isEmpty()
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Who can see this story?",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    val audienceChipColors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = TealSurface,
+                        selectedLabelColor = Teal,
+                        selectedLeadingIconColor = Teal,
+                        containerColor = Color.Transparent,
+                        labelColor = TextSecondary,
+                        iconColor = TextSecondary
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val wholeSchool = selectedAudience.isEmpty()
+                        FilterChip(
+                            selected = wholeSchool,
+                            onClick = onSelectWholeSchool,
+                            label = { Text("Whole school") },
+                            leadingIcon = {
+                                Icon(
+                                    if (wholeSchool) Icons.Filled.Check else Icons.Filled.Public,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            colors = audienceChipColors,
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderColor = GlassBorder,
+                                selectedBorderColor = Teal.copy(alpha = 0.4f),
+                                enabled = true,
+                                selected = wholeSchool
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        audienceOptions.forEach { option ->
+                            val isSel = option.token in selectedAudience
                             FilterChip(
-                                selected = wholeSchool,
-                                onClick = onSelectWholeSchool,
-                                label = { Text("Whole school") },
-                                leadingIcon = if (wholeSchool) {
-                                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                } else null,
+                                selected = isSel,
+                                onClick = { onToggleAudience(option.token) },
+                                label = { Text(option.label) },
+                                leadingIcon = {
+                                    Icon(
+                                        if (isSel) Icons.Filled.Check else Icons.Filled.Groups,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
                                 colors = audienceChipColors,
                                 border = FilterChipDefaults.filterChipBorder(
                                     borderColor = GlassBorder,
                                     selectedBorderColor = Teal.copy(alpha = 0.4f),
                                     enabled = true,
-                                    selected = wholeSchool
+                                    selected = isSel
                                 ),
                                 shape = RoundedCornerShape(8.dp)
                             )
-                            audienceOptions.forEach { option ->
-                                val isSel = option.token in selectedAudience
-                                FilterChip(
-                                    selected = isSel,
-                                    onClick = { onToggleAudience(option.token) },
-                                    label = { Text(option.label) },
-                                    leadingIcon = if (isSel) {
-                                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                    } else null,
-                                    colors = audienceChipColors,
-                                    border = FilterChipDefaults.filterChipBorder(
-                                        borderColor = GlassBorder,
-                                        selectedBorderColor = Teal.copy(alpha = 0.4f),
-                                        enabled = true,
-                                        selected = isSel
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                            }
                         }
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = if (selectedAudience.isEmpty())
                             "Everyone in your school will see this story."
@@ -784,7 +963,8 @@ private fun UploadStoryDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-            }
+              } // end RIGHT column
+            } // end two-column Row
         },
         confirmButton = {
             Button(
@@ -818,7 +998,661 @@ private fun UploadStoryDialog(
                 Text("Cancel", color = TextSecondary)
             }
         },
+        // Landscape: opt out of the narrow platform default width so the
+        // two-column (media | audience+caption) layout has room to breathe.
+        modifier = Modifier.fillMaxWidth(0.82f),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         containerColor = SurfaceDark,
         shape = RoundedCornerShape(20.dp)
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  Insights sheet — who saw the story + what they reacted
+// ─────────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StoryInsightsSheet(
+    story: Story,
+    insights: com.schoolsync.teacher.data.repository.firestore.StoryInsights?,
+    loading: Boolean,
+    onDismiss: () -> Unit
+) {
+    BackHandler(onBack = onDismiss)
+    // Full-screen in-composition overlay (NOT a Dialog) so it lives in the
+    // app's edge-to-edge window and fits landscape + camera cutout. Cap the
+    // sheet to 92% height so it never runs off the top; body scrolls.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxSheetHeight = maxHeight * 0.92f
+        // Tap the dimmed area to dismiss; the sheet itself swallows taps.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                    .background(SurfaceDark)
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { /* swallow */ }
+                    // Keep content clear of the side notch + bottom nav bar.
+                    .displayCutoutPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                // Grabber
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(TextTertiary.copy(alpha = 0.4f))
+                )
+                Spacer(Modifier.height(16.dp))
+
+                // Scrollable body so tall content (long viewer lists) never clips.
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+
+                // Header: thumbnail + caption + close
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Glass)
+                    ) {
+                        if (story.mediaUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                                    .data(story.mediaUrl)
+                                    .apply { if (story.type == "video") decoderFactory(coil.decode.VideoFrameDecoder.Factory()) }
+                                    .crossfade(true).build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = story.caption.ifBlank { "Your story" },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (story.createdAt > 0) {
+                            Text(
+                                text = story.createdAt.toRelativeTime(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextTertiary
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary)
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Stat row: views + total reactions
+                val totalReactions = insights?.reactionCounts?.values?.sum()
+                    ?: story.reactionCounts.values.sum()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatPill(
+                        icon = Icons.Filled.Visibility,
+                        value = (insights?.viewCount ?: story.viewCount).toString(),
+                        label = "Views",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatPill(
+                        icon = Icons.Filled.Person,
+                        value = totalReactions.toString(),
+                        label = "Reactions",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Reaction breakdown chips
+                val breakdown = (insights?.reactionCounts ?: story.reactionCounts)
+                    .filterValues { it > 0 }
+                    .entries.sortedByDescending { it.value }
+                if (breakdown.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        breakdown.forEach { (emoji, count) ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Glass)
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(emoji, fontSize = 15.sp)
+                                Spacer(Modifier.width(5.dp))
+                                Text(
+                                    "$count",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = GlassBorder)
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = "Seen by",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextSecondary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(8.dp))
+
+                when {
+                    loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) { CircularProgressIndicator(color = Teal, modifier = Modifier.size(28.dp)) }
+                    }
+                    insights == null || insights.viewers.isEmpty() -> {
+                        Text(
+                            text = "No views yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextTertiary,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    }
+                    else -> {
+                        Column {
+                            insights.viewers.forEach { v -> ViewerRow(v) }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                } // end scrollable body
+            }
+        }
+    } // end BoxWithConstraints
+}
+
+@Composable
+private fun StatPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Glass)
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = null, tint = Teal, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(value, style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+    }
+}
+
+@Composable
+private fun ViewerRow(v: com.schoolsync.teacher.data.repository.firestore.StoryViewerEntry) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(38.dp).clip(CircleShape).background(TealSurface),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = v.name.trim().firstOrNull()?.uppercase() ?: "?",
+                style = MaterialTheme.typography.titleSmall,
+                color = Teal,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = v.name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (v.viewedAtMillis > 0) {
+                Text(
+                    text = v.viewedAtMillis.toRelativeTime(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary
+                )
+            }
+        }
+        if (v.emoji != null) {
+            Text(v.emoji, fontSize = 18.sp)
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  Archived gallery — full-screen grid of expired stories
+// ─────────────────────────────────────────────────────────────────────
+@Composable
+private fun ArchivedGalleryOverlay(
+    stories: List<Story>,
+    viewCounts: Map<String, Int>,
+    onOpen: (Story) -> Unit,
+    onClose: () -> Unit
+) {
+    BackHandler(onBack = onClose)
+    // In-composition full-screen overlay (NOT a Dialog) so it fits the
+    // edge-to-edge landscape window; safeDrawingPadding keeps everything
+    // clear of the status bar, nav bar and side camera cutout.
+    GradientBackground {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onClose, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextPrimary)
+                }
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Filled.Timer, contentDescription = null, tint = Teal, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Archived",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "${stories.size}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextTertiary
+                )
+            }
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 150.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 8.dp)
+            ) {
+                items(stories, key = { "gal_${it.storyId}" }) { story ->
+                    ArchivedThumb(
+                        story = story,
+                        viewCount = viewCounts[story.storyId] ?: 0,
+                        onClick = { onOpen(story) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArchivedThumb(story: Story, viewCount: Int, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Glass)
+            .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                .background(SurfaceDark)
+        ) {
+            if (story.mediaUrl.isNotBlank()) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                        .data(story.mediaUrl)
+                        .apply { if (story.type == "video") decoderFactory(coil.decode.VideoFrameDecoder.Factory()) }
+                        .crossfade(true).build(),
+                    contentDescription = story.caption.ifBlank { "Story" },
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            if (story.type == "video") {
+                Box(
+                    modifier = Modifier.align(Alignment.Center).size(40.dp).clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                }
+            }
+            Box(
+                modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)
+                    .clip(RoundedCornerShape(6.dp)).background(Glass)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Visibility, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(11.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("$viewCount", style = MaterialTheme.typography.labelSmall, color = TextPrimary, fontSize = 10.sp)
+                }
+            }
+        }
+        if (story.caption.isNotBlank()) {
+            Text(
+                text = story.caption,
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+            )
+        } else {
+            Spacer(Modifier.height(6.dp))
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  Archived full-screen viewer — one expired story, gallery-style
+// ─────────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ArchivedStoryViewer(
+    stories: List<Story>,
+    initialIndex: Int,
+    onClose: () -> Unit
+) {
+    if (stories.isEmpty()) { onClose(); return }
+    // Proper full-screen story layout (in-composition overlay, NOT a Dialog)
+    // — same window as the app so it fits landscape + camera cutout.
+    BackHandler(onBack = onClose)
+    run {
+        val safeInitial = initialIndex.coerceIn(0, stories.size - 1)
+        val pagerState = rememberPagerState(initialPage = safeInitial) { stories.size }
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        var menuOpen by remember { mutableStateOf(false) }
+        var detailsFor by remember { mutableStateOf<Story?>(null) }
+
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            // Gallery-style swipe left/right, NO auto-advance timer.
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                val story = stories[page]
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (story.type == "video" && story.mediaUrl.isNotBlank()) {
+                        // Only the visible page instantiates a player.
+                        if (page == pagerState.currentPage) {
+                            ArchivedVideoPlayer(url = story.mediaUrl)
+                        } else {
+                            AsyncImage(
+                                model = coil.request.ImageRequest.Builder(context)
+                                    .data(story.mediaUrl)
+                                    .decoderFactory(coil.decode.VideoFrameDecoder.Factory())
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    } else {
+                        AsyncImage(
+                            model = story.mediaUrl,
+                            contentDescription = story.caption.ifBlank { "Story" },
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    // Caption centered at bottom (per page).
+                    if (story.caption.isNotBlank()) {
+                        Box(
+                            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+                                .padding(horizontal = 24.dp).padding(top = 48.dp, bottom = 40.dp),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            Text(
+                                text = story.caption,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+
+            val current = stories[pagerState.currentPage]
+
+            // Top bar: close · counter · 3-dot menu (details / download).
+            // safeDrawingPadding keeps the buttons clear of the side notch.
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .safeDrawingPadding()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                }
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${stories.size}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Color.White)
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Details") },
+                            leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                            onClick = { menuOpen = false; detailsFor = current }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Download") },
+                            leadingIcon = { Icon(Icons.Filled.Download, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                android.widget.Toast.makeText(context, "Saving…", android.widget.Toast.LENGTH_SHORT).show()
+                                scope.launch {
+                                    val ok = downloadStoryMedia(context, current)
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        if (ok) "Saved to your gallery" else "Download failed",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Per-story details sheet.
+        detailsFor?.let { s ->
+            ArchivedDetailsSheet(story = s, onDismiss = { detailsFor = null })
+        }
+    }
+}
+
+/** Bottom sheet with one archived story's metadata. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ArchivedDetailsSheet(story: Story, onDismiss: () -> Unit) {
+    BackHandler(onBack = onDismiss)
+    run {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                    .background(SurfaceDark)
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { }
+                    .displayCutoutPadding()
+                    .navigationBarsPadding()
+                    .padding(20.dp)
+            ) {
+                Text("Story details", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(14.dp))
+                DetailRow("Type", story.type.replaceFirstChar { it.uppercase() })
+                if (story.caption.isNotBlank()) DetailRow("Caption", story.caption)
+                if (story.createdAt > 0) DetailRow("Posted", story.createdAt.toRelativeTime())
+                DetailRow("Views", story.viewCount.toString())
+                val reactionTotal = story.reactionCounts.values.sum()
+                DetailRow("Reactions", reactionTotal.toString())
+                val breakdown = story.reactionCounts.filterValues { it > 0 }.entries.sortedByDescending { it.value }
+                if (breakdown.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        breakdown.forEach { (emoji, count) ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Glass).padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(emoji, fontSize = 15.sp)
+                                Spacer(Modifier.width(5.dp))
+                                Text("$count", style = MaterialTheme.typography.labelMedium, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+                val audience = if (story.audienceClassKeys.isEmpty()) "Whole school"
+                    else story.audienceClassKeys.joinToString(", ")
+                DetailRow("Audience", audience)
+                Spacer(Modifier.height(10.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = TextTertiary, modifier = Modifier.width(96.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * Save a story's media to the device gallery via MediaStore. Images →
+ * Pictures/ZenXii, videos → Movies/ZenXii. Returns true on success.
+ */
+private suspend fun downloadStoryMedia(context: android.content.Context, story: Story): Boolean =
+    withContext(Dispatchers.IO) {
+        try {
+            val url = story.mediaUrl
+            if (url.isBlank()) return@withContext false
+            val isVideo = story.type == "video"
+            val mime = if (isVideo) "video/mp4" else "image/jpeg"
+            val ext = if (isVideo) "mp4" else "jpg"
+            val name = "ZenXii_Story_${System.currentTimeMillis()}.$ext"
+            val resolver = context.contentResolver
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val collection = if (isVideo)
+                    android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                else
+                    android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, if (isVideo) "Movies/ZenXii" else "Pictures/ZenXii")
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val itemUri = resolver.insert(collection, values) ?: return@withContext false
+                resolver.openOutputStream(itemUri)?.use { out ->
+                    java.net.URL(url).openStream().use { input -> input.copyTo(out) }
+                } ?: return@withContext false
+                values.clear()
+                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(itemUri, values, null, null)
+                true
+            } else {
+                // Pre-Q: app-specific external dir (no runtime permission).
+                val dir = context.getExternalFilesDir(if (isVideo) "Movies" else "Pictures")
+                val file = java.io.File(dir, name)
+                java.net.URL(url).openStream().use { input ->
+                    file.outputStream().use { out -> input.copyTo(out) }
+                }
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+@Composable
+private fun ArchivedVideoPlayer(url: String) {
+    val context = LocalContext.current
+    val player = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(url))
+            repeatMode = ExoPlayer.REPEAT_MODE_ONE
+            playWhenReady = true
+            prepare()
+        }
+    }
+    DisposableEffect(Unit) { onDispose { player.release() } }
+    AndroidView(
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                this.player = player
+                useController = true
+            }
+        },
+        modifier = Modifier.fillMaxSize()
     )
 }

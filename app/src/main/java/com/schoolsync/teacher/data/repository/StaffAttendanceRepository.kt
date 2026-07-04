@@ -82,6 +82,9 @@ class StaffAttendanceRepository @Inject constructor(
                 status = todayMap["status"] as? String ?: "V",
                 checkInAt = todayMap["checkInAt"] as? String,
                 checkOutAt = todayMap["checkOutAt"] as? String,
+                isWeeklyOff = todayMap["isWeeklyOff"] as? Boolean ?: false,
+                isHoliday = todayMap["isHoliday"] as? Boolean ?: false,
+                allowWorkOnOff = todayMap["allowWorkOnOff"] as? Boolean ?: false,
             ),
             month = MonthSummary(
                 monthKey = monthMap["monthKey"] as? String ?: "",
@@ -90,6 +93,9 @@ class StaffAttendanceRepository @Inject constructor(
                 leave = (monthMap["leave"] as? Number)?.toInt() ?: 0,
                 holiday = (monthMap["holiday"] as? Number)?.toInt() ?: 0,
                 tardy = (monthMap["tardy"] as? Number)?.toInt() ?: 0,
+                halfDay = (monthMap["halfDay"] as? Number)?.toInt() ?: 0,
+                extraWorked = (monthMap["extraWorked"] as? Number)?.toInt() ?: 0,
+                weeklyOff = (monthMap["weeklyOff"] as? Number)?.toInt() ?: 0,
                 workingDays = (monthMap["workingDays"] as? Number)?.toInt() ?: 0,
             ),
             history = historyRaw.mapNotNull {
@@ -153,9 +159,12 @@ data class MyAttendance(
 
 data class TodayAttendance(
     val date: String,
-    val status: String,            // P|T|A|L|H|V
+    val status: String,            // P|T|M|A|L|H|O|W|V
     val checkInAt: String?,
     val checkOutAt: String?,
+    val isWeeklyOff: Boolean = false,
+    val isHoliday: Boolean = false,
+    val allowWorkOnOff: Boolean = false,
 )
 
 data class MonthSummary(
@@ -165,6 +174,9 @@ data class MonthSummary(
     val leave: Int,
     val holiday: Int,
     val tardy: Int,
+    val halfDay: Int = 0,
+    val extraWorked: Int = 0,
+    val weeklyOff: Int = 0,
     val workingDays: Int,
 )
 

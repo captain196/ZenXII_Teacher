@@ -3,6 +3,7 @@ package com.schoolsync.teacher.data.repository.firestore
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.schoolsync.teacher.data.firebase.FirestoreService
+import com.schoolsync.teacher.util.toEpochMillisOrNull
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.CircularDoc
 import com.schoolsync.teacher.data.model.firestore.CircularReadDoc
@@ -41,6 +42,32 @@ class CommunicationFirestoreRepository @Inject constructor(
     // ── Circulars ──────────────────────────────────────────────────────────
 
     /**
+     * Canonical audience keys the current teacher matches: school-wide,
+     * staff/teacher role, and their OWN user key (for individually-targeted
+     * staff notices).
+     */
+    private fun teacherAudienceKeys(userId: String?): Set<String> {
+        val keys = mutableSetOf("all", "role:teacher", "role:staff")
+        userId?.takeIf { it.isNotBlank() }?.let { keys.add("user:$it") }
+        return keys
+    }
+
+    private suspend fun teacherAudienceKeys(): Set<String> = teacherAudienceKeys(getUserId())
+
+    /**
+     * Audience gate. Canonical `audienceKeys` intersection when present; legacy
+     * un-keyed docs default to visible (no content vanishes before the writer +
+     * backfill are fully rolled out).
+     */
+    private fun matchesTeacherAudience(c: CircularDoc, myKeys: Set<String>): Boolean =
+        if (c.audienceKeys.isNotEmpty()) c.audienceKeys.any { it in myKeys }
+        else true
+
+    /** Hide circulars whose expiry has passed (expiresAt is optional). */
+    private fun notExpired(c: CircularDoc): Boolean =
+        c.expiresAt.toEpochMillisOrNull()?.let { it > System.currentTimeMillis() } ?: true
+
+    /**
      * Fetch sent circulars AND notices for the current school, merged and
      * ordered by most recent first. Admin Notice Board posts to the `notices`
      * collection; HR auto-posts + Circulars module posts to `circulars`.
@@ -73,12 +100,32 @@ class CommunicationFirestoreRepository @Inject constructor(
                 // or the query fails, fall through with circulars only.
                 emptyList()
             }
+            val myKeys = teacherAudienceKeys()
             val merged = (circulars + notices)
-                .sortedByDescending { it.sentAt?.toString().orEmpty() }
+                .filter { matchesTeacherAudience(it, myKeys) && notExpired(it) }
+                .sortedByDescending { it.sentAt.toEpochMillisOrNull() ?: 0L }
                 .take(limit)
             Result.success(merged)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * The set of circular/notice IDs the current teacher has already opened
+     * (from `circularReads`). Empty on any failure — read-state is a display
+     * nicety, never a hard dependency.
+     */
+    suspend fun getReadCircularIds(): Set<String> {
+        val userId = getUserId() ?: return emptySet()
+        return try {
+            firestoreService.queryDocumentsAs<CircularReadDoc>(
+                Constants.Firestore.CIRCULAR_READS
+            ) { ref -> ref.whereEqualTo("userId", userId) }
+                .mapNotNull { it.circularId.takeIf { c -> c.isNotBlank() } }
+                .toSet()
+        } catch (e: Exception) {
+            emptySet()
         }
     }
 
@@ -222,7 +269,8 @@ class CommunicationFirestoreRepository @Inject constructor(
                         .catch { emit(emptyList()) } // index missing → degrade gracefully
 
                     combine(circulars, notices) { c, n ->
-                        (c + n).sortedByDescending { it.sentAt?.toString().orEmpty() }.take(50)
+                        (c + n).filter { matchesTeacherAudience(it, teacherAudienceKeys(null)) && notExpired(it) }
+                            .sortedByDescending { it.sentAt.toEpochMillisOrNull() ?: 0L }.take(50)
                     }
                 }
             }

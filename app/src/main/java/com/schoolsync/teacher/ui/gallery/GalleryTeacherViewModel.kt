@@ -84,6 +84,32 @@ class GalleryTeacherViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Open (select) an album by its albumId — used when arriving from the
+     * Events "View Photos" jump. Reuses the loaded album list when possible;
+     * otherwise refreshes albums first, then selects the match.
+     */
+    fun openAlbumById(albumId: String) {
+        if (albumId.isBlank()) return
+        viewModelScope.launch {
+            _uiState.value.albums.firstOrNull { it.albumId == albumId }?.let { album ->
+                selectAlbum(album)
+                return@launch
+            }
+            _uiState.update { it.copy(isLoadingAlbums = true, error = null) }
+            galleryRepository.getAlbums().fold(
+                onSuccess = { albums ->
+                    _uiState.update { it.copy(albums = albums, isLoadingAlbums = false) }
+                    albums.firstOrNull { it.albumId == albumId }?.let { selectAlbum(it) }
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "openAlbumById failed: ${e.message}", e)
+                    _uiState.update { it.copy(isLoadingAlbums = false, error = e.message) }
+                }
+            )
+        }
+    }
+
     fun selectAlbum(album: GalleryAlbum?) {
         _uiState.update { it.copy(selectedAlbum = album, media = emptyList()) }
         if (album != null) {
@@ -160,40 +186,6 @@ class GalleryTeacherViewModel @Inject constructor(
         _uiState.update { it.copy(showUploadMediaDialog = false) }
     }
 
-    fun uploadMedia(url: String, caption: String, type: String = "image") {
-        val album = _uiState.value.selectedAlbum ?: return
-        if (url.isBlank()) {
-            viewModelScope.launch {
-                _events.emit(GalleryEvent.Error("URL cannot be empty"))
-            }
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isUploading = true) }
-            try {
-                galleryRepository.uploadMedia(album.albumId, url, type, caption).fold(
-                    onSuccess = { mediaId ->
-                        Log.d(TAG, "Uploaded media: $mediaId")
-                        _uiState.update { it.copy(isUploading = false, showUploadMediaDialog = false) }
-                        _events.emit(GalleryEvent.Success("Media uploaded successfully"))
-                        loadMedia(album.albumId)
-                        loadAlbums() // Refresh count
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Failed to upload media: ${e.message}", e)
-                        _uiState.update { it.copy(isUploading = false) }
-                        _events.emit(GalleryEvent.Error(e.message ?: "Failed to upload media"))
-                    }
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to upload media", e)
-                _uiState.update { it.copy(isUploading = false) }
-                _events.emit(GalleryEvent.Error(e.message ?: "Failed to upload media"))
-            }
-        }
-    }
-
     /**
      * Upload a picked file (Uri) to Firebase Storage, then write the
      * resulting download URL into the gallery via [uploadMedia]. Validates
@@ -214,21 +206,23 @@ class GalleryTeacherViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isUploading = true) }
             try {
-                val schoolId = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
-                    ?: tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
+                // Canonical school scope: `schoolId` is always populated at
+                // login; `schoolCode` is a fallback for older sessions.
+                val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
+                    ?: tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
                     ?: throw Exception("School ID not available")
 
-                Log.d(TAG, "uploadMediaFile: starting upload uri=$uri type=$declaredType")
-                val downloadUrl = GalleryMediaUploader.uploadSuspending(
+                Log.d(TAG, "uploadMediaFile: starting upload type=$declaredType")
+                val upload = GalleryMediaUploader.uploadSuspending(
                     context     = context,
                     uri         = uri,
                     schoolId    = schoolId,
                     albumId     = album.albumId,
                     declaredType= declaredType
                 )
-                Log.d(TAG, "uploadMediaFile: storage upload OK, url=$downloadUrl")
+                Log.d(TAG, "uploadMediaFile: storage upload OK")
 
-                galleryRepository.uploadMedia(album.albumId, downloadUrl, declaredType, caption).fold(
+                galleryRepository.uploadMedia(album.albumId, upload.downloadUrl, declaredType, caption).fold(
                     onSuccess = { mediaId ->
                         Log.d(TAG, "uploadMediaFile: firestore write OK mediaId=$mediaId")
                         _uiState.update { it.copy(isUploading = false, showUploadMediaDialog = false) }
@@ -238,6 +232,10 @@ class GalleryTeacherViewModel @Inject constructor(
                     },
                     onFailure = { e ->
                         Log.e(TAG, "uploadMediaFile: firestore write failed: ${e.message}", e)
+                        // Roll back the orphaned Storage object so a failed
+                        // Firestore write doesn't leave a billed, unreferenced file.
+                        val deleted = GalleryMediaUploader.deleteByPath(upload.storagePath)
+                        if (!deleted) Log.w(TAG, "uploadMediaFile: orphan rollback failed for uploaded object")
                         _uiState.update { it.copy(isUploading = false) }
                         _events.emit(GalleryEvent.Error(e.message ?: "Failed to save media"))
                     }

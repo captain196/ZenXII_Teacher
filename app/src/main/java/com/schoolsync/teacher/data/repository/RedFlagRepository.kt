@@ -1,6 +1,7 @@
 package com.schoolsync.teacher.data.repository
 
 import android.util.Log
+import com.schoolsync.teacher.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.Query
@@ -173,12 +174,14 @@ class RedFlagRepository @Inject constructor(
                 "isArchived"    to false
             )
 
-            // Loud log so the parent-side mismatch (studentId not matching
-            // parent's user.userId) can be diagnosed via:
-            //   adb logcat -s RedFlagRepo:*
-            Log.i(TAG, "createFlag write -> docId=$docId, studentId=${flag.studentId}, " +
-                "schoolId=$schoolId, teacherUid=$teacherUid, className='${flag.className}', " +
-                "section='${flag.section}'")
+            // Diagnostic for parent-side studentId mismatch. Debug builds only —
+            // studentId/schoolId/teacherUid are PII and must not persist in
+            // release logcat. adb logcat -s RedFlagRepo:*
+            if (BuildConfig.DEBUG) {
+                Log.i(TAG, "createFlag write -> docId=$docId, studentId=${flag.studentId}, " +
+                    "schoolId=$schoolId, teacherUid=$teacherUid, className='${flag.className}', " +
+                    "section='${flag.section}'")
+            }
 
             // The write is idempotent — docId is `{schoolId}_{flagId}` and
             // `flagId` is generated as a UUID-suffixed timestamp, so a
@@ -306,7 +309,7 @@ class RedFlagRepository @Inject constructor(
             val snap = try {
                 query.get(Source.SERVER).await()
             } catch (e: Exception) {
-                Log.w(TAG, "Server fetch failed for student $studentId, falling back to cache: ${e.message}")
+                if (BuildConfig.DEBUG) Log.w(TAG, "Server fetch failed for student $studentId, falling back to cache: ${e.message}")
                 query.get(Source.CACHE).await()
             }
             // Hide soft-deleted flags.

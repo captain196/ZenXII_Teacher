@@ -1,12 +1,10 @@
 package com.schoolsync.teacher.service
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -28,9 +26,6 @@ class FCMService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "FCMService"
-        private const val CHANNEL_ID = "school_sync_channel"
-        private const val CHANNEL_NAME = "ZenXii Notifications"
-        private const val CHANNEL_DESCRIPTION = "Notifications from ZenXii Teacher app"
     }
 
     @Inject
@@ -41,6 +36,14 @@ class FCMService : FirebaseMessagingService() {
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+
+    override fun onCreate() {
+        super.onCreate()
+        // Create all channels up front so the manifest default_notification_channel_id
+        // always resolves (backgrounded notification-payload pushes rely on it) and
+        // per-category muting works. Idempotent.
+        NotificationChannels.ensureChannels(this)
+    }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
@@ -155,19 +158,9 @@ class FCMService : FirebaseMessagingService() {
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Create channel for Android O+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = CHANNEL_DESCRIPTION
-                enableLights(true)
-                enableVibration(true)
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
+        // Channels are created in onCreate; resolve the per-category channel for
+        // this payload (falls back to GENERAL for unknown/missing types).
+        val channelId = NotificationChannels.channelForType(data["type"] ?: data["mark"])
 
         // Create intent
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -184,7 +177,7 @@ class FCMService : FirebaseMessagingService() {
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)

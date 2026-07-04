@@ -529,7 +529,7 @@ private fun HomeworkTopBar(
             }
 
             // Refresh
-            IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onRefresh, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
             }
         }
@@ -1334,7 +1334,14 @@ private fun HomeworkDetailPanel(
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isImage) {
+                            // Only let Coil fetch the raw URL when it passes the
+                            // same allowlist (https + firebasestorage host) the
+                            // click-open path enforces — otherwise fall through to
+                            // the type-icon so a hostile/unknown URL is never hit
+                            // by the image loader (SSRF surface).
+                            val thumbAllowed = isImage &&
+                                AttachmentUrlValidator.validate(attachment) is AttachmentUrlValidator.Result.Valid
+                            if (thumbAllowed) {
                                 AsyncImage(
                                     model = attachment,
                                     contentDescription = fileName,
@@ -2477,22 +2484,37 @@ private fun getSubjectColor(subject: String): Color {
  * so a card isn't flagged "past due" on the morning of its due day. Returns
  * null for blank/unparseable input (caller treats that as "not past due").
  */
-private fun parseDueInstant(raw: String): java.util.Date? {
+// Visibility widened private -> internal for JVM unit tests (HomeworkDateLogicTest).
+// Pure JDK date math (SimpleDateFormat/TimeZone/Calendar) — no Android/Firebase deps.
+internal fun parseDueInstant(raw: String): java.util.Date? {
     if (raw.isBlank()) return null
     val istTz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
     if (raw.contains('T')) {
         for (p in listOf("yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss'Z'")) {
             try {
                 val sdf = java.text.SimpleDateFormat(p, java.util.Locale.US)
+                // isLenient=false is CRITICAL: with lenient parsing (the JDK
+                // default) a wrong-separator or out-of-range input is silently
+                // rolled over / partially consumed instead of rejected, so the
+                // wrong pattern "wins" before the correct one is tried. Strict
+                // mode makes bad input throw and fall through to the next
+                // pattern (or to null). See the two regression tests.
+                sdf.isLenient = false
                 if (p.endsWith("'Z'")) sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
                 val d = sdf.parse(raw)
                 if (d != null) return d
             } catch (_: Exception) {}
         }
     }
+    // Date-only patterns. Order matters together with isLenient=false: strict
+    // mode makes "yyyy-MM-dd" REJECT a dash-form legacy date like "06-05-2026"
+    // (day 2026 is out of range) so it correctly falls through to "dd-MM-yyyy".
     for (p in listOf("yyyy-MM-dd", "dd-MM-yyyy", "dd/MM/yyyy")) {
         try {
-            val sdf = java.text.SimpleDateFormat(p, java.util.Locale.US).apply { timeZone = istTz }
+            val sdf = java.text.SimpleDateFormat(p, java.util.Locale.US).apply {
+                timeZone = istTz
+                isLenient = false
+            }
             val d = sdf.parse(raw)
             if (d != null) {
                 return java.util.Calendar.getInstance(istTz).apply {
@@ -2507,7 +2529,7 @@ private fun parseDueInstant(raw: String): java.util.Date? {
 }
 
 /** True when the homework's due instant is in the past. */
-private fun isDuePassed(raw: String): Boolean {
+internal fun isDuePassed(raw: String): Boolean {
     val due = parseDueInstant(raw) ?: return false
     return due.before(java.util.Date())
 }
@@ -2520,26 +2542,16 @@ private fun isDuePassed(raw: String): Boolean {
  *   - otherwise → "Due on dd MMM"
  * Returns "No due date" for blank input and the raw string if unparseable.
  */
-private fun formatDueDateIST(raw: String): String {
+internal fun formatDueDateIST(raw: String): String {
     if (raw.isBlank()) return "No due date"
     val tz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
-    val patterns = listOf(
-        "yyyy-MM-dd'T'HH:mm:ssXXX",
-        "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        "yyyy-MM-dd",
-        "dd-MM-yyyy",
-        "dd/MM/yyyy"
-    )
-    var due: java.util.Date? = null
-    for (p in patterns) {
-        try {
-            val sdf = java.text.SimpleDateFormat(p, java.util.Locale.US)
-            if (p.endsWith("'Z'")) sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
-            val d = sdf.parse(raw)
-            if (d != null) { due = d; break }
-        } catch (_: Exception) {}
-    }
-    if (due == null) return raw
+    // Reuse parseDueInstant so parsing is IDENTICAL to the overdue check:
+    // strict (isLenient=false) parsing, and date-only values pinned to
+    // 23:59:59 IST end-of-day (previously this parsed date-only at midnight
+    // in the default TZ, so the rendered time was wrong and TZ-dependent).
+    // Time-bearing ISO inputs resolve to the exact same instant as before,
+    // so their display is unchanged.
+    val due: java.util.Date = parseDueInstant(raw) ?: return raw
     fun istDay(d: java.util.Date): Long {
         val c = java.util.Calendar.getInstance(tz).apply {
             time = d

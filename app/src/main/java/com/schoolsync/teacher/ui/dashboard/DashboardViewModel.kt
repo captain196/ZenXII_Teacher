@@ -32,13 +32,18 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 
+/** Where a period sits relative to the current wall-clock time. */
+enum class PeriodStatus { DONE, CURRENT, UPCOMING }
+
 data class PeriodItem(
     val periodNumber: Int,
     val time: String,
     val subject: String,
     val className: String,
     val section: String,
-    val isCurrent: Boolean = false
+    val isCurrent: Boolean = false,
+    val status: PeriodStatus = PeriodStatus.UPCOMING,
+    val isBreak: Boolean = false
 )
 
 data class QuickStat(
@@ -96,7 +101,9 @@ data class DashboardUiState(
      */
     val classTeacherOf: List<String> = emptyList(),
     /** Substitute info for today — shows if someone is covering this teacher's classes */
-    val substituteInfo: String? = null
+    val substituteInfo: String? = null,
+    /** Upcoming school events (soonest first) for the dashboard events rail. */
+    val upcomingEvents: List<com.schoolsync.teacher.data.model.firestore.EventDoc> = emptyList()
 )
 
 @HiltViewModel
@@ -110,6 +117,7 @@ class DashboardViewModel @Inject constructor(
     private val sectionFirestoreRepo: SectionFirestoreRepository,
     private val communicationFirestoreRepo: CommunicationFirestoreRepository,
     private val timetableFirestoreRepo: TimetableFirestoreRepository,
+    private val eventsFirestoreRepo: com.schoolsync.teacher.data.repository.firestore.EventsFirestoreRepository,
     private val firestoreService: com.schoolsync.teacher.data.firebase.FirestoreService
 ) : ViewModel() {
 
@@ -124,7 +132,10 @@ class DashboardViewModel @Inject constructor(
             tokenManager.session
                 .distinctUntilChanged()
                 .collect { session ->
-                    if (!session.isNullOrBlank()) loadDashboard()
+                    if (!session.isNullOrBlank()) {
+                        loadDashboard()
+                        loadUpcomingEvents()
+                    }
                 }
         }
 
@@ -171,6 +182,12 @@ class DashboardViewModel @Inject constructor(
                 val classSectionsDistinct = assignedClasses
                     .map { it.className to it.section }
                     .distinct()
+                // Subject keys so the timetable reader can claim blank-teacherId
+                // periods matching my (class, section, subject) assignments —
+                // covers admin timetables published without a teacher on a slot.
+                val mySubjectKeys = TimetableFirestoreRepository.subjectKeysOf(
+                    assignedClasses.map { Triple(it.className, it.section, it.subject) }
+                )
                 val classTeacherSections = assignedClasses
                     .filter { it.classTeacher }
                     .map { it.className to it.section }
@@ -230,22 +247,27 @@ class DashboardViewModel @Inject constructor(
                     //    permission / missing index), which the UI must
                     //    distinguish from a genuinely empty schedule.
                     val timetableJob = async {
-                        timetableFirestoreRepo.getMyTimetable(classSectionsDistinct).fold(
+                        timetableFirestoreRepo.getMyTimetable(classSectionsDistinct, mySubjectKeys).fold(
                             onSuccess = { dayTimetables ->
                                 val todayName = todayDayName()
                                 val todayPeriods = dayTimetables
                                     .filter { it.day.equals(todayName, ignoreCase = true) }
                                     .flatMap { it.periods }
                                     .sortedBy { it.periodNumber }
-                                val currentPeriod = calculateCurrentPeriod(todayPeriods)
+                                val nowMinutes = Calendar.getInstance().let {
+                                    it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE)
+                                }
                                 todayPeriods.map { entry ->
+                                    val st = periodStatusOf(entry, nowMinutes)
                                     PeriodItem(
                                         periodNumber = entry.periodNumber,
                                         time = entry.timeSlot,
                                         subject = entry.subject,
                                         className = entry.className,
                                         section = entry.section,
-                                        isCurrent = entry.periodNumber == currentPeriod
+                                        isCurrent = st == PeriodStatus.CURRENT,
+                                        status = st,
+                                        isBreak = entry.isBreak
                                     )
                                 } to false
                             },
@@ -392,29 +414,72 @@ class DashboardViewModel @Inject constructor(
 
     private fun todayDayName(): String = com.schoolsync.teacher.util.englishDayName()
 
-    private fun calculateCurrentPeriod(periods: List<TimetableEntry>): Int {
-        val cal = Calendar.getInstance()
-        val currentHour = cal.get(Calendar.HOUR_OF_DAY)
-        val currentMinute = cal.get(Calendar.MINUTE)
-        val currentTimeMinutes = currentHour * 60 + currentMinute
-
-        for (period in periods) {
-            try {
-                val startParts = period.startTime.trim().split(":")
-                val endParts = period.endTime.trim().split(":")
-                if (startParts.size >= 2 && endParts.size >= 2) {
-                    val startMinutes = startParts[0].toInt() * 60 + startParts[1].toInt()
-                    val endMinutes = endParts[0].toInt() * 60 + endParts[1].toInt()
-                    if (currentTimeMinutes in startMinutes..endMinutes) {
-                        return period.periodNumber
-                    }
-                }
-            } catch (_: Exception) { }
+    /**
+     * Classify a period against the current wall-clock time using its 24h
+     * HH:MM start/end. now within [start,end] → CURRENT; past end → DONE;
+     * otherwise UPCOMING. Unparseable times fall back to UPCOMING, so a period
+     * is never wrongly shown as live.
+     */
+    private fun periodStatusOf(entry: TimetableEntry, nowMinutes: Int): PeriodStatus {
+        val start = parseTimeToMinutes(entry.startTime) ?: return PeriodStatus.UPCOMING
+        val end = parseTimeToMinutes(entry.endTime) ?: return PeriodStatus.UPCOMING
+        return when {
+            nowMinutes in start..end -> PeriodStatus.CURRENT
+            nowMinutes > end -> PeriodStatus.DONE
+            else -> PeriodStatus.UPCOMING
         }
-        return -1
+    }
+
+    /**
+     * Parse a clock string to minutes-since-midnight. Handles both 24h
+     * ("14:30") and 12h with an AM/PM suffix in any spacing/case
+     * ("2:30PM", "2:30 pm", "10:45AM") — the timetable stores times in the
+     * 12h form, so a naive HH:MM split silently failed and left every period
+     * marked UPCOMING. Returns null when unparseable.
+     */
+    private fun parseTimeToMinutes(raw: String): Int? {
+        val t = raw.trim().uppercase(Locale.US)
+        if (t.isEmpty()) return null
+        val isAm = t.contains("AM")
+        val isPm = t.contains("PM")
+        val cleaned = t.replace("AM", "").replace("PM", "").trim()
+        val parts = cleaned.split(":")
+        if (parts.size < 2) return null
+        val h = parts[0].trim().toIntOrNull() ?: return null
+        val m = parts[1].trim().toIntOrNull() ?: return null
+        if (m !in 0..59) return null
+        var hour = h
+        if (isAm || isPm) {                 // 12-hour clock
+            hour %= 12
+            if (isPm) hour += 12
+        }
+        if (hour !in 0..23) return null
+        return hour * 60 + m
     }
 
     fun refresh() {
         loadDashboard()
+        loadUpcomingEvents()
+    }
+
+    /**
+     * Load upcoming school events for the dashboard rail. Independent of the
+     * main load so a slow/failed events fetch never blocks the dashboard.
+     * startDate is stored as "yyyy-MM-dd", so a lexicographic compare with
+     * today correctly keeps today-and-later, soonest first.
+     */
+    private fun loadUpcomingEvents() {
+        viewModelScope.launch {
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val events = eventsFirestoreRepo.getEvents().getOrNull().orEmpty()
+                .filter {
+                    it.startDate >= today &&
+                        !it.status.equals("cancelled", true) &&
+                        !it.status.equals("completed", true)
+                }
+                .sortedBy { it.startDate }
+                .take(8)
+            _uiState.value = _uiState.value.copy(upcomingEvents = events)
+        }
     }
 }

@@ -1,10 +1,5 @@
 package com.schoolsync.teacher.ui.gallery
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +21,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -53,24 +50,55 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.schoolsync.teacher.data.model.GalleryAlbum
 import com.schoolsync.teacher.data.model.GalleryMedia
+import com.schoolsync.teacher.util.AttachmentUrlValidator
 import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.Divider as DividerColor
 import com.schoolsync.teacher.ui.theme.Glass
@@ -84,16 +112,24 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.glassCard
 import kotlinx.coroutines.flow.collectLatest
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun GalleryTeacherScreen(
+    initialAlbumId: String? = null,
+    onInitialAlbumConsumed: () -> Unit = {},
     viewModel: GalleryTeacherViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Deep-link from the Events "View Photos" jump: preselect the album.
+    LaunchedEffect(initialAlbumId) {
+        val id = initialAlbumId
+        if (!id.isNullOrBlank()) {
+            viewModel.openAlbumById(id)
+            onInitialAlbumConsumed()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
@@ -479,7 +515,8 @@ private fun MediaPanel(
                     }
                 }
             } else {
-                var viewerMedia by remember { mutableStateOf<GalleryMedia?>(null) }
+                // Store just the id so the open viewer survives process death.
+                var viewerMediaId by rememberSaveable { mutableStateOf<String?>(null) }
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 160.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -487,11 +524,16 @@ private fun MediaPanel(
                     contentPadding = PaddingValues(4.dp)
                 ) {
                     items(media, key = { it.mediaId }) { item ->
-                        MediaCard(media = item, onClick = { viewerMedia = item })
+                        MediaCard(media = item, onClick = { viewerMediaId = item.mediaId })
                     }
                 }
-                viewerMedia?.let { m ->
-                    MediaViewerDialog(media = m, onDismiss = { viewerMedia = null })
+                val viewerStartIndex = media.indexOfFirst { it.mediaId == viewerMediaId }
+                if (viewerStartIndex >= 0) {
+                    GalleryMediaPagerViewer(
+                        media = media,
+                        initialIndex = viewerStartIndex,
+                        onDismiss = { viewerMediaId = null }
+                    )
                 }
             }
         } else {
@@ -526,6 +568,11 @@ private fun MediaPanel(
 
 @Composable
 private fun MediaCard(media: GalleryMedia, onClick: () -> Unit) {
+    val context = LocalContext.current
+    // Prefer an explicit poster frame; else decode the first video frame.
+    val thumbModel = media.thumbnail.ifBlank { media.url }
+    // Only render Coil for trusted, well-formed https Storage URLs.
+    val isValid = AttachmentUrlValidator.validate(thumbModel) is AttachmentUrlValidator.Result.Valid
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -533,9 +580,13 @@ private fun MediaCard(media: GalleryMedia, onClick: () -> Unit) {
             .glassCard(cornerRadius = 10.dp)
             .clickable(onClick = onClick)
     ) {
-        if (media.url.isNotEmpty()) {
+        if (isValid) {
             AsyncImage(
-                model = media.url,
+                model = ImageRequest.Builder(context)
+                    .data(thumbModel)
+                    .decoderFactory(coil.decode.VideoFrameDecoder.Factory())
+                    .crossfade(true)
+                    .build(),
                 contentDescription = media.caption,
                 modifier = Modifier
                     .fillMaxSize()
@@ -619,7 +670,10 @@ private fun CreateAlbumDialog(
             Text("Create Album", color = TextPrimary, fontWeight = FontWeight.Bold)
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -736,7 +790,10 @@ private fun UploadMediaDialog(
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 // Type toggle (drives which picker filter we use)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -860,59 +917,254 @@ private fun UploadMediaDialog(
 }
 
 /**
- * Full-screen media viewer. Tap dismisses.
+ * MIUI-gallery–style full-screen media viewer.
+ *
+ * Ports the Stories viewer's gesture stack so images/videos behave the same
+ * everywhere:
+ *   • swipe left / right → previous / next media in the album (HorizontalPager)
+ *   • pinch to zoom (1×–5×) + double-tap to toggle zoom, with panning + bounds
+ *   • one-finger pan while zoomed; page-swipe is LOCKED while zoomed so a pan
+ *     never accidentally flips the page
+ *   • swipe down (when not zoomed) → dismiss, with the backdrop fading away
+ *   • tap → toggle chrome (close button + counter + caption)
+ *   • videos play inline (validated URL → ExoPlayer)
+ *
+ * Consumes multi-touch (and one-finger-while-zoomed) only, exactly like the
+ * Stories viewer — so single-finger horizontal swipes still reach the pager
+ * and single-finger vertical swipes still reach the dismiss detector.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun MediaViewerDialog(media: GalleryMedia, onDismiss: () -> Unit) {
+private fun GalleryMediaPagerViewer(
+    media: List<GalleryMedia>,
+    initialIndex: Int,
+    onDismiss: () -> Unit
+) {
+    if (media.isEmpty()) return
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false
         )
     ) {
+        BackHandler(onBack = onDismiss)
+        val context = LocalContext.current
+        val pagerState = rememberPagerState(
+            initialPage = initialIndex.coerceIn(0, media.size - 1)
+        ) { media.size }
+
+        // Transform state for the CURRENT page only; reset when the page changes.
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offsetX by remember { mutableFloatStateOf(0f) }
+        var offsetY by remember { mutableFloatStateOf(0f) }
+        var playingVideo by remember { mutableStateOf(false) }
+        var chromeVisible by remember { mutableStateOf(true) }
+        var dragY by remember { mutableFloatStateOf(0f) }
+
+        LaunchedEffect(pagerState.currentPage) {
+            scale = 1f; offsetX = 0f; offsetY = 0f; playingVideo = false; dragY = 0f
+        }
+        val isZoomed = scale > 1.02f
+        val dismissProgress = (dragY / 620f).coerceIn(0f, 1f)
+        val chromeAlpha by animateFloatAsState(
+            targetValue = if (chromeVisible && !isZoomed && dragY < 4f) 1f else 0f,
+            animationSpec = tween(180), label = "chrome"
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(BgStart.copy(alpha = 0.95f))
-                .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.Center
+                .background(Color.Black.copy(alpha = 1f - dismissProgress * 0.9f))
         ) {
-            if (media.url.isNotBlank()) {
-                AsyncImage(
-                    model = media.url,
-                    contentDescription = media.caption,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                Text("No preview available", color = TextSecondary)
-            }
-            // Caption overlay
-            if (media.caption.isNotBlank()) {
+            HorizontalPager(
+                state = pagerState,
+                // Lock paging while zoomed → the finger pans instead of flipping.
+                userScrollEnabled = !isZoomed,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                val item = media[page]
+                val isActive = page == pagerState.currentPage
+                val isVideo = item.type.equals("video", ignoreCase = true)
+                val isValid = AttachmentUrlValidator.validate(item.url) is
+                    AttachmentUrlValidator.Result.Valid
+
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .background(BgStart.copy(alpha = 0.8f))
-                        .padding(16.dp)
+                        .fillMaxSize()
+                        // Whole active page slides + shrinks a touch while
+                        // swiping down to dismiss.
+                        .then(
+                            if (isActive) Modifier.graphicsLayer {
+                                translationY = dragY.coerceAtLeast(0f)
+                                val s = 1f - dismissProgress * 0.2f
+                                scaleX = s; scaleY = s
+                            } else Modifier
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = media.caption,
-                        color = TextPrimary,
-                        fontSize = 14.sp
-                    )
+                    if (isVideo && isActive && playingVideo && isValid) {
+                        GalleryVideoPlayer(url = item.url)
+                    } else {
+                        val model = if (isVideo && item.thumbnail.isNotBlank())
+                            item.thumbnail else item.url
+                        if (isValid || (isVideo && item.thumbnail.isNotBlank())) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(model)
+                                    .decoderFactory(coil.decode.VideoFrameDecoder.Factory())
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = item.caption.ifBlank { null },
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(
+                                        if (isActive) Modifier.graphicsLayer {
+                                            scaleX = scale; scaleY = scale
+                                            translationX = offsetX; translationY = offsetY
+                                        } else Modifier
+                                    )
+                                    .then(
+                                        if (isActive) Modifier
+                                            // Pinch / one-finger-while-zoomed pan.
+                                            // Consumes ONLY multi-touch or zoomed
+                                            // drags, so the pager + dismiss keep
+                                            // their single-finger gestures.
+                                            .pointerInput(page) {
+                                                awaitEachGesture {
+                                                    awaitFirstDown(requireUnconsumed = false)
+                                                    do {
+                                                        val event = awaitPointerEvent()
+                                                        val pressed = event.changes.count { it.pressed }
+                                                        val pan = event.calculatePan()
+                                                        if (pressed >= 2) {
+                                                            val newScale = (scale * event.calculateZoom())
+                                                                .coerceIn(1f, 5f)
+                                                            scale = newScale
+                                                            val maxX = (size.width * (newScale - 1f) / 2f).coerceAtLeast(0f)
+                                                            val maxY = (size.height * (newScale - 1f) / 2f).coerceAtLeast(0f)
+                                                            offsetX = (offsetX + pan.x).coerceIn(-maxX, maxX)
+                                                            offsetY = (offsetY + pan.y).coerceIn(-maxY, maxY)
+                                                            event.changes.forEach { it.consume() }
+                                                        } else if (pressed == 1 && scale > 1.02f) {
+                                                            val maxX = (size.width * (scale - 1f) / 2f).coerceAtLeast(0f)
+                                                            val maxY = (size.height * (scale - 1f) / 2f).coerceAtLeast(0f)
+                                                            offsetX = (offsetX + pan.x).coerceIn(-maxX, maxX)
+                                                            offsetY = (offsetY + pan.y).coerceIn(-maxY, maxY)
+                                                            event.changes.forEach { it.consume() }
+                                                        }
+                                                    } while (event.changes.any { it.pressed })
+                                                }
+                                            }
+                                            .pointerInput(page) {
+                                                detectTapGestures(
+                                                    onTap = { chromeVisible = !chromeVisible },
+                                                    onDoubleTap = {
+                                                        if (scale > 1.5f) {
+                                                            scale = 1f; offsetX = 0f; offsetY = 0f
+                                                        } else scale = 2.5f
+                                                    }
+                                                )
+                                            }
+                                            // Swipe-down dismiss — only when NOT
+                                            // zoomed (a zoomed pan owns the drag).
+                                            .pointerInput(page, isZoomed) {
+                                                if (!isZoomed) {
+                                                    detectVerticalDragGestures(
+                                                        onVerticalDrag = { _, dy ->
+                                                            dragY = (dragY + dy).coerceAtLeast(0f)
+                                                        },
+                                                        onDragEnd = {
+                                                            if (dragY > 250f) onDismiss() else dragY = 0f
+                                                        },
+                                                        onDragCancel = { dragY = 0f }
+                                                    )
+                                                }
+                                            }
+                                        else Modifier
+                                    )
+                            )
+                        } else {
+                            Text("No preview available", color = TextSecondary)
+                        }
+                        // Play affordance over a video poster frame.
+                        if (isVideo && isActive && !playingVideo) {
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.45f))
+                                    .clickable { if (isValid) playingVideo = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.PlayCircle,
+                                    contentDescription = "Play video",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
-            // Close button
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+
+            // ── Chrome: top bar (close + counter) ────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .graphicsLayer { alpha = chromeAlpha }
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)
+                        )
+                    )
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                Icon(
-                    Icons.Filled.ArrowBack,
-                    contentDescription = "Close",
-                    tint = TextPrimary
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                    }
+                    Text(
+                        text = "${pagerState.currentPage + 1} / ${media.size}",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.size(48.dp))
+                }
+            }
+
+            // ── Chrome: caption ──────────────────────────────────────────
+            val current = media.getOrNull(pagerState.currentPage)
+            if (!current?.caption.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .graphicsLayer { alpha = chromeAlpha }
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
+                            )
+                        )
+                        .padding(horizontal = 20.dp, vertical = 24.dp)
+                ) {
+                    Text(
+                        text = current!!.caption,
+                        color = Color.White.copy(alpha = 0.95f),
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
@@ -931,11 +1183,32 @@ private fun galleryTextFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedTextColor = TextPrimary
 )
 
-private fun formatDate(timestamp: Long): String {
-    return try {
-        val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-        sdf.format(Date(timestamp))
-    } catch (_: Exception) {
-        ""
+/**
+ * Fullscreen ExoPlayer for a gallery video. The [url] must already be
+ * validated (https + trusted Storage host) by the caller. Mirrors the
+ * Stories viewer's player; shows the default controls so the teacher can
+ * scrub/pause. The player is released on dispose.
+ */
+@Composable
+private fun GalleryVideoPlayer(url: String) {
+    val context = LocalContext.current
+    val player = remember(url) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(url))
+            prepare()
+            playWhenReady = true
+        }
     }
+    DisposableEffect(player) {
+        onDispose { player.release() }
+    }
+    AndroidView(
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                this.player = player
+                useController = true
+            }
+        },
+        modifier = Modifier.fillMaxWidth().padding(16.dp)
+    )
 }
