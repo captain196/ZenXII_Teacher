@@ -68,9 +68,35 @@ object AppModule {
     fun provideFirebaseAuthManager(firebaseAuth: FirebaseAuth): FirebaseAuthManager =
         FirebaseAuthManager(firebaseAuth)
 
+    /**
+     * F9 (2026-07-07) — explicitly assert Firestore persistent local cache.
+     * The Android SDK enables offline persistence by default since v22+,
+     * but F9's driver flows (attendance/fuel/trip writes from a moving
+     * bus with unreliable connectivity) depend on it materially. Asserting
+     * the setting removes reliance on defaults and documents intent.
+     *
+     * Deterministic doc-ids for transportAttendance (from F7) make repeat
+     * writes on reconnect idempotent — no custom queue / WorkManager
+     * needed.
+     */
     @Provides
     @Singleton
-    fun provideFirebaseFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
+    fun provideFirebaseFirestore(): FirebaseFirestore {
+        val fs = FirebaseFirestore.getInstance()
+        try {
+            val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                .setLocalCacheSettings(
+                    com.google.firebase.firestore.PersistentCacheSettings.newBuilder().build()
+                )
+                .build()
+            fs.firestoreSettings = settings
+        } catch (_: IllegalStateException) {
+            // Settings can only be configured before the first use — a
+            // hot-restart may replay this provider after cache is warm.
+            // Default (SDK on-by-default) persistence still applies.
+        }
+        return fs
+    }
 
     @Provides
     @Singleton

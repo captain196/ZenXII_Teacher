@@ -79,5 +79,16 @@ data class StaffDoc(
     val status: String = "",
     val session: String = "",
     val createdAt: Any? = null,
-    val updatedAt: Any? = null
+    val updatedAt: Any? = null,
+
+    // ── F9 (2026-07-07) — Driver identity (Transport module) ──────────
+    // `flags.can_drive_transport` is the F4 gate that identifies a staff
+    // record as a transport driver. `driver_meta` carries licence /
+    // medical / badge validity + operational_status. Kotlin data-class
+    // ignores unknown fields at deserialisation, so pre-F9 staff docs
+    // that lack these fields just deserialise with the defaults.
+    val flags: Map<String, Any>? = null,
+
+    @get:PropertyName("driver_meta") @set:PropertyName("driver_meta")
+    var driverMeta: Map<String, Any>? = null
 )

@@ -37,6 +37,8 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.outlined.DirectionsBus
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
@@ -104,6 +106,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import com.schoolsync.teacher.ui.attendance.AttendanceScreen
 import com.schoolsync.teacher.ui.auth.LoginScreen
 import com.schoolsync.teacher.ui.splash.SplashScreen
@@ -175,6 +179,17 @@ sealed class Route(val route: String) {
     data object More : Route("more")
     data object Profile : Route("profile")
     data object LessonPlan : Route("lesson_plan")
+    // F9 (2026-07-07) — Teacher App Transport (LC-22). The nav rail
+    // "Bus" entry opens the DriverHomeScreen — the driver's landing
+    // for the operational workflow. From there the driver drills into
+    // a specific trip (checkpoints + roster + start/complete) or
+    // opens the fuel log form or the SOS trigger.
+    data object Transport : Route("transport")
+    data object TransportTripDetail : Route("transport_trip_detail/{tripId}") {
+        fun createRoute(tripId: String) = "transport_trip_detail/$tripId"
+    }
+    data object TransportFuelLog : Route("transport_fuel_log")
+    data object TransportSos : Route("transport_sos")
 }
 
 data class NavRailItem(
@@ -206,6 +221,8 @@ val moreSubItems = listOf(
     NavRailItem(Route.Events, "Events", Icons.Filled.Event, Icons.Outlined.Event),
     NavRailItem(Route.Ptm, "PTM", Icons.Filled.Groups, Icons.Outlined.Groups),
     NavRailItem(Route.Leave, "Leave", Icons.Filled.EventNote, Icons.Outlined.EventNote),
+    // F9 (2026-07-07) — Transport entry for drivers.
+    NavRailItem(Route.Transport, "Bus", Icons.Filled.DirectionsBus, Icons.Outlined.DirectionsBus),
     NavRailItem(Route.Gallery, "Gallery", Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
     NavRailItem(Route.Library, "Library", Icons.Filled.LocalLibrary, Icons.Outlined.LocalLibrary),
     NavRailItem(Route.Payslips, "Pay", Icons.Filled.Payments, Icons.Outlined.Payments),
@@ -546,6 +563,39 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.Appraisals.route) { AppraisalsScreen() }
             composable(Route.Recruitment.route) { RecruitmentScreen() }
             composable(Route.Profile.route) { MyProfileScreen() }
+            // F9 (2026-07-07) — Transport section:
+            //   Bus rail → DriverHomeScreen → {TripDetail | FuelLog | Sos}
+            // The driver never needs a developer-only route or deep link;
+            // every operational surface is reached from the nav rail.
+            composable(Route.Transport.route) {
+                com.schoolsync.teacher.ui.transport.DriverHomeScreen(
+                    onOpenTrip = { tripId ->
+                        innerNavController.navigate(Route.TransportTripDetail.createRoute(tripId))
+                    },
+                    onOpenFuelLog = { innerNavController.navigate(Route.TransportFuelLog.route) },
+                    onOpenSos = { innerNavController.navigate(Route.TransportSos.route) }
+                )
+            }
+            composable(
+                route = Route.TransportTripDetail.route,
+                arguments = listOf(navArgument("tripId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val tid = backStackEntry.arguments?.getString("tripId") ?: ""
+                com.schoolsync.teacher.ui.transport.DriverTripDetailScreen(
+                    tripId = tid,
+                    onBack = { innerNavController.popBackStack() }
+                )
+            }
+            composable(Route.TransportFuelLog.route) {
+                com.schoolsync.teacher.ui.transport.FuelLogScreen(
+                    onBack = { innerNavController.popBackStack() }
+                )
+            }
+            composable(Route.TransportSos.route) {
+                com.schoolsync.teacher.ui.transport.SosTriggerScreen(
+                    onBack = { innerNavController.popBackStack() }
+                )
+            }
         }
     }
 }

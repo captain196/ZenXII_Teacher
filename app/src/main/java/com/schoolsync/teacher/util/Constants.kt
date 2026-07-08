@@ -54,6 +54,10 @@ object Constants {
         const val GEO_FENCES = "geoFences"
         const val SOS_ALERTS = "sosAlerts"
 
+        // F9 (2026-07-07) — Teacher-side driver-write collections
+        const val TRANSPORT_ATTENDANCE = "transportAttendance"
+        const val FUEL_LOGS = "fuelLogs"
+
         // ── Phase 8: Campus Life ───────────────────────────────────────
         const val HOSTEL_ROOMS = "hostelRooms"
         const val HOSTEL_ALLOCATIONS = "hostelAllocations"
