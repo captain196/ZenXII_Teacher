@@ -10,6 +10,7 @@ import com.schoolsync.teacher.data.location.LocationError
 import com.schoolsync.teacher.data.location.LocationFix
 import com.schoolsync.teacher.data.location.LocationOutcome
 import com.schoolsync.teacher.data.location.LocationProvider
+import com.schoolsync.teacher.data.location.PlayIntegrityTokenProvider
 import com.schoolsync.teacher.data.repository.MyAttendance
 import com.schoolsync.teacher.data.repository.PunchResult
 import com.schoolsync.teacher.data.repository.StaffAttendanceError
@@ -47,6 +48,7 @@ class StaffAttendanceViewModel @Inject constructor(
     private val repo: StaffAttendanceRepository,
     private val locationProvider: LocationProvider,
     private val schoolRepo: SchoolFirestoreRepository,
+    private val integrityProvider: PlayIntegrityTokenProvider,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(StaffAttendanceUiState())
@@ -61,14 +63,20 @@ class StaffAttendanceViewModel @Inject constructor(
     /** Load the staff member's own attendance (today + month + history). */
     fun loadMe() {
         viewModelScope.launch {
-            _ui.update { it.copy(loading = true, error = null) }
+            _ui.update { it.copy(loading = true, error = null, loadError = null) }
             repo.me()
-                .onSuccess { me -> _ui.update { it.copy(loading = false, me = me) } }
-                .onFailure {
-                    // A LOAD failure (e.g. backend not yet deployed) must NOT surface as
-                    // the red action banner — that is reserved for an explicit Clock-In/Out
-                    // attempt. Fail quietly; the Today card simply shows "Not marked" / "—".
-                    _ui.update { it.copy(loading = false) }
+                .onSuccess { me -> _ui.update { it.copy(loading = false, me = me, loadError = null) } }
+                .onFailure { e ->
+                    // Record the load failure so the screen can show an explicit
+                    // "unavailable — tap to retry" state. Previously this was
+                    // swallowed and the Today card rendered a healthy-looking
+                    // "Not marked", hiding a 404 (backend not deployed), a 422
+                    // (GPS disabled) or a 5xx until the user tapped Clock-In and
+                    // hit an error. `error` (the red action banner) stays reserved
+                    // for explicit punch attempts.
+                    val se = e as? StaffAttendanceError
+                        ?: StaffAttendanceError.Network(e.message ?: "Couldn't load attendance.")
+                    _ui.update { it.copy(loading = false, loadError = se) }
                 }
         }
     }
@@ -158,6 +166,11 @@ class StaffAttendanceViewModel @Inject constructor(
                         UUID.randomUUID().toString().also { pendingPunchId = it; pendingDirection = direction }
                     }
 
+                    // Play Integrity attestation (inert until configured — see
+                    // PlayIntegrityTokenProvider). Bound to this attempt via the
+                    // clientPunchId nonce. Best-effort: null when disabled/failed.
+                    val integrityToken = integrityProvider.tokenOrNull(clientPunchId)
+
                     repo.punch(
                         direction = direction,
                         lat = fix.latitude,
@@ -167,6 +180,7 @@ class StaffAttendanceViewModel @Inject constructor(
                         clientPunchId = clientPunchId,
                         clientCapturedAt = isoTimestamp(fix.capturedAtEpochMs),
                         device = deviceInfo(),
+                        integrityToken = integrityToken,
                     )
                         .onSuccess { r ->
                             pendingPunchId = null; pendingDirection = null   // logical attempt done
@@ -216,6 +230,10 @@ data class StaffAttendanceUiState(
     val me: MyAttendance? = null,
     val lastResult: PunchResult? = null,
     val error: StaffAttendanceError? = null,
+    /** A me() LOAD failure (backend not deployed / GPS disabled / server / offline),
+     *  distinct from the punch `error`. When set (and `me` is null) the screen shows
+     *  an "unavailable — tap to retry" state instead of a misleading "Not marked". */
+    val loadError: StaffAttendanceError? = null,
     // Campus geofence (guidance only; never sent to the server)
     val geoActive: Boolean = false,
     val geoCenterLat: Double? = null,

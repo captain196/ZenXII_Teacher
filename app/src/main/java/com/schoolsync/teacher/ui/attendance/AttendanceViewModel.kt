@@ -42,12 +42,19 @@ enum class AttendanceStatus(val code: String, val label: String) {
     TARDY("T", "Tardy"),
     VACATION("V", "Vacation");
 
+    // Tap cycle: P -> A -> L -> T -> P. HOLIDAY and VACATION are deliberately
+    // NOT in the cycle: they are admin/system-set states shown from server data,
+    // and `saveAttendance` maps them to "no delta" (server default = Present).
+    // Previously they WERE tappable, so a teacher could visibly set Holiday and
+    // have it silently saved as Present — silent data loss. Tapping an
+    // admin-set H/V now moves it to a user-markable state (Present) which the
+    // save can actually persist.
     fun next(): AttendanceStatus = when (this) {
         PRESENT -> ABSENT
         ABSENT -> LEAVE
-        LEAVE -> HOLIDAY
-        HOLIDAY -> TARDY
-        TARDY -> VACATION
+        LEAVE -> TARDY
+        TARDY -> PRESENT
+        HOLIDAY -> PRESENT
         VACATION -> PRESENT
     }
 
@@ -72,6 +79,17 @@ enum class AttendanceStatus(val code: String, val label: String) {
 
         fun fromCode(code: String): AttendanceStatus {
             return entries.find { it.code.equals(code, ignoreCase = true) } ?: PRESENT
+        }
+
+        /**
+         * Decode a single dayWise char to a status, or null when the char is not
+         * a recognised code (padding, placeholder, unmarked). Callers must treat
+         * null as "not marked" — NOT as Present. `fromCode` defaulting unknown
+         * chars to PRESENT silently invented present marks for placeholder days
+         * and threw off the "remaining/Not marked" totals.
+         */
+        fun fromCodeOrNull(code: String): AttendanceStatus? {
+            return entries.find { it.code.equals(code, ignoreCase = true) }
         }
     }
 }
@@ -122,8 +140,14 @@ data class AttendanceUiState(
     val isSaving: Boolean = false,
     val error: String? = null,
     val hasUnsavedChanges: Boolean = false,
+    // Confirmation dialog before discarding unsaved marks on a class/month
+    // switch or refresh (see guardUnsaved).
+    val showDiscardDialog: Boolean = false,
     val todayDay: Int = Calendar.getInstance().get(Calendar.DAY_OF_MONTH),
-    val isClassTeacher: Boolean = true,
+    // Default false: a teacher is read-only until an assignment confirms them as
+    // the class teacher. Defaulting true briefly showed an editable roster for a
+    // non-class-teacher until the load resolved (or if it failed, permanently).
+    val isClassTeacher: Boolean = false,
     // Phase 10f: tardy time dialog
     val showTardyDialog: Boolean = false,
     val tardyStudentId: String = "",
@@ -223,7 +247,7 @@ class AttendanceViewModel @Inject constructor(
                         val firstClass = classSections.firstOrNull()
                         val isClassTeacherForFirst = firstClass?.let {
                             RoleHelper.isClassTeacher(assignments, it.className, it.section)
-                        } ?: true
+                        } ?: false
                         _uiState.update {
                             it.copy(
                                 availableClasses = classSections,
@@ -239,6 +263,11 @@ class AttendanceViewModel @Inject constructor(
                         }
                         if (classSections.isNotEmpty()) {
                             loadAttendance()
+                            // Pull the server stage for the auto-selected class so a
+                            // locked run opens read-only instead of looking editable
+                            // and only rejecting at save (423). Previously refreshStage
+                            // ran only from selectClass, never on this initial path.
+                            refreshStage()
                         } else {
                             currentStudentInfos = emptyList()
                         }
@@ -257,6 +286,10 @@ class AttendanceViewModel @Inject constructor(
 
     fun selectClass(classSection: ClassSection) {
         if (_uiState.value.selectedClass == classSection) return
+        guardUnsaved { applySelectClass(classSection) }
+    }
+
+    private fun applySelectClass(classSection: ClassSection) {
         val isClassTeacherForClass = RoleHelper.isClassTeacher(
             cachedAssignments, classSection.className, classSection.section
         )
@@ -274,16 +307,56 @@ class AttendanceViewModel @Inject constructor(
     }
 
     fun selectMonth(month: Int, year: Int) {
-        // Phase 9b: don't silently discard unsaved changes — the UI
-        // should show a confirmation dialog before calling this.
-        // For now, reset the flag and reload.
+        guardUnsaved { applySelectMonth(month, year) }
+    }
+
+    private fun applySelectMonth(month: Int, year: Int) {
         _uiState.update { it.copy(selectedMonth = month, selectedYear = year, hasUnsavedChanges = false) }
         loadAttendance()
+    }
+
+    // ── Unsaved-changes guard (Phase 9b) ──────────────────────────
+    // Switching class/month or refreshing while marks are unsaved used to
+    // silently reload and discard them. These entry points now route through
+    // guardUnsaved: if there are pending marks, the UI shows a confirm dialog
+    // (showDiscardDialog) and the navigation runs only after confirmDiscardChanges().
+    private var pendingNav: (() -> Unit)? = null
+
+    private fun guardUnsaved(action: () -> Unit) {
+        if (_uiState.value.hasUnsavedChanges) {
+            pendingNav = action
+            _uiState.update { it.copy(showDiscardDialog = true) }
+        } else {
+            action()
+        }
+    }
+
+    fun confirmDiscardChanges() {
+        val action = pendingNav
+        pendingNav = null
+        _uiState.update { it.copy(showDiscardDialog = false, hasUnsavedChanges = false) }
+        action?.invoke()
+    }
+
+    fun dismissDiscardChanges() {
+        pendingNav = null
+        _uiState.update { it.copy(showDiscardDialog = false) }
     }
 
     /** True if the user has unsaved mark changes. UI should check
      *  before navigating away or switching months. */
     fun hasUnsavedChanges(): Boolean = _uiState.value.hasUnsavedChanges
+
+    /**
+     * True when the selected month/year is the actual current month. The UI uses
+     * this to disable the bulk "All Present/Absent" actions and to route past-day
+     * cell taps to the correction flow instead of the (save-only) cycle editor.
+     */
+    fun isViewingCurrentMonth(): Boolean {
+        val now = Calendar.getInstance()
+        val s = _uiState.value
+        return s.selectedMonth == now.get(Calendar.MONTH) && s.selectedYear == now.get(Calendar.YEAR)
+    }
 
     fun previousMonth() {
         val current = _uiState.value
@@ -345,10 +418,13 @@ class AttendanceViewModel @Inject constructor(
                     val summaryDoc = firestoreResult.getOrNull()
 
                     if (summaryDoc != null && summaryDoc.dayWise.isNotEmpty()) {
-                        // Parse dayWise string (e.g. "PPAPLHV...") into day statuses
+                        // Parse dayWise string (e.g. "PPAPLHV...") into day statuses.
+                        // Unknown/placeholder chars decode to null and are left
+                        // UNMARKED (not silently Present — see fromCodeOrNull).
                         summaryDoc.dayWise.forEachIndexed { index, char ->
-                            val status = AttendanceStatus.fromCode(char.toString())
-                            dayMap[index + 1] = status
+                            AttendanceStatus.fromCodeOrNull(char.toString())?.let { status ->
+                                dayMap[index + 1] = status
+                            }
                         }
                         debugLog("[$TAG][D] ${student.studentId} Firestore dayWise='${summaryDoc.dayWise}' days=${dayMap.size}")
                     } else {
@@ -369,7 +445,14 @@ class AttendanceViewModel @Inject constructor(
                         students = rows,
                         daysInMonth = daysInMonth,
                         isLoading = false,
-                        hasUnsavedChanges = false
+                        hasUnsavedChanges = false,
+                        // Recompute today's day on every (re)load from ONE source so
+                        // the mark-day the UI writes against always matches the
+                        // save-day. A VM kept alive across midnight otherwise held a
+                        // stale todayDay while saveAttendance bucketed against a fresh
+                        // `now` — reading the (empty) new day and saving the whole
+                        // class Present.
+                        todayDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
                     )
                 }
             } catch (e: Exception) {
@@ -400,8 +483,12 @@ class AttendanceViewModel @Inject constructor(
         _uiState.update { st ->
             val updatedStudents = st.students.map { row ->
                 if (row.studentId == studentId) {
-                    val currentStatus = row.dayStatuses[day] ?: AttendanceStatus.PRESENT
-                    val newStatus = currentStatus.next()
+                    // First tap on an UNMARKED student lands on Present (the common
+                    // case). Only an already-marked cell advances through the cycle.
+                    // Previously an unmarked cell was treated as Present and then
+                    // cycled straight to Absent on first tap, skipping Present.
+                    val existing = row.dayStatuses[day]
+                    val newStatus = existing?.next() ?: AttendanceStatus.PRESENT
                     row.copy(
                         dayStatuses = row.dayStatuses.toMutableMap().also { it[day] = newStatus }
                     )
@@ -471,6 +558,10 @@ class AttendanceViewModel @Inject constructor(
      * Mark all students as Present for today.
      */
     fun markAllPresentToday() {
+        // Guard: bulk actions only make sense for TODAY, which only exists in the
+        // current month. Viewing a past/History month, this used to write today's
+        // day-number INTO that month (e.g. mark "day 7 of March" for everyone).
+        if (!isViewingCurrentMonth()) return
         val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
         _uiState.update { state ->
             val updatedStudents = state.students.map { row ->
@@ -488,6 +579,7 @@ class AttendanceViewModel @Inject constructor(
      * Mark all students as Absent for today.
      */
     fun markAllAbsentToday() {
+        if (!isViewingCurrentMonth()) return
         val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
         _uiState.update { state ->
             val updatedStudents = state.students.map { row ->
@@ -540,6 +632,17 @@ class AttendanceViewModel @Inject constructor(
             }
 
             val todayDay = now.get(Calendar.DAY_OF_MONTH)
+
+            // Midnight-rollover safety: if the day advanced between when the marks
+            // were made (state.todayDay) and now, the buckets below would read the
+            // fresh (empty) day and silently save the whole class Present. Bail out
+            // and reload today's sheet instead of persisting stale data.
+            if (todayDay != state.todayDay) {
+                _uiState.update { it.copy(isSaving = false) }
+                _events.emit(AttendanceEvent.SaveError("The date changed since you started marking. Reloading today's sheet — please re-check and save again."))
+                loadAttendance()
+                return@launch
+            }
 
             // Bucket today's per-student marks into absent / leave / late lists.
             // Server treats every active-roster student NOT in any list as Present.
@@ -749,6 +852,6 @@ class AttendanceViewModel @Inject constructor(
     }
 
     fun refresh() {
-        loadAttendance()
+        guardUnsaved { loadAttendance() }
     }
 }

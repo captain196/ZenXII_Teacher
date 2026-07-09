@@ -65,6 +65,8 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -86,7 +88,6 @@ import java.util.Date
 import java.util.Locale
 
 private const val IMAGE_DURATION_MS = 6000L
-private const val LONG_PRESS_TIMEOUT_MS = 180L
 private const val DISMISS_THRESHOLD_PX = 250f
 /** Drag distance over which the story fully fades out while swiping down. */
 private const val DISMISS_DISTANCE_PX = 620f
@@ -102,8 +103,10 @@ private const val MIN_ZOOM_OUT = 0.5f
  *   • video progress tied to actual playback (position/duration) and
  *     advance on STATE_ENDED — not a flat timer
  *   • shared disk-cached + tuned-buffering ExoPlayer (StoryVideoCache)
- *   • pinch / double-tap zoom on images (Telephoto); zooming pauses
- *     the progress timer
+ *   • hand-rolled two-finger pinch-zoom + pan on ALL media (image AND
+ *     video) via a pointerInput gesture loop — pinch-IN zooms to 4×,
+ *     pinch-OUT below 0.75× dismisses the story; zooming pauses the
+ *     progress timer. (No double-tap zoom; no Telephoto dependency.)
  *   • image timer starts only once the image is actually displayed
  *
  * Read-only: teachers browse all sections' stories; seen state is
@@ -322,7 +325,7 @@ private fun AuthorStoryPage(
                 } else {
                     coil.compose.AsyncImage(
                         model = story.mediaUrl,
-                        contentDescription = null,
+                        contentDescription = story.caption.ifBlank { "Story by ${group.authorName}" },
                         contentScale = ContentScale.Fit,
                         onSuccess = { imageDisplayed = true },
                         modifier = Modifier.fillMaxSize()
@@ -523,7 +526,17 @@ private fun TopChrome(
         Column(
             modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Collapse the N decorative segment bars into ONE spoken
+                    // summary for TalkBack instead of reading each bar's raw
+                    // progress percentage.
+                    .clearAndSetSemantics {
+                        contentDescription = "Story ${currentIndex + 1} of $storyCount"
+                    },
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
                 repeat(storyCount) { i ->
                     val barProgress = when {
                         i < currentIndex -> 1f
@@ -548,7 +561,7 @@ private fun TopChrome(
                     if (authorPic.isNotBlank()) {
                         coil.compose.AsyncImage(
                             model = authorPic,
-                            contentDescription = null,
+                            contentDescription = "$authorName profile photo",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.size(36.dp).clip(CircleShape)
                         )
@@ -647,8 +660,13 @@ private fun VideoStoryPlayer(
         }
     }
 
-    // Drive the progress bar from real playback position every ~50ms.
-    LaunchedEffect(player, isCurrentPage) {
+    // Drive the progress bar from real playback position every ~50ms — but
+    // ONLY while this is the current page AND playback isn't paused (M5).
+    // Keying on isPaused/isCurrentPage restarts this effect and returns
+    // early when the story is off-screen, held, zoomed, or dismissing, so
+    // the 20Hz loop doesn't spin against a stopped player.
+    LaunchedEffect(player, isCurrentPage, isPaused) {
+        if (!isCurrentPage || isPaused) return@LaunchedEffect
         while (true) {
             val dur = player.duration
             if (dur > 0) {

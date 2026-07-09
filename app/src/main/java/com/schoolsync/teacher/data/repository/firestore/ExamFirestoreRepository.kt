@@ -212,9 +212,14 @@ class ExamFirestoreRepository @Inject constructor(
                     "subject" to subject,
                     "studentId" to entry.studentId,
                     "studentName" to entry.studentName,
+                    // componentMarks is the CANONICAL shape the admin report cards /
+                    // tabulation read component columns from ([{name, value}]); the
+                    // VM builds it (omitting Practical when the subject has none).
+                    "componentMarks" to entry.componentMarks,
                     "theory" to entry.theory,
                     "practical" to entry.practical,
                     "total" to entry.total,
+                    "maxMarks" to entry.maxMarks,     // = subject.maxTotal (schedule)
                     "absent" to entry.absent,
                     "savedBy" to teacherId,
                     "savedAt" to firestoreService.serverTimestamp(),

@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Grade
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.Image
@@ -1252,6 +1253,7 @@ private fun ModulesGrid(onNavigate: (String) -> Unit) {
     val modules = listOf(
         DashItem("Attendance", Icons.Filled.HowToReg, Route.Attendance.route, Teal, TealSurface),
         DashItem("Marks", Icons.Filled.Grade, Route.Marks.route, Teal, TealSurface),
+        DashItem("Results", Icons.Filled.Leaderboard, Route.Results.route, Teal, TealSurface),
         DashItem("Homework", Icons.Filled.MenuBook, Route.Homework.route, Teal, TealSurface),
         DashItem("Timetable", Icons.Filled.Schedule, Route.Timetable.route, Teal, TealSurface),
         DashItem("Students", Icons.Filled.People, Route.Students.route, Teal, TealSurface),

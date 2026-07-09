@@ -11,6 +11,10 @@ import com.schoolsync.teacher.data.model.GalleryMedia
 import com.schoolsync.teacher.data.repository.firestore.GalleryFirestoreRepository
 import com.schoolsync.teacher.util.GalleryMediaUploader
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +23,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 data class GalleryUiState(
@@ -51,6 +57,11 @@ class GalleryTeacherViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "GalleryVM"
+        // Backstop so a stalled upload can't strand the user forever behind a
+        // non-dismissible spinner. Generous enough for a full-size video on a
+        // weak school connection; the user can also cancel manually.
+        private const val IMAGE_UPLOAD_TIMEOUT_MS = 120_000L   // 2 min
+        private const val VIDEO_UPLOAD_TIMEOUT_MS = 420_000L   // 7 min
     }
 
     private val _uiState = MutableStateFlow(GalleryUiState())
@@ -58,6 +69,9 @@ class GalleryTeacherViewModel @Inject constructor(
 
     private val _events = MutableSharedFlow<GalleryEvent>()
     val events = _events.asSharedFlow()
+
+    /** Handle to the in-flight upload so the user can cancel it. */
+    private var uploadJob: Job? = null
 
     init {
         loadAlbums()
@@ -158,8 +172,12 @@ class GalleryTeacherViewModel @Inject constructor(
             return
         }
 
+        // Flip the flag SYNCHRONOUSLY (before launching) so the confirm button
+        // disables on this frame — a fast double-tap can otherwise fire twice
+        // before the coroutine runs and create duplicate albums.
+        if (_uiState.value.isCreatingAlbum) return
+        _uiState.update { it.copy(isCreatingAlbum = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isCreatingAlbum = true) }
             try {
                 galleryRepository.createAlbum(title, description, category).fold(
                     onSuccess = { albumId ->
@@ -207,8 +225,17 @@ class GalleryTeacherViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isUploading = true) }
+        // Flip SYNCHRONOUSLY so the confirm button disables this frame (kills
+        // the double-submit race). Ignore a second call while one is in flight.
+        if (_uiState.value.isUploading) return
+        _uiState.update { it.copy(isUploading = true) }
+
+        // Track uploaded object paths OUTSIDE withTimeout so timeout / cancel
+        // can roll back whatever already landed in Storage.
+        var uploadedPath: String? = null
+        var posterPath: String? = null
+
+        uploadJob = viewModelScope.launch {
             try {
                 // Canonical school scope: `schoolId` is always populated at
                 // login; `schoolCode` is a fallback for older sessions.
@@ -216,55 +243,86 @@ class GalleryTeacherViewModel @Inject constructor(
                     ?: tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
                     ?: throw Exception("School ID not available")
 
-                Log.d(TAG, "uploadMediaFile: starting upload type=$declaredType")
-                val upload = GalleryMediaUploader.uploadSuspending(
-                    context     = context,
-                    uri         = uri,
-                    schoolId    = schoolId,
-                    albumId     = album.albumId,
-                    declaredType= declaredType
-                )
-                Log.d(TAG, "uploadMediaFile: storage upload OK")
+                val timeout = if (declaredType == "video") VIDEO_UPLOAD_TIMEOUT_MS else IMAGE_UPLOAD_TIMEOUT_MS
+                withTimeout(timeout) {
+                    Log.d(TAG, "uploadMediaFile: starting upload type=$declaredType")
+                    val upload = GalleryMediaUploader.uploadSuspending(
+                        context     = context,
+                        uri         = uri,
+                        schoolId    = schoolId,
+                        albumId     = album.albumId,
+                        declaredType= declaredType
+                    )
+                    uploadedPath = upload.storagePath
+                    Log.d(TAG, "uploadMediaFile: storage upload OK")
 
-                // For videos, generate + upload a poster frame and read the
-                // duration so the Parent app / admin gallery don't show a blank
-                // video tile (cross-system thumbnail contract). Best-effort.
-                val poster = if (declaredType == "video") {
-                    GalleryMediaUploader.uploadVideoPoster(context, uri, schoolId, album.albumId)
-                } else null
+                    // For videos, generate + upload a poster frame and read the
+                    // duration so the Parent app / admin gallery don't show a blank
+                    // video tile (cross-system thumbnail contract). Best-effort.
+                    val poster = if (declaredType == "video") {
+                        GalleryMediaUploader.uploadVideoPoster(context, uri, schoolId, album.albumId)
+                    } else null
+                    posterPath = poster?.storagePath
 
-                galleryRepository.uploadMedia(
-                    albumId   = album.albumId,
-                    url       = upload.downloadUrl,
-                    type      = declaredType,
-                    caption   = caption,
-                    thumbnail = poster?.thumbnailUrl.orEmpty(),
-                    duration  = poster?.duration.orEmpty()
-                ).fold(
-                    onSuccess = { mediaId ->
-                        Log.d(TAG, "uploadMediaFile: firestore write OK mediaId=$mediaId")
-                        _uiState.update { it.copy(isUploading = false, showUploadMediaDialog = false) }
-                        _events.emit(GalleryEvent.Success("Media uploaded successfully"))
-                        loadMedia(album.albumId)
-                        loadAlbums() // refresh count
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "uploadMediaFile: firestore write failed: ${e.message}", e)
-                        // Roll back the orphaned Storage object(s) so a failed
-                        // Firestore write doesn't leave billed, unreferenced files.
-                        val deleted = GalleryMediaUploader.deleteByPath(upload.storagePath)
-                        if (!deleted) Log.w(TAG, "uploadMediaFile: orphan rollback failed for uploaded object")
-                        poster?.storagePath?.let { GalleryMediaUploader.deleteByPath(it) }
-                        _uiState.update { it.copy(isUploading = false) }
-                        _events.emit(GalleryEvent.Error(e.message ?: "Failed to save media"))
-                    }
-                )
+                    galleryRepository.uploadMedia(
+                        albumId   = album.albumId,
+                        url       = upload.downloadUrl,
+                        type      = declaredType,
+                        caption   = caption,
+                        thumbnail = poster?.thumbnailUrl.orEmpty(),
+                        duration  = poster?.duration.orEmpty()
+                    ).fold(
+                        onSuccess = { mediaId ->
+                            Log.d(TAG, "uploadMediaFile: firestore write OK mediaId=$mediaId")
+                            _uiState.update { it.copy(isUploading = false, showUploadMediaDialog = false) }
+                            _events.emit(GalleryEvent.Success("Media uploaded successfully"))
+                            loadMedia(album.albumId)
+                            loadAlbums() // refresh count
+                        },
+                        onFailure = { e ->
+                            Log.e(TAG, "uploadMediaFile: firestore write failed: ${e.message}", e)
+                            // Roll back the orphaned Storage object(s) so a failed
+                            // Firestore write doesn't leave billed, unreferenced files.
+                            val deleted = GalleryMediaUploader.deleteByPath(upload.storagePath)
+                            if (!deleted) Log.w(TAG, "uploadMediaFile: orphan rollback failed for uploaded object")
+                            poster?.storagePath?.let { GalleryMediaUploader.deleteByPath(it) }
+                            _uiState.update { it.copy(isUploading = false) }
+                            _events.emit(GalleryEvent.Error(e.message ?: "Failed to save media"))
+                        }
+                    )
+                }
+            } catch (timeout: TimeoutCancellationException) {
+                // Only the withTimeout block was cancelled — the outer coroutine
+                // is still active, so normal suspend cleanup runs fine.
+                Log.w(TAG, "uploadMediaFile: timed out after ${if (declaredType == "video") "7m" else "2m"}")
+                uploadedPath?.let { GalleryMediaUploader.deleteByPath(it) }
+                posterPath?.let { GalleryMediaUploader.deleteByPath(it) }
+                _uiState.update { it.copy(isUploading = false) }
+                _events.emit(GalleryEvent.Error("Upload timed out. Check your connection and try again."))
+            } catch (cancel: CancellationException) {
+                // User cancelled: the whole coroutine is cancelled, so run the
+                // rollback + snackbar under NonCancellable or they'd be skipped.
+                Log.d(TAG, "uploadMediaFile: cancelled by user")
+                _uiState.update { it.copy(isUploading = false) }
+                withContext(NonCancellable) {
+                    uploadedPath?.let { GalleryMediaUploader.deleteByPath(it) }
+                    posterPath?.let { GalleryMediaUploader.deleteByPath(it) }
+                    _events.emit(GalleryEvent.Error("Upload cancelled"))
+                }
+                throw cancel
             } catch (e: Exception) {
                 Log.e(TAG, "uploadMediaFile failed", e)
+                uploadedPath?.let { GalleryMediaUploader.deleteByPath(it) }
+                posterPath?.let { GalleryMediaUploader.deleteByPath(it) }
                 _uiState.update { it.copy(isUploading = false) }
                 _events.emit(GalleryEvent.Error(e.message ?: "Upload failed"))
             }
         }
+    }
+
+    /** Cancel an in-flight upload (user tapped Cancel on the upload dialog). */
+    fun cancelUpload() {
+        uploadJob?.cancel(CancellationException("User cancelled upload"))
     }
 
     fun clearError() {

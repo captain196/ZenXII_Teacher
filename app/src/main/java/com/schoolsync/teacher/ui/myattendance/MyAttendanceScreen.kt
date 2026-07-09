@@ -123,14 +123,23 @@ fun MyAttendanceScreen(vm: StaffAttendanceViewModel = hiltViewModel()) {
         return fine || coarse
     }
 
+    // Precise (FINE) is required for a geofence-accurate punch. On Android 12+ the
+    // user can grant Approximate (COARSE) only — hasPerm() is then true, the app
+    // punches, and only the SERVER rejects it (poor_accuracy). Detect coarse-only
+    // up front and prompt to upgrade instead of letting them hit a reject loop.
+    fun hasPrecise(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
     var permGranted by remember { mutableStateOf(hasPerm()) }
     var permanentlyDenied by remember { mutableStateOf(false) }
+    var coarseOnly by remember { mutableStateOf(hasPerm() && !hasPrecise()) }
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         val granted = result.values.any { it }
         permGranted = granted
+        coarseOnly = granted && !hasPrecise()
         if (granted) {
             permanentlyDenied = false
             vm.refreshGpsStatus()
@@ -149,12 +158,23 @@ fun MyAttendanceScreen(vm: StaffAttendanceViewModel = hiltViewModel()) {
         if (hasPerm()) vm.refreshGpsStatus()
     }
 
+    // Auto-dismiss the punch success/error banner. Previously consumeResult()
+    // was never called, so a "Clocked in" / error line lingered indefinitely
+    // and stayed visible across home↔calendar navigation.
+    LaunchedEffect(ui.lastResult, ui.error) {
+        if (ui.lastResult != null || ui.error != null) {
+            kotlinx.coroutines.delay(4000)
+            vm.consumeResult()
+        }
+    }
+
     // Re-check on resume so returning from Settings auto-refreshes the guidance.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 permGranted = hasPerm()
+                coarseOnly = permGranted && !hasPrecise()
                 if (permGranted) vm.refreshGpsStatus()
             }
         }
@@ -186,6 +206,8 @@ fun MyAttendanceScreen(vm: StaffAttendanceViewModel = hiltViewModel()) {
                 vm = vm,
                 permGranted = permGranted,
                 permanentlyDenied = permanentlyDenied,
+                coarseOnly = coarseOnly,
+                onEnablePrecise = { permLauncher.launch(LocationPermissions.REQUIRED) },
                 onRequestLocation = requestLocation,
                 onRequestPermission = { permLauncher.launch(LocationPermissions.REQUIRED) },
                 onOpenAppSettings = { openAppSettings(context) },
@@ -204,6 +226,8 @@ private fun HomeView(
     vm: StaffAttendanceViewModel,
     permGranted: Boolean,
     permanentlyDenied: Boolean,
+    coarseOnly: Boolean,
+    onEnablePrecise: () -> Unit,
     onRequestLocation: () -> Unit,
     onRequestPermission: () -> Unit,
     onOpenAppSettings: () -> Unit,
@@ -389,8 +413,34 @@ private fun HomeView(
                 InfoLine(text = e.message ?: "Something went wrong.", color = c.error, surface = c.errorSurface, icon = Icons.Filled.WarningAmber)
                 Spacer(Modifier.height(12.dp))
             }
+            // Coarse-only location: warn + offer to upgrade BEFORE a punch, instead
+            // of letting the server reject it for poor accuracy.
+            if (permGranted && coarseOnly) {
+                InfoLine(
+                    text = "Approximate location only — enable Precise location for attendance.",
+                    color = c.warning, surface = c.warningSurface, icon = Icons.Filled.WarningAmber,
+                )
+                Spacer(Modifier.height(8.dp))
+                PillButton(label = "Enable Precise", bg = c.warningSurface, content = c.warning) {
+                    onEnablePrecise()
+                }
+                Spacer(Modifier.height(12.dp))
+            }
 
             when {
+                // Load failed and we have no data: show an explicit unavailable
+                // state + Retry rather than a misleading "Clock in" button. This
+                // is what a 404 (backend not deployed), 422 (GPS disabled) or 5xx
+                // now surfaces as, instead of a healthy-looking "Not marked".
+                ui.me == null && ui.loadError != null -> {
+                    InfoLine(
+                        text = ui.loadError?.message?.takeIf { it.isNotBlank() }
+                            ?: "Couldn't load your attendance.",
+                        color = c.error, surface = c.errorSurface, icon = Icons.Filled.WarningAmber,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    PillButton(label = "Retry", bg = c.errorSurface, content = c.error) { vm.loadMe() }
+                }
                 // First load not finished yet: show a shimmer skeleton instead of
                 // guessing the Clock-in state — prevents the "Clock in" button
                 // flashing for an already-clocked-in user before me() resolves.
@@ -775,9 +825,12 @@ private fun CalendarView(
         for (d in 1..dim) {
             val key = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, d)
             if (key > todayKey) continue
-            val dow = Calendar.getInstance().apply { clear(); set(year, month, d) }.get(Calendar.DAY_OF_WEEK)
-            if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) continue
+            // Use the SERVER's rest-day markings (O = weekly-off, H = holiday) rather
+            // than a hardcoded Sat/Sun weekend — the school's real weekly-off may be
+            // Friday, or Saturday may be a working day. Only past Absent/unmarked
+            // WORKING days are regularizable.
             when (statusByDate[key]?.uppercase()) {
+                "O", "H" -> {}            // server-marked rest day — not regularizable
                 "A", "V" -> out.add(key)
             }
         }
@@ -785,11 +838,15 @@ private fun CalendarView(
     }
 
     fun shift(delta: Int) {
-        var m = month + delta
-        var y = year
-        if (m < 0) { m = 11; y-- }
-        if (m > 11) { m = 0; y++ }
-        month = m; year = y
+        // me().history is only ~30 days, so only the current month and the
+        // immediately-previous month have any data. Bounding nav to that window
+        // stops the user paging into fully-blank months that read as "no
+        // attendance recorded". (No future months either.)
+        val nowAbs = nowCal.get(Calendar.YEAR) * 12 + nowCal.get(Calendar.MONTH)
+        val targetAbs = (year * 12 + month) + delta
+        if (targetAbs > nowAbs || targetAbs < nowAbs - 1) return
+        month = ((targetAbs % 12) + 12) % 12
+        year = Math.floorDiv(targetAbs, 12)
     }
 
     Column(

@@ -116,4 +116,5 @@ data class StaffPunchRequest(
     val clientPunchId: String,        // idempotency / correlation key
     val clientCapturedAt: String?,    // ISO-8601 device capture time (audit only)
     val device: Map<String, String>? = null,
+    val integrityToken: String? = null, // Play Integrity attestation (null when disabled)
 )

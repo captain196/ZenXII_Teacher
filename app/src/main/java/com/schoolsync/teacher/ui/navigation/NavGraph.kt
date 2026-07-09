@@ -48,6 +48,8 @@ import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Grade
+import androidx.compose.material.icons.filled.Leaderboard
+import androidx.compose.material.icons.outlined.Leaderboard
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.filled.MyLocation
@@ -113,6 +115,7 @@ import com.schoolsync.teacher.ui.splash.WalkthroughScreen
 import com.schoolsync.teacher.ui.dashboard.DashboardScreen
 import com.schoolsync.teacher.ui.leave.LeaveScreen
 import com.schoolsync.teacher.ui.marks.MarksScreen
+import com.schoolsync.teacher.ui.results.ResultsScreen
 import com.schoolsync.teacher.ui.myattendance.MyAttendanceScreen
 import com.schoolsync.teacher.ui.messages.MessagesScreen
 import com.schoolsync.teacher.ui.events.EventsTeacherScreen
@@ -158,6 +161,7 @@ sealed class Route(val route: String) {
     data object Attendance : Route("attendance")
     data object MyAttendance : Route("my_attendance")
     data object Marks : Route("marks")
+    data object Results : Route("results")
     data object Timetable : Route("timetable")
     data object Students : Route("students")
     data object Messages : Route("messages")
@@ -202,6 +206,7 @@ val mainNavItems = listOf(
 /** Sub-items revealed when "More" is expanded. */
 val moreSubItems = listOf(
     NavRailItem(Route.MyAttendance, "My Att.", Icons.Filled.MyLocation, Icons.Outlined.MyLocation),
+    NavRailItem(Route.Results, "Results", Icons.Filled.Leaderboard, Icons.Outlined.Leaderboard),
     NavRailItem(Route.Homework, "HW", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
     NavRailItem(Route.Fees, "Fees", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet),
     NavRailItem(Route.RedFlags, "Flags", Icons.Filled.Flag, Icons.Outlined.Flag),
@@ -318,6 +323,13 @@ fun AppNavGraph(
 @Composable
 fun MainScaffold(navController: NavHostController) {
     val mainViewModel: MainViewModel = hiltViewModel()
+
+    // ONE shared StoryViewerViewModel for the whole Main scaffold (M2). It is
+    // scoped to the Main NavBackStackEntry (this composable's ViewModelStoreOwner),
+    // so the dashboard ring, the Stories-screen ring, AND the full-screen viewer
+    // overlay all reuse the SAME warm VM — a single set of collection-group
+    // observeActiveStories + observeSeenStoryIds listeners instead of up to three.
+    val storyViewerViewModel: com.schoolsync.teacher.ui.stories.StoryViewerViewModel = hiltViewModel()
 
     // Listen for logout event → navigate back to Login
     LaunchedEffect(Unit) {
@@ -540,12 +552,14 @@ fun MainScaffold(navController: NavHostController) {
                             restoreState = true
                         }
                     },
-                    onOpenStory = { authorId -> storyViewerAuthorId = authorId }
+                    onOpenStory = { authorId -> storyViewerAuthorId = authorId },
+                    storyViewerViewModel = storyViewerViewModel
                 )
             }
             composable(Route.Attendance.route) { AttendanceScreen() }
             composable(Route.MyAttendance.route) { MyAttendanceScreen() }
             composable(Route.Marks.route) { MarksScreen() }
+            composable(Route.Results.route) { ResultsScreen() }
             composable(Route.Timetable.route) { TimetableScreen() }
             composable(Route.LessonPlan.route) { TodayLessonsScreen() }
             composable(Route.Students.route) { StudentsScreen() }
@@ -571,7 +585,8 @@ fun MainScaffold(navController: NavHostController) {
             composable(Route.RedFlags.route) { RedFlagTeacherScreen() }
             composable(Route.Stories.route) {
                 StoriesTeacherScreen(
-                    onOpenViewer = { authorId -> storyViewerAuthorId = authorId }
+                    onOpenViewer = { authorId -> storyViewerAuthorId = authorId },
+                    viewerViewModel = storyViewerViewModel
                 )
             }
             composable(Route.Fees.route) { FeesTeacherScreen() }
@@ -616,7 +631,8 @@ fun MainScaffold(navController: NavHostController) {
         storyViewerAuthorId?.let { authorId ->
             com.schoolsync.teacher.ui.stories.StoryViewerScreen(
                 initialAuthorId = authorId,
-                onClose = { storyViewerAuthorId = null }
+                onClose = { storyViewerAuthorId = null },
+                viewModel = storyViewerViewModel
             )
         }
     } // end overlay Box

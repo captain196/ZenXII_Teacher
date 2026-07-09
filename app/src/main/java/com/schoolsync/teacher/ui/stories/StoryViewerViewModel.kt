@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
@@ -91,12 +92,17 @@ class StoryViewerViewModel @Inject constructor(
         combine(storyRepo.observeActiveStories(), seenIds, audienceContext) { docs, seen, ctx ->
             val (myId, myKeys) = ctx
             val visible = docs.filter { d ->
-                d.audienceClassKeys.isEmpty() ||                 // whole-school
-                d.audienceClassKeys.any { it in myKeys } ||      // a section I teach
-                d.effectiveAuthorId == myId                      // my own post
+                StorySharedConfig.isWholeSchool(d.audienceClassKeys) ||  // whole-school (empty OR "*")
+                d.audienceClassKeys.any { it in myKeys } ||             // a section I teach
+                d.effectiveAuthorId == myId                            // my own post
             }
             groupByAuthor(visible, seen)
         }
+            // Grouping is idempotent for identical inputs; skip re-emitting an
+            // equal list so a seen-state ping that changes nothing doesn't
+            // re-sort the ring or bounce downstream collectors (StoryGroup /
+            // ViewerStory are data classes → structural equality).
+            .distinctUntilChanged()
             .onEach { _isLoading.value = false }
             .stateIn(
                 scope = viewModelScope,

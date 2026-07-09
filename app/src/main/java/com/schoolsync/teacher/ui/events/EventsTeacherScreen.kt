@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -182,14 +183,10 @@ private fun EventCard(evt: EventDoc, onClick: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 if (cover != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(cover)
-                            .decoderFactory(coil.decode.VideoFrameDecoder.Factory())
-                            .crossfade(true)
-                            .build(),
+                    EventMediaThumb(
+                        url = cover,
+                        context = LocalContext.current,
                         contentDescription = null,
-                        contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
@@ -412,6 +409,50 @@ private fun EventDetailDialog(
     }
 }
 
+/** Firebase Storage download URLs keep the real file extension before the `?`. */
+private fun isLikelyVideoUrl(url: String): Boolean {
+    val path = url.substringBefore('?').lowercase()
+    return listOf(".mp4", ".mov", ".webm", ".mkv", ".avi", ".3gp", ".m4v").any { path.endsWith(it) }
+}
+
+/**
+ * Event cover / thumbnail tile. Renders an image URL via Coil, but for a VIDEO
+ * url it shows a play glyph instead of handing the raw .mp4 to Coil: decoding a
+ * frame off a REMOTE video downloads the entire file (slow, heavy, routinely
+ * fails to a blank tile) and events carry no pre-generated poster. Mirrors the
+ * Gallery module's deliberate poster-only strategy. (Fixes audit M7.)
+ */
+@Composable
+private fun EventMediaThumb(
+    url: String,
+    context: android.content.Context,
+    contentDescription: String?,
+    modifier: Modifier = Modifier
+) {
+    if (isLikelyVideoUrl(url)) {
+        Box(
+            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayCircle,
+                contentDescription = contentDescription ?: "Video",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    } else {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(url)
+                .crossfade(true)
+                .build(),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+        )
+    }
+}
+
 /** Cover image (or gradient fallback) with the status pill + title overlaid. */
 @Composable
 private fun EventCoverPane(
@@ -423,14 +464,10 @@ private fun EventCoverPane(
     val scheme = MaterialTheme.colorScheme
     Box(modifier = modifier) {
         if (cover != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(cover)
-                    .decoderFactory(coil.decode.VideoFrameDecoder.Factory())
-                    .crossfade(true)
-                    .build(),
+            EventMediaThumb(
+                url = cover,
+                context = context,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -615,14 +652,10 @@ private fun EventMediaGrid(
                         .clickable { onThumbClick(url) },
                     contentAlignment = Alignment.Center
                 ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(url)
-                            .decoderFactory(coil.decode.VideoFrameDecoder.Factory())
-                            .crossfade(true)
-                            .build(),
+                    EventMediaThumb(
+                        url = url,
+                        context = context,
                         contentDescription = "Event photo",
-                        contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                     if (isLastShown && extra > 0) {

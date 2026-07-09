@@ -39,6 +39,7 @@ class StaffAttendanceRepository @Inject constructor(
         clientPunchId: String,
         clientCapturedAt: String?,
         device: Map<String, String>? = null,
+        integrityToken: String? = null,
     ): Result<PunchResult> = runCatching {
         val resp = api.staffPunch(
             StaffPunchRequest(
@@ -50,6 +51,7 @@ class StaffAttendanceRepository @Inject constructor(
                 clientPunchId = clientPunchId,
                 clientCapturedAt = clientCapturedAt,
                 device = device,
+                integrityToken = integrityToken,
             )
         )
         if (!resp.isSuccessful) throw resp.toError()

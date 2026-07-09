@@ -214,6 +214,7 @@ fun GalleryTeacherScreen(
             UploadMediaDialog(
                 isUploading = state.isUploading,
                 onDismiss = viewModel::hideUploadMediaDialog,
+                onCancelUpload = viewModel::cancelUpload,
                 onUpload = { uri, type, caption ->
                     viewModel.uploadMediaFile(ctx, uri, type, caption)
                 }
@@ -628,10 +629,19 @@ private fun MediaPanel(
 @Composable
 private fun MediaCard(media: GalleryMedia, onClick: () -> Unit) {
     val context = LocalContext.current
-    // Prefer an explicit poster frame; else decode the first video frame.
-    val thumbModel = media.thumbnail.ifBlank { media.url }
-    // Only render Coil for trusted, well-formed https Storage URLs.
-    val isValid = AttachmentUrlValidator.validate(thumbModel) is AttachmentUrlValidator.Result.Valid
+    val isVideo = media.type == "video"
+    // Poster source: an image URL for photos, or the video's poster frame when
+    // it has one. We do NOT feed the raw .mp4 to Coil for a grid tile — decoding
+    // a frame off a remote video downloads the whole file (slow, heavy) and
+    // routinely fails, leaving a BLANK tile. A thumbnail-less video shows a play
+    // placeholder instead; the fullscreen viewer plays the actual video on tap.
+    val posterModel = when {
+        !isVideo -> media.url
+        media.thumbnail.isNotBlank() -> media.thumbnail
+        else -> null
+    }
+    val isValid = posterModel != null &&
+        AttachmentUrlValidator.validate(posterModel) is AttachmentUrlValidator.Result.Valid
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -642,8 +652,7 @@ private fun MediaCard(media: GalleryMedia, onClick: () -> Unit) {
         if (isValid) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(thumbModel)
-                    .decoderFactory(coil.decode.VideoFrameDecoder.Factory())
+                    .data(posterModel)
                     .crossfade(true)
                     .build(),
                 contentDescription = media.caption,
@@ -653,6 +662,8 @@ private fun MediaCard(media: GalleryMedia, onClick: () -> Unit) {
                 contentScale = ContentScale.Crop
             )
         } else {
+            // Placeholder — play icon for a poster-less video, image icon
+            // otherwise. Never a blank tile.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -660,10 +671,10 @@ private fun MediaCard(media: GalleryMedia, onClick: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Filled.Image,
+                    if (isVideo) Icons.Filled.PlayCircle else Icons.Filled.Image,
                     contentDescription = null,
                     tint = TextTertiary,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(if (isVideo) 44.dp else 32.dp)
                 )
             }
         }
@@ -801,6 +812,7 @@ private fun CreateAlbumDialog(
 private fun UploadMediaDialog(
     isUploading: Boolean,
     onDismiss: () -> Unit,
+    onCancelUpload: () -> Unit,
     onUpload: (uri: android.net.Uri, type: String, caption: String) -> Unit
 ) {
     var pickedUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -836,14 +848,16 @@ private fun UploadMediaDialog(
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(
-                    onClick = onDismiss,
-                    enabled = !isUploading,
+                    // While uploading this cancels the in-flight upload rather
+                    // than being dead — otherwise a stalled upload strands the
+                    // user behind a non-dismissible spinner.
+                    onClick = { if (isUploading) onCancelUpload() else onDismiss() },
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
-                        contentDescription = "Close",
-                        tint = if (isUploading) TextTertiary else TextSecondary
+                        contentDescription = if (isUploading) "Cancel upload" else "Close",
+                        tint = TextSecondary
                     )
                 }
             }
@@ -966,8 +980,8 @@ private fun UploadMediaDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isUploading) {
-                Text("Cancel", color = TextSecondary)
+            TextButton(onClick = { if (isUploading) onCancelUpload() else onDismiss() }) {
+                Text(if (isUploading) "Cancel upload" else "Cancel", color = TextSecondary)
             }
         },
         containerColor = SurfaceDark,
@@ -1065,13 +1079,21 @@ private fun GalleryMediaPagerViewer(
                     if (isVideo && isActive && playingVideo && isValid) {
                         GalleryVideoPlayer(url = item.url)
                     } else {
-                        val model = if (isVideo && item.thumbnail.isNotBlank())
-                            item.thumbnail else item.url
-                        if (isValid || (isVideo && item.thumbnail.isNotBlank())) {
+                        // Poster = an image (photo, or the video's poster frame).
+                        // A poster-less video shows just the play button on a dark
+                        // page — we don't decode the raw .mp4 here (heavy + flaky).
+                        val posterModel = when {
+                            !isVideo -> item.url
+                            item.thumbnail.isNotBlank() -> item.thumbnail
+                            else -> null
+                        }
+                        val showPoster = posterModel != null &&
+                            AttachmentUrlValidator.validate(posterModel) is
+                                AttachmentUrlValidator.Result.Valid
+                        if (showPoster) {
                             AsyncImage(
                                 model = ImageRequest.Builder(context)
-                                    .data(model)
-                                    .decoderFactory(coil.decode.VideoFrameDecoder.Factory())
+                                    .data(posterModel)
                                     .crossfade(true)
                                     .build(),
                                 contentDescription = item.caption.ifBlank { null },
@@ -1144,10 +1166,11 @@ private fun GalleryMediaPagerViewer(
                                         else Modifier
                                     )
                             )
-                        } else {
+                        } else if (!isVideo) {
                             Text("No preview available", color = TextSecondary)
                         }
-                        // Play affordance over a video poster frame.
+                        // Play affordance — shown over a poster frame, or centered
+                        // on the dark page for a poster-less video.
                         if (isVideo && isActive && !playingVideo) {
                             Box(
                                 modifier = Modifier

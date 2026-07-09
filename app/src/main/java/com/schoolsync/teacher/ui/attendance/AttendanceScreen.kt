@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -922,7 +923,26 @@ private fun HistoryView(
             state.isLoading -> LoadingState()
             state.students.isEmpty() -> EmptyState()
             else -> {
-                AttendanceGrid(state = state, onCellClick = viewModel::cycleStatus)
+                AttendanceGrid(
+                    state = state,
+                    onCellClick = { studentId, day ->
+                        // History grid: gate on class-teacher (parity with TodayView,
+                        // which the raw cycleStatus wiring skipped), and route PAST-day
+                        // taps to the correction flow. The free cycle editor only works
+                        // for TODAY (save is today-only), so editing a past cell here
+                        // used to be a dead end — changes showed but Save always failed.
+                        if (state.isClassTeacher) {
+                            when {
+                                viewModel.isViewingCurrentMonth() && day == state.todayDay ->
+                                    viewModel.cycleStatus(studentId, day)
+                                viewModel.isViewingCurrentMonth() && day > state.todayDay ->
+                                    Unit // future day — not markable
+                                else ->
+                                    viewModel.openCorrectionDialog(studentId, day)
+                            }
+                        }
+                    }
+                )
                 AttendanceLegend()
             }
         }
@@ -1159,6 +1179,11 @@ private fun AttendanceGrid(
     onCellClick: (studentId: String, day: Int) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
+    // Shared vertical scroll for BOTH the frozen roll/name column and the
+    // day-cell grid. Without this each LazyColumn kept its OWN scroll offset,
+    // so vertical scrolling desynced the name column from the marks and a
+    // teacher could read one student's name against another's row.
+    val rowScrollState = rememberLazyListState()
     val rollWidth = 40.dp
     val nameWidth = 120.dp
     val dayCellSize = 36.dp
@@ -1196,7 +1221,7 @@ private fun AttendanceGrid(
                         Text("Student", style = MaterialTheme.typography.labelMedium, color = TextTertiary, fontWeight = FontWeight.Bold, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp))
                     }
                 }
-                LazyColumn {
+                LazyColumn(state = rowScrollState) {
                     items(state.students, key = { it.studentId }) { student ->
                         Row(modifier = Modifier.border(0.5.dp, DividerColor.copy(alpha = 0.5f))) {
                             Box(
@@ -1264,7 +1289,7 @@ private fun AttendanceGrid(
                         }
                     }
                 }
-                LazyColumn {
+                LazyColumn(state = rowScrollState) {
                     items(state.students, key = { it.studentId }) { student ->
                         Row {
                             for (day in 1..state.daysInMonth) {

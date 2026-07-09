@@ -42,7 +42,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,7 +60,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Visibility
@@ -114,6 +115,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.schoolsync.teacher.data.model.Story
+import com.schoolsync.teacher.data.model.firestore.StorySharedConfig
 import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.ErrorRed
 import com.schoolsync.teacher.ui.theme.Glass
@@ -127,6 +129,7 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.glassCard
+import com.schoolsync.teacher.util.StoryVideoCache
 import com.schoolsync.teacher.util.toRelativeTime
 import kotlinx.coroutines.flow.collectLatest
 
@@ -193,8 +196,7 @@ fun StoriesTeacherScreen(
                 // Top bar (your own stories) + Archived entry
                 StoriesTopBar(
                     archivedCount = state.archivedStories.size,
-                    onOpenArchived = viewModel::openArchivedGallery,
-                    onRefresh = viewModel::refresh
+                    onOpenArchived = viewModel::openArchivedGallery
                 )
 
                 // Active stories — tap a card to see who saw / reacted.
@@ -282,8 +284,7 @@ fun StoriesTeacherScreen(
 @Composable
 private fun StoriesTopBar(
     archivedCount: Int,
-    onOpenArchived: () -> Unit,
-    onRefresh: () -> Unit
+    onOpenArchived: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -338,10 +339,6 @@ private fun StoriesTopBar(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
             }
         }
     }
@@ -600,7 +597,8 @@ private fun StoryCard(
                         )
                     }
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
+                // ≥48dp touch target (a11y) while keeping the small glyph.
+                IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = "Delete story",
@@ -1569,7 +1567,7 @@ private fun ArchivedDetailsSheet(story: Story, onDismiss: () -> Unit) {
                         }
                     }
                 }
-                val audience = if (story.audienceClassKeys.isEmpty()) "Whole school"
+                val audience = if (StorySharedConfig.isWholeSchool(story.audienceClassKeys)) "Whole school"
                     else story.audienceClassKeys.joinToString(", ")
                 DetailRow("Audience", audience)
                 Spacer(Modifier.height(10.dp))
@@ -1634,12 +1632,18 @@ private suspend fun downloadStoryMedia(context: android.content.Context, story: 
         }
     }
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun ArchivedVideoPlayer(url: String) {
     val context = LocalContext.current
-    val player = remember {
+    val player = remember(url) {
+        // Reuse the shared disk cache (M6) like the live VideoStoryPlayer so
+        // an archived clip the teacher already watched replays from disk
+        // instead of re-downloading.
+        val source = ProgressiveMediaSource.Factory(StoryVideoCache.dataSourceFactory(context))
+            .createMediaSource(MediaItem.fromUri(url))
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(url))
+            setMediaSource(source)
             repeatMode = ExoPlayer.REPEAT_MODE_ONE
             playWhenReady = true
             prepare()

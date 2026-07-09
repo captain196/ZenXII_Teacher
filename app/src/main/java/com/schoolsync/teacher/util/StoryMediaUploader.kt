@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
+import com.schoolsync.teacher.data.model.firestore.StorySharedConfig
 import java.io.File
 import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
@@ -50,20 +51,29 @@ object StoryMediaUploader {
         data class Failed(val reason: String) : UploadProgress()
     }
 
-    // Raw-pick caps. Images are downscaled/re-encoded client-side before
-    // upload (see [compressImage]) the way Instagram/WhatsApp do, so the
-    // image cap is generous — it only rejects absurd inputs; anything
-    // reasonable is shrunk to ~MAX_IMAGE_DIMEN before it leaves the device.
-    private const val MAX_IMAGE_BYTES = 40L * 1024 * 1024
+    // Raw-pick caps (PRE-compression). Images are downscaled/re-encoded
+    // client-side before upload (see [compressImage]) the way Instagram/
+    // WhatsApp do, so this cap is generous — it only rejects absurd inputs
+    // at pick time; anything reasonable is shrunk before it leaves the
+    // device. The AUTHORITATIVE post-compression cap is
+    // StorySharedConfig.MAX_IMAGE_BYTES (10 MB) — enforced in [upload].
+    private const val RAW_MAX_IMAGE_BYTES = 40L * 1024 * 1024
     // Generous raw cap: videos are transcoded to ~720p/2Mbps client-side
     // (see StoryVideoCompressor) before upload, so this only rejects absurd
-    // inputs rather than ordinary phone recordings.
-    private const val MAX_VIDEO_BYTES = 300L * 1024 * 1024
+    // inputs at pick time. The AUTHORITATIVE post-compression cap is
+    // StorySharedConfig.MAX_VIDEO_BYTES (50 MB) — enforced in [upload].
+    private const val RAW_MAX_VIDEO_BYTES = 300L * 1024 * 1024
 
     /** Longest-edge cap for uploaded images (Instagram-story-ish 9:16 @1080
      *  fits comfortably; 1920 keeps landscape/quality without bloating). */
     private const val MAX_IMAGE_DIMEN = 1920
     private const val JPEG_QUALITY = 82
+
+    /** Best-effort byte size of a content/file Uri; -1 when unknown. */
+    private fun fileSizeBytes(context: Context, uri: Uri): Long = try {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")
+            ?.use { it.length.takeIf { len -> len > 0 } } ?: -1L
+    } catch (_: Exception) { -1L }
 
     /**
      * Cheap server-free pre-checks. Returns null when OK, otherwise an
@@ -84,7 +94,7 @@ object StoryMediaUploader {
             cr.openAssetFileDescriptor(uri, "r")?.use { it.length.takeIf { len -> len > 0 } }
         } catch (_: Exception) { null }
         if (size != null) {
-            val cap = if (declaredType == "image") MAX_IMAGE_BYTES else MAX_VIDEO_BYTES
+            val cap = if (declaredType == "image") RAW_MAX_IMAGE_BYTES else RAW_MAX_VIDEO_BYTES
             if (size > cap) {
                 val capMb = cap / (1024 * 1024)
                 return "${declaredType.replaceFirstChar { it.uppercase() }} too large (max $capMb MB)."
@@ -123,6 +133,25 @@ object StoryMediaUploader {
             val uploadUri = if (declaredType == "image") compressImage(context, uri) else uri
             // Re-derive extension: a compressed image is always JPEG.
             val finalExt = if (declaredType == "image") "jpg" else ext
+
+            // Post-compression size guard (M8). The AUTHORITATIVE cap is the
+            // storage-rule limit mirrored in StorySharedConfig (10 MB image /
+            // 50 MB video). Compression usually lands well under it, but a
+            // long clip — or a compressor/image fallback to the original —
+            // can still exceed it. Reject here with a clear message instead
+            // of letting the Storage rule reject the PUT with a generic
+            // "you don't have permission" error. Unknown size (-1) fails open;
+            // the Storage rule remains the server-side backstop.
+            val finalBytes = fileSizeBytes(context, uploadUri)
+            val postCap = if (declaredType == "image")
+                StorySharedConfig.MAX_IMAGE_BYTES else StorySharedConfig.MAX_VIDEO_BYTES
+            if (finalBytes in 1..Long.MAX_VALUE && finalBytes > postCap) {
+                val capMb = postCap / (1024 * 1024)
+                val noun = if (declaredType == "image") "Image" else "Video"
+                trySend(UploadProgress.Failed("$noun too large after compression, max $capMb MB."))
+                close()
+                return@callbackFlow
+            }
 
             val path = "stories/${schoolId}/${teacherId}/${System.currentTimeMillis()}.${finalExt}"
             val ref = FirebaseStorage.getInstance().reference.child(path)
@@ -234,32 +263,5 @@ object StoryMediaUploader {
         true
     } catch (_: Exception) {
         false
-    }
-
-    /**
-     * Convenience: suspend wrapper that uploads and returns the URL,
-     * throwing on failure. Use when you don't need progress events.
-     */
-    suspend fun uploadSuspending(
-        context: Context,
-        uri: Uri,
-        schoolId: String,
-        teacherId: String,
-        declaredType: String
-    ): String {
-        val mime = context.contentResolver.getType(uri).orEmpty()
-        val ext = when {
-            mime.endsWith("/jpeg") || mime.endsWith("/jpg") -> "jpg"
-            mime.endsWith("/png")                          -> "png"
-            mime.endsWith("/webp")                         -> "webp"
-            mime.endsWith("/mp4")                          -> "mp4"
-            mime.endsWith("/quicktime")                    -> "mov"
-            mime.endsWith("/3gpp")                         -> "3gp"
-            else -> if (declaredType == "image") "jpg" else "mp4"
-        }
-        val path = "stories/${schoolId}/${teacherId}/${System.currentTimeMillis()}.${ext}"
-        val ref = FirebaseStorage.getInstance().reference.child(path)
-        ref.putFile(uri).await()
-        return ref.downloadUrl.await().toString()
     }
 }

@@ -460,10 +460,6 @@ class StoriesTeacherViewModel @Inject constructor(
         }
     }
 
-    /** Pull-to-refresh kept as a no-op convenience — listener already
-     *  delivers fresh data; this just clears any error banner. */
-    fun refresh() { _uiState.update { it.copy(error = null) } }
-
     // ─── Mapper: Firestore doc → existing UI Story model ───────────
     private fun StoryDoc.toStory(): Story {
         // createdAt is Any? — Firestore may deliver Timestamp; convert

@@ -85,6 +85,14 @@ import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.glassCard
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 @Composable
 fun MarksScreen(
@@ -145,104 +153,231 @@ fun MarksScreen(
                 }
             }
         ) { paddingValues ->
-            Row(
+            // Guard selector changes when there are unsaved marks: stash the
+            // pending action and confirm before discarding it (HIGH-2).
+            var pendingSelection by remember { mutableStateOf<(() -> Unit)?>(null) }
+            val onGuarded: (() -> Unit) -> Unit = { action ->
+                if (state.hasUnsavedChanges) pendingSelection = action else action()
+            }
+
+            val panel: @Composable (Boolean, Modifier) -> Unit = { compact, m ->
+                MarksLeftPanel(
+                    state = state,
+                    onExamSelected = { exam -> onGuarded { viewModel.selectExam(exam) } },
+                    onSubjectSelected = { subj -> onGuarded { viewModel.selectSubject(subj) } },
+                    onClassSelected = { className, section ->
+                        onGuarded { viewModel.selectClass(className, section) }
+                    },
+                    modifier = m,
+                    compact = compact
+                )
+            }
+
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Left panel: Selectors
-                MarksLeftPanel(
-                    state = state,
-                    onExamSelected = viewModel::selectExam,
-                    onSubjectSelected = viewModel::selectSubject,
-                    onClassSelected = { className, section -> viewModel.selectClass(className, section) },
-                    modifier = Modifier
-                        .width(220.dp)
-                        .fillMaxHeight()
-                        .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)
-                )
-
-                // Right panel: Marks grid
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .padding(start = 4.dp, top = 8.dp, bottom = 8.dp, end = 12.dp)
-                ) {
-                    if (state.isLoading) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Teal)
-                        }
-                    } else if (state.selectedExam == null || state.selectedSubject == null) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Filled.Grade,
-                                    contentDescription = null,
-                                    tint = TextTertiary,
-                                    modifier = Modifier.size(64.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "Select exam and subject",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = TextSecondary
-                                )
-                                Text(
-                                    text = "Choose from the panel on the left to start entering marks",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextTertiary
-                                )
-                            }
-                        }
-                    } else {
-                        // Header info
-                        Row(
-                            modifier = Modifier
+                // Below ~600dp of available width the 220dp panel + ~210dp of frozen
+                // grid columns overflow, so stack the panel above the grid instead of
+                // side-by-side — the feature stays usable on a portrait phone (HIGH-1).
+                val isNarrow = maxWidth < 600.dp
+                // Captured here because Compose's @LayoutScopeMarker blocks reaching
+                // BoxWithConstraintsScope.maxHeight from inside the nested Column.
+                val panelMaxHeight = maxHeight * 0.45f
+                if (isNarrow) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        panel(
+                            true,
+                            Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "${state.selectedExam?.examName} - ${state.selectedSubject?.subjectName}",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${state.selectedClassName} - ${state.selectedSection} | Max: ${state.selectedSubject?.maxTotal}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
-                            }
-                            if (state.hasUnsavedChanges) {
-                                Text(
-                                    text = "Unsaved changes",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = WarningAmber,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        // Marks spreadsheet
-                        MarksGrid(
+                                .heightIn(max = panelMaxHeight)
+                                .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 4.dp)
+                        )
+                        MarksContent(
                             state = state,
                             onTheoryChange = viewModel::updateTheory,
                             onPracticalChange = viewModel::updatePractical,
                             onToggleAbsent = viewModel::toggleAbsent,
-                            modifier = Modifier.fillMaxSize()
+                            onRetry = viewModel::retry,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, top = 4.dp, bottom = 8.dp, end = 12.dp)
+                        )
+                    }
+                } else {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        panel(
+                            false,
+                            Modifier
+                                .width(220.dp)
+                                .fillMaxHeight()
+                                .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)
+                        )
+                        MarksContent(
+                            state = state,
+                            onTheoryChange = viewModel::updateTheory,
+                            onPracticalChange = viewModel::updatePractical,
+                            onToggleAbsent = viewModel::toggleAbsent,
+                            onRetry = viewModel::retry,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .padding(start = 4.dp, top = 8.dp, bottom = 8.dp, end = 12.dp)
                         )
                     }
                 }
+            }
+
+            pendingSelection?.let { action ->
+                AlertDialog(
+                    onDismissRequest = { pendingSelection = null },
+                    containerColor = SurfaceDark,
+                    title = { Text("Discard unsaved marks?", color = TextPrimary) },
+                    text = {
+                        Text(
+                            "You have unsaved marks on this subject. Switching now will discard them.",
+                            color = TextSecondary
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val run = action
+                            pendingSelection = null
+                            run()
+                        }) { Text("Discard", color = ErrorRed) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingSelection = null }) {
+                            Text("Keep editing", color = Teal)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Right-hand content area: loading spinner, an error state with Retry (MED-7),
+ * the "select exam & subject" empty state, or the marks grid. Extracted so the
+ * responsive layout can drop it below the panel on narrow screens.
+ */
+@Composable
+private fun MarksContent(
+    state: MarksUiState,
+    onTheoryChange: (String, String) -> Unit,
+    onPracticalChange: (String, String) -> Unit,
+    onToggleAbsent: (String) -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val errorMsg = state.error
+    Column(modifier = modifier) {
+        when {
+            state.isLoading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Teal)
+                }
+            }
+            errorMsg != null -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.ErrorOutline,
+                            contentDescription = null,
+                            tint = ErrorRed,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = errorMsg,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = onRetry,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Teal,
+                                contentColor = BgStart
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text("Retry", fontWeight = FontWeight.SemiBold) }
+                    }
+                }
+            }
+            state.selectedExam == null || state.selectedSubject == null -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.Grade,
+                            contentDescription = null,
+                            tint = TextTertiary,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Select exam and subject",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = "Choose an exam and subject to start entering marks",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            else -> {
+                // Header info
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${state.selectedExam?.examName} - ${state.selectedSubject?.subjectName}",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${state.selectedClassName} - ${state.selectedSection} | Max: ${state.selectedSubject?.maxTotal}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                    if (state.hasUnsavedChanges) {
+                        Text(
+                            text = "Unsaved changes",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = WarningAmber,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Marks spreadsheet
+                MarksGrid(
+                    state = state,
+                    onTheoryChange = onTheoryChange,
+                    onPracticalChange = onPracticalChange,
+                    onToggleAbsent = onToggleAbsent,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
     }
@@ -254,22 +389,26 @@ private fun MarksLeftPanel(
     onExamSelected: (ExamInfo) -> Unit,
     onSubjectSelected: (SubjectInfo) -> Unit,
     onClassSelected: (String, String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
 ) {
     Column(
         modifier = modifier
             .glassCard()
+            .verticalScroll(rememberScrollState())
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Marks Entry",
-            style = MaterialTheme.typography.titleLarge,
-            color = TextPrimary,
-            fontWeight = FontWeight.Bold
-        )
+        if (!compact) {
+            Text(
+                text = "Marks Entry",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
 
-        Divider(color = DividerColor, thickness = 0.5.dp)
+            Divider(color = DividerColor, thickness = 0.5.dp)
+        }
 
         // Class selector
         SelectorDropdown(
@@ -304,44 +443,45 @@ private fun MarksLeftPanel(
             enabled = state.availableSubjects.isNotEmpty()
         )
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Max marks info
-        state.selectedSubject?.let { subject ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(TealSurface)
-                    .padding(10.dp)
-            ) {
-                Text(
-                    text = "Max Marks",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Teal,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+        // Max marks info — only in the wide layout; the grid header already
+        // shows per-column maxes, so this card is dropped when stacked/compact.
+        if (!compact) {
+            state.selectedSubject?.let { subject ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(TealSurface)
+                        .padding(10.dp)
                 ) {
-                    Text("Theory:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                    Text("${subject.maxTheory}", style = MaterialTheme.typography.labelSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Practical:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                    Text("${subject.maxPractical}", style = MaterialTheme.typography.labelSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Total:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                    Text("${subject.maxTotal}", style = MaterialTheme.typography.labelSmall, color = Teal, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Max Marks",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Teal,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Theory:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text("${subject.maxTheory}", style = MaterialTheme.typography.labelSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Practical:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text("${subject.maxPractical}", style = MaterialTheme.typography.labelSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Total:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text("${subject.maxTotal}", style = MaterialTheme.typography.labelSmall, color = Teal, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -543,7 +683,8 @@ private fun MarksGrid(
                                 errorText = mark.theoryError,
                                 enabled = !mark.isAbsent,
                                 width = markCellWidth,
-                                height = rowHeight
+                                height = rowHeight,
+                                semanticLabel = "Theory marks for ${mark.name}, roll ${mark.rollNo}"
                             )
 
                             // Practical input
@@ -554,26 +695,36 @@ private fun MarksGrid(
                                 errorText = mark.practicalError,
                                 enabled = !mark.isAbsent,
                                 width = markCellWidth,
-                                height = rowHeight
+                                height = rowHeight,
+                                semanticLabel = "Practical marks for ${mark.name}, roll ${mark.rollNo}"
                             )
 
-                            // Total (read-only, auto-calculated)
+                            // Total (read-only, auto-calculated). Turns red when the
+                            // combined total exceeds the subject's maxTotal (MED-6).
                             Box(
                                 modifier = Modifier
                                     .width(totalWidth)
                                     .height(rowHeight)
                                     .background(
-                                        if (mark.isAbsent) ErrorRed.copy(alpha = 0.08f)
-                                        else if (mark.total.isNotEmpty()) SuccessGreen.copy(alpha = 0.06f)
-                                        else Glass.copy(alpha = 0.05f)
+                                        when {
+                                            mark.totalError != null -> ErrorRed.copy(alpha = 0.12f)
+                                            mark.isAbsent -> ErrorRed.copy(alpha = 0.08f)
+                                            mark.total.isNotEmpty() -> SuccessGreen.copy(alpha = 0.06f)
+                                            else -> Glass.copy(alpha = 0.05f)
+                                        }
                                     )
-                                    .border(0.5.dp, DividerColor.copy(alpha = 0.3f)),
+                                    .border(
+                                        0.5.dp,
+                                        if (mark.totalError != null) ErrorRed.copy(alpha = 0.4f)
+                                        else DividerColor.copy(alpha = 0.3f)
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = mark.total.ifEmpty { "-" },
                                     style = MaterialTheme.typography.labelLarge,
                                     color = when {
+                                        mark.totalError != null -> ErrorRed
                                         mark.isAbsent -> ErrorRed
                                         mark.total.isNotEmpty() -> SuccessGreen
                                         else -> TextTertiary
@@ -581,6 +732,16 @@ private fun MarksGrid(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp
                                 )
+                                if (mark.totalError != null) {
+                                    Text(
+                                        text = mark.totalError!!,
+                                        color = ErrorRed,
+                                        fontSize = 7.sp,
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .padding(bottom = 1.dp)
+                                    )
+                                }
                             }
 
                             // Absent checkbox
@@ -589,6 +750,7 @@ private fun MarksGrid(
                                     .width(absentWidth)
                                     .height(rowHeight)
                                     .border(0.5.dp, DividerColor.copy(alpha = 0.3f))
+                                    .semantics { contentDescription = "Toggle absent for ${mark.name}" }
                                     .clickable { onToggleAbsent(mark.studentId) },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -646,12 +808,14 @@ private fun MarkInputCell(
     errorText: String?,
     enabled: Boolean,
     width: androidx.compose.ui.unit.Dp,
-    height: androidx.compose.ui.unit.Dp
+    height: androidx.compose.ui.unit.Dp,
+    semanticLabel: String = ""
 ) {
     Box(
         modifier = Modifier
             .width(width)
             .height(height)
+            .semantics { if (semanticLabel.isNotEmpty()) contentDescription = semanticLabel }
             .background(
                 when {
                     isError -> ErrorRed.copy(alpha = 0.08f)
@@ -672,10 +836,9 @@ private fun MarkInputCell(
             BasicTextField(
                 value = value,
                 onValueChange = { newVal ->
-                    // Only allow digits, max 3 chars
-                    if (newVal.length <= 3 && newVal.all { it.isDigit() } || newVal.isEmpty()) {
-                        onValueChange(newVal)
-                    }
+                    // Accept digits + one optional decimal point — marks are Double,
+                    // so both "40" and "37.5" are valid (no silent truncation).
+                    if (isValidMarkInput(newVal)) onValueChange(newVal)
                 },
                 modifier = Modifier
                     .fillMaxSize()
@@ -688,7 +851,7 @@ private fun MarkInputCell(
                 ),
                 singleLine = true,
                 cursorBrush = SolidColor(Teal),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 decorationBox = { innerTextField ->
                     Box(
                         contentAlignment = Alignment.Center,

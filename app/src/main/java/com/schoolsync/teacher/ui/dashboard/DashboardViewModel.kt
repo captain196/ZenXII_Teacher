@@ -217,7 +217,14 @@ class DashboardViewModel @Inject constructor(
                             try {
                                 val students = studentRepository.getStudentsForClass(cls, sec)
                                     .getOrNull() ?: emptyList()
-                                val sectionKey = "$cls/$sec"
+                                // Canonical combined key — MUST match the admin
+                                // writer's buildSectionKey ("Class 9th/Section A"),
+                                // idempotent like classKey/sectionKey. The old
+                                // "$cls/$sec" ("9th/A") matched 0 summary docs, so
+                                // the whole class showed unmarked.
+                                val clsKey = if (cls.startsWith("Class ", true)) cls else "Class $cls"
+                                val secKey = if (sec.startsWith("Section ", true)) sec else "Section $sec"
+                                val sectionKey = "$clsKey/$secKey"
                                 val summaries = attendanceFirestoreRepo
                                     .getClassMonthlySummaries(sectionKey, monthKey)
                                     .getOrNull().orEmpty()

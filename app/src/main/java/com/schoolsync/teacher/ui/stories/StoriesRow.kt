@@ -124,7 +124,8 @@ private fun StoryAvatar(group: StoryGroup, onClick: () -> Unit) {
             if (group.authorPic.isNotBlank()) {
                 AsyncImage(
                     model = group.authorPic,
-                    contentDescription = null,
+                    contentDescription = if (group.hasUnviewed)
+                        "${group.authorName}, unseen story" else "${group.authorName}, story seen",
                     modifier = Modifier.size(54.dp).clip(CircleShape)
                 )
             } else {

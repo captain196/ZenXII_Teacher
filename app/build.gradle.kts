@@ -144,6 +144,11 @@ dependencies {
     // Location — FusedLocationProviderClient (GPS staff attendance, Phase 11)
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
+    // Play Integrity — anti-spoof attestation for GPS staff attendance.
+    // Inert until a cloud project number is set (PlayIntegrityTokenProvider) AND
+    // the server enables it (config/play_integrity.php).
+    implementation("com.google.android.play:integrity:1.4.0")
+
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
@@ -166,10 +171,6 @@ dependencies {
     // clips to ~720p/2Mbps before upload (MediaCodec, Telegram-derived),
     // mirroring WhatsApp/Instagram. JitPack-hosted.
     implementation("com.github.AbedElazizShe:LightCompressor:1.3.3")
-
-    // Stories viewer upgrade — pinch / double-tap zoom for image stories
-    // (Compose equivalent of the old PhotoView), integrates with Coil.
-    implementation("me.saket.telephoto:zoomable-image-coil:0.13.0")
 
     // Lottie animations
     implementation("com.airbnb.android:lottie-compose:6.4.0")
