@@ -16,7 +16,6 @@ import com.schoolsync.teacher.data.remote.ApiService
 import com.schoolsync.teacher.data.repository.AuthRepository
 import com.schoolsync.teacher.data.repository.FeeRepository
 import com.schoolsync.teacher.data.repository.HomeworkTeacherRepository
-import com.schoolsync.teacher.data.repository.LeaveRepository
 import com.schoolsync.teacher.data.repository.RedFlagRepository
 import com.schoolsync.teacher.data.repository.DataRepository
 import com.schoolsync.teacher.data.repository.StudentRepository
@@ -174,12 +173,8 @@ object AppModule {
     // The Messages screen now renders a Coming Soon Composable that does not
     // instantiate any ViewModel or repository.
 
-    @Provides
-    @Singleton
-    fun provideLeaveRepository(
-        firebaseService: FirebaseService,
-        tokenManager: TokenManager
-    ): LeaveRepository = LeaveRepository(firebaseService, tokenManager)
+    // LeaveRepository (legacy RTDB) DI provision removed — the leave feature is
+    // Firestore-only via LeaveFirestoreRepository; the RTDB repo was dead.
 
     @Provides
     @Singleton

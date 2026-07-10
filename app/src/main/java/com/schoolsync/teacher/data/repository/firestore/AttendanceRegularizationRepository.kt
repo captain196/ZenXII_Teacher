@@ -19,7 +19,9 @@ import javax.inject.Singleton
  * punch uses (that approval side ships with the staff-attendance backend deploy).
  *
  * Collection: [Constants.Firestore.ATTENDANCE_REGULARIZATIONS].
- * Doc id: {schoolId}_{staffId}_{date}_{ts}.
+ * Doc id: {schoolId}_{staffId}_{date} — DETERMINISTIC (one row per staff+date) so a
+ * double-submit for the same date overwrites the prior pending row instead of
+ * creating a duplicate (TCH-H3).
  */
 @Singleton
 class AttendanceRegularizationRepository @Inject constructor(
@@ -49,7 +51,10 @@ class AttendanceRegularizationRepository @Inject constructor(
         val batchId = "REG_${schoolId}_${staffId}_$now"
 
         val items = entries.map { e ->
-            val docId = "${schoolId}_${staffId}_${e.date}_$now"
+            // TCH-H3: deterministic per (school, staff, date) — NOT timestamped — so a
+            // re-submit for the same date overwrites the existing pending doc (via
+            // merge below) rather than creating a second duplicate pending row.
+            val docId = "${schoolId}_${staffId}_${e.date}"
             val data = hashMapOf<String, Any?>(
                 "schoolId" to schoolId,
                 "staffId" to staffId,
@@ -72,7 +77,7 @@ class AttendanceRegularizationRepository @Inject constructor(
         }
 
         return try {
-            firestoreService.setDocumentsBatch(items, merge = false)
+            firestoreService.setDocumentsBatch(items, merge = true)
             Result.success(batchId)
         } catch (e: Exception) {
             Result.failure(e)
@@ -129,4 +134,8 @@ data class RegularizationDoc(
     val status: String = "pending",   // pending | approved | rejected | cancelled | auto_rejected
     val reviewedBy: String = "",
     val remarks: String = "",
+    /** The mark the admin actually stamped on the day when approving (e.g. "P" /
+     *  "M"). Written by the PHP decide endpoint; blank until decided or if the
+     *  endpoint doesn't emit it. Shown to the teacher as "Applied: Present". */
+    val appliedMark: String = "",
 )

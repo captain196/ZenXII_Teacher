@@ -28,10 +28,15 @@ class RegularizationViewModel @Inject constructor(
 
     fun loadMyRequests() {
         viewModelScope.launch {
-            _ui.update { it.copy(loadingRequests = true) }
+            _ui.update { it.copy(loadingRequests = true, requestsError = null) }
             repo.getMyRequests()
-                .onSuccess { list -> _ui.update { it.copy(loadingRequests = false, myRequests = list) } }
-                .onFailure { _ui.update { it.copy(loadingRequests = false) } }
+                .onSuccess { list -> _ui.update { it.copy(loadingRequests = false, myRequests = list, requestsError = null) } }
+                .onFailure { e ->
+                    // Surface the failure now that "My Requests" renders it — previously
+                    // swallowed, which left the list silently empty on a permission /
+                    // network error (indistinguishable from "no requests yet").
+                    _ui.update { it.copy(loadingRequests = false, requestsError = e.message ?: "Couldn't load your requests.") }
+                }
         }
     }
 
@@ -59,4 +64,5 @@ data class RegularizationUiState(
     val error: String? = null,
     val loadingRequests: Boolean = false,
     val myRequests: List<RegularizationDoc> = emptyList(),
+    val requestsError: String? = null,
 )

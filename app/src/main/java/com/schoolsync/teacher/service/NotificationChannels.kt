@@ -32,6 +32,9 @@ object NotificationChannels {
     const val ATTENDANCE = "ch_attendance"
     const val LEAVE = "ch_leave"
     const val EVENTS = "ch_events"
+    const val TIMETABLE = "ch_timetable"
+    const val GALLERY = "ch_gallery"
+    const val STORIES = "ch_stories"
 
     private data class Def(val id: String, val name: String, val description: String)
 
@@ -42,6 +45,9 @@ object NotificationChannels {
         Def(ATTENDANCE, "Attendance", "Attendance reminders and updates"),
         Def(LEAVE, "Leave", "Leave request updates"),
         Def(EVENTS, "Events", "School events"),
+        Def(TIMETABLE, "Timetable", "Substitute assignments and timetable changes"),
+        Def(GALLERY, "Gallery", "New photos and albums"),
+        Def(STORIES, "Stories", "New school stories"),
     )
 
     /**
@@ -76,6 +82,9 @@ object NotificationChannels {
         "attendance_reminder" -> ATTENDANCE
         "leave_update", "leave_approved", "leave_rejected" -> LEAVE
         "event", "event_created" -> EVENTS
+        "substitute_assigned", "timetable_changed" -> TIMETABLE
+        "gallery_added" -> GALLERY
+        "story", "story_created" -> STORIES
         else -> GENERAL
     }
 }

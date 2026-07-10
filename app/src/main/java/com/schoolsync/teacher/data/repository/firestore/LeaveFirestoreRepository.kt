@@ -32,7 +32,7 @@ class LeaveFirestoreRepository @Inject constructor(
         leaveType: String,
         startDate: String,
         endDate: String,
-        numberOfDays: Int,
+        numberOfDays: Double,          // MEDIUM #5: Double so half-day stores 0.5
         reason: String,
         attachments: List<String> = emptyList(),
         typePaid: Boolean? = null,           // CR-3 cross-system: snapshot at submit time
@@ -124,12 +124,10 @@ class LeaveFirestoreRepository @Inject constructor(
      * attendance stamp + payroll-day adjustments. We only own the
      * Pending → Cancelled transition.
      *
-     * On Pending cancel we also try to restore the BAL doc's `used` counter
-     * for the leave type. The current submission flow does not auto-deduct
-     * on submit (admin's `decide_leave` is the only `used`-incrementer),
-     * so this restore is a no-op in the typical flow — but it's correct if
-     * a future change deducts on submit, and harmless either way (clamped
-     * to a non-negative value).
+     * Balance restore is NOT performed here: Firestore rules now make BAL
+     * docs service-account-only, so any client-side balance write is dead
+     * and would fail with PERMISSION_DENIED. The admin/service path owns
+     * balance reconciliation on cancel.
      *
      * @throws IllegalStateException if the leave is not in "pending" status
      */
@@ -155,66 +153,10 @@ class LeaveFirestoreRepository @Inject constructor(
                 mapOf("status" to "cancelled")
             )
 
-            // Restore BAL.used for this leave type (best-effort; never
-            // fails the cancel itself if the BAL doc / type mapping is
-            // missing). Safe under the current model — see method KDoc.
-            try {
-                restoreBalanceForCancelledLeave(doc)
-            } catch (_: Exception) { /* best-effort */ }
-
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
-
-    /**
-     * Decrement the matching BAL doc's `used` counter by [LeaveApplicationDoc.numberOfDays].
-     * Looks up the leave type by name in the school's `leaveTypes` map to
-     * resolve the typeId (the BAL doc keys by typeId). Clamped to a
-     * non-negative value so a stray cancel doesn't make `used` go negative
-     * if the original submit never deducted.
-     */
-    private suspend fun restoreBalanceForCancelledLeave(doc: LeaveApplicationDoc) {
-        val schoolCode = getSchoolCode() ?: return
-        val teacherId = doc.applicantId.takeIf { it.isNotBlank() }
-            ?: getTeacherId()
-            ?: return
-        val days = doc.numberOfDays
-        if (days <= 0) return
-
-        // Year picked from startDate; falls back to current year so cancels
-        // of a no-startDate doc still target the right BAL.
-        val year = doc.startDate.take(4).toIntOrNull()
-            ?: java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-
-        // Resolve typeId from the school's leaveTypes map by matching name
-        // (case-insensitive). doc.leaveType holds the human name.
-        val leaveTypes = getSchoolLeaveTypes(schoolCode) ?: return
-        val typeId = leaveTypes.entries.firstOrNull { (_, v) ->
-            (v as? Map<*, *>)?.get("name")?.toString()
-                ?.equals(doc.leaveType, ignoreCase = true) == true
-        }?.key ?: return
-
-        val balDocId = "${schoolCode}_BAL_${teacherId}_$year"
-        val balDoc = firestoreService.getDocumentMap(
-            Constants.Firestore.LEAVE_APPLICATIONS,
-            balDocId
-        ) ?: return
-
-        @Suppress("UNCHECKED_CAST")
-        val balances = balDoc["balances"] as? Map<String, Any> ?: return
-        @Suppress("UNCHECKED_CAST")
-        val typeEntry = balances[typeId] as? Map<String, Any> ?: return
-        val currentUsed = (typeEntry["used"] as? Number)?.toInt() ?: 0
-        val newUsed = (currentUsed - days).coerceAtLeast(0)
-        if (newUsed == currentUsed) return // already at zero — nothing to restore
-
-        firestoreService.updateDocument(
-            Constants.Firestore.LEAVE_APPLICATIONS,
-            balDocId,
-            mapOf("balances.$typeId.used" to newUsed)
-        )
     }
 
     /**
@@ -281,12 +223,23 @@ class LeaveFirestoreRepository @Inject constructor(
     // ── Student Leave Approval (teacher as approver) ────────────────────────
 
     /**
-     * Fetch pending student leave applications for the teacher's school.
-     * Teachers see leave requests from students in their assigned classes.
+     * Fetch student leave applications for the teacher's school, scoped to a
+     * class/section.
+     *
+     * H8: the status filter is intentionally dropped so processed
+     * (approved/rejected/cancelled) rows are returned alongside pending ones —
+     * otherwise a teacher's own approval/rejection vanishes instead of moving
+     * to the "Processed" section. Callers split by status client-side.
+     *
+     * H9: [className]/[section] are pushed to the query as equality filters
+     * (previously ignored → whole-school scan) and the result is bounded by
+     * [limit]. All filters are equality-only + no orderBy, so no composite
+     * index is required.
      */
     suspend fun getStudentLeaveRequests(
         className: String? = null,
-        section: String? = null
+        section: String? = null,
+        limit: Long = 100L
     ): Result<List<LeaveApplicationDoc>> {
         val schoolCode = getSchoolCode()
             ?: return Result.failure(Exception("School code not available"))
@@ -295,9 +248,12 @@ class LeaveFirestoreRepository @Inject constructor(
             val leaves = firestoreService.queryDocumentsAs<LeaveApplicationDoc>(
                 Constants.Firestore.LEAVE_APPLICATIONS
             ) { ref ->
-                ref.whereEqualTo("schoolId", schoolCode)
+                var q: Query = ref
+                    .whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("applicantType", "student")
-                    .whereEqualTo("status", "pending")
+                if (!className.isNullOrBlank()) q = q.whereEqualTo("className", className)
+                if (!section.isNullOrBlank()) q = q.whereEqualTo("section", section)
+                q.limit(limit)
             }.sortedByDescending { it.startDate }
             Result.success(leaves)
         } catch (e: Exception) {

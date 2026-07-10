@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.model.GalleryAlbum
 import com.schoolsync.teacher.data.model.firestore.EventDoc
+import com.schoolsync.teacher.util.AttachmentUrlValidator
 import com.schoolsync.teacher.data.repository.firestore.EventsFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.GalleryFirestoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -63,12 +64,18 @@ class EventsTeacherViewModel @Inject constructor(
      * dialog still show a cover. One extra album query, only when needed.
      */
     private suspend fun injectAlbumCovers(events: List<EventDoc>): List<EventDoc> {
-        if (events.none { it.mediaUrls.isEmpty() }) return events
+        // "Usable cover" = a media url that passes the attachment allowlist.
+        // Gating on this (not just isEmpty) means events whose mediaUrls hold
+        // only invalid/unshowable entries still borrow the album cover.
+        fun hasUsableCover(e: EventDoc) = e.mediaUrls.any {
+            AttachmentUrlValidator.validate(it) is AttachmentUrlValidator.Result.Valid
+        }
+        if (events.all { hasUsableCover(it) }) return events
         val albums = galleryRepo.getAlbums().getOrNull().orEmpty()
             .filter { it.source == "event" && it.coverImage.isNotBlank() }
         if (albums.isEmpty()) return events
         return events.map { evt ->
-            if (evt.mediaUrls.isNotEmpty()) evt
+            if (hasUsableCover(evt)) evt
             else {
                 // Album stores the RAW event id ("EVT0001"); evt.id is the full
                 // "{schoolId}_{EVT...}" doc id.

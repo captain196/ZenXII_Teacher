@@ -170,33 +170,15 @@ private fun EventCard(evt: EventDoc, onClick: () -> Unit) {
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Cover = first media that passes the URL allowlist; falls back to
-            // the calendar icon when the event has no (valid) media.
-            val cover = evt.mediaUrls.firstOrNull {
-                AttachmentUrlValidator.validate(it) is AttachmentUrlValidator.Result.Valid
-            }
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                if (cover != null) {
-                    EventMediaThumb(
-                        url = cover,
-                        context = LocalContext.current,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Event,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
+            // Cover = first media that passes the URL allowlist; falls back to a
+            // polished category placeholder when the event has no (valid) media.
+            EventCoverBox(
+                coverUrl = firstEventCover(evt.mediaUrls),
+                category = evt.category,
+                contentDescription = null,
+                modifier = Modifier.size(52.dp),
+                cornerRadius = 12.dp,
+            )
 
             Spacer(Modifier.width(12.dp))
 
@@ -410,7 +392,7 @@ private fun EventDetailDialog(
 }
 
 /** Firebase Storage download URLs keep the real file extension before the `?`. */
-private fun isLikelyVideoUrl(url: String): Boolean {
+internal fun isLikelyVideoUrl(url: String): Boolean {
     val path = url.substringBefore('?').lowercase()
     return listOf(".mp4", ".mov", ".webm", ".mkv", ".avi", ".3gp", ".m4v").any { path.endsWith(it) }
 }
@@ -423,7 +405,7 @@ private fun isLikelyVideoUrl(url: String): Boolean {
  * Gallery module's deliberate poster-only strategy. (Fixes audit M7.)
  */
 @Composable
-private fun EventMediaThumb(
+internal fun EventMediaThumb(
     url: String,
     context: android.content.Context,
     contentDescription: String?,

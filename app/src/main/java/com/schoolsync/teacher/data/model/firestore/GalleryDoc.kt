@@ -15,6 +15,7 @@ data class GalleryAlbumDoc(
     val title: String = "",
     val description: String = "",
     val coverImage: String = "",           // canonical: NOT coverUrl
+    val coverPinned: Boolean = false,      // true = admin pinned cover; uploads must NOT auto-advance it
     val source: String = "general",        // "event" | "general"
     val eventId: String = "",
     val session: String = "",

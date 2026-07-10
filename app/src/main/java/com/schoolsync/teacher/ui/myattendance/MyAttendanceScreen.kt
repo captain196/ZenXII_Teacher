@@ -50,11 +50,13 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EditCalendar
+import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -72,6 +74,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -176,6 +180,10 @@ fun MyAttendanceScreen(vm: StaffAttendanceViewModel = hiltViewModel()) {
                 permGranted = hasPerm()
                 coarseOnly = permGranted && !hasPrecise()
                 if (permGranted) vm.refreshGpsStatus()
+                // Re-read attendance on resume so an admin's regularization approval
+                // (which flips e.g. Absent→Present in staffAttendance) shows on the
+                // Today card + calendar without a full app restart.
+                vm.loadMe()
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -198,6 +206,9 @@ fun MyAttendanceScreen(vm: StaffAttendanceViewModel = hiltViewModel()) {
             CalendarView(
                 today = ui.me?.today,
                 history = ui.me?.history.orEmpty(),
+                leaveDates = ui.approvedLeaveDates,
+                refreshing = ui.loading,
+                onRefresh = { vm.loadMe() },
                 onBack = { showCalendar = false },
             )
         } else {
@@ -265,6 +276,18 @@ private fun HomeView(
         today?.isHoliday == true -> "H"
         today?.isWeeklyOff == true -> "O"
         else -> "V"
+    }
+
+    // On-leave detection: TODAY is on leave when the server already marked it 'L'
+    // OR today falls inside one of the teacher's own APPROVED leave ranges (which
+    // also covers the not-yet-stamped case). todayKey prefers the server's date,
+    // falling back to the device date so the banner still works if me() failed.
+    val deviceTodayKey = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
+    val todayKey = today?.date?.takeIf { it.isNotBlank() } ?: deviceTodayKey
+    val onLeaveType = ui.approvedLeaveDates[todayKey]
+    val onLeaveToday = today?.status?.uppercase() == "L" || onLeaveType != null
+    val leaveUntilLabel = remember(todayKey, ui.approvedLeaveDates) {
+        leaveUntilLabel(todayKey, ui.approvedLeaveDates)
     }
 
     if (showOffConfirm) {
@@ -361,6 +384,12 @@ private fun HomeView(
                 .verticalScroll(rememberScrollState())
                 .padding(28.dp),
         ) {
+            // Prominent on-leave banner — shows the moment an approved leave covers
+            // today, independent of whether the server has stamped today's 'L' yet.
+            if (onLeaveToday) {
+                OnLeaveBanner(leaveType = onLeaveType, untilLabel = leaveUntilLabel)
+                Spacer(Modifier.height(16.dp))
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -449,16 +478,58 @@ private fun HomeView(
                     text = "All done for today · ${fmtHM(checkInMs)} — ${fmtHM(checkOutMs)}",
                     color = c.success, surface = c.successSurface, icon = Icons.Filled.CheckCircle,
                 )
-                checkInMs == null -> ClockInButton(
-                    busy = ui.punching,
-                    onClick = {
-                        when {
-                            !permGranted -> onRequestPermission()
-                            isRestDay && today?.allowWorkOnOff == true -> showOffConfirm = true
-                            else -> vm.checkIn()
+                checkInMs == null -> {
+                    // Check-in-time GUIDANCE (mirror of the server window): show
+                    // on-time / late / window-closed before the tap; the server is
+                    // still the authority. Skipped on a rest day (handled by dialog).
+                    val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+                    val nowMin = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+                    val hint = staffCheckInHint(ui.shiftStartMin, ui.graceMin, ui.earliestCheckInMin, ui.latestCheckInMin, nowMin)
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (!isRestDay && ui.scheduleLoaded) {
+                            val fullTxt = ui.fullDayHours?.let { h ->
+                                val hs = if (h % 1.0 == 0.0) h.toInt().toString() else h.toString()
+                                " · Full day ${hs}h"
+                            } ?: ""
+                            when (hint.window) {
+                                CheckInWindow.BEFORE_OPEN -> InfoLine(
+                                    text = "Check-in opens at ${hint.opensAt}.",
+                                    color = c.textSecondary, surface = c.surfaceCard, icon = Icons.Filled.WarningAmber,
+                                )
+                                CheckInWindow.ON_TIME -> InfoLine(
+                                    text = "On time — clock in by ${hint.onTimeBy}$fullTxt",
+                                    color = c.success, surface = c.successSurface, icon = Icons.Filled.CheckCircle,
+                                )
+                                CheckInWindow.LATE -> InfoLine(
+                                    text = "You'll be marked Late (+${hint.lateMinutes} min)$fullTxt",
+                                    color = c.warning, surface = c.warningSurface, icon = Icons.Filled.WarningAmber,
+                                )
+                                CheckInWindow.CLOSED -> InfoLine(
+                                    text = "Check-in window closed (after ${hint.closedAt}). File a regularization instead.",
+                                    color = c.error, surface = c.errorSurface, icon = Icons.Filled.WarningAmber,
+                                )
+                                CheckInWindow.UNKNOWN -> Unit
+                            }
                         }
-                    },
-                )
+                        ClockInButton(
+                            busy = ui.punching,
+                            // TCH-H1: the window hint above is ADVISORY only. A wrong
+                            // device clock or stale schedule config must NOT hard-lock a
+                            // legitimate punch — the server is the sole authority on
+                            // whether a punch is accepted. Gate only on location
+                            // permission (needed to acquire a fix), mirroring the rest
+                            // of the flow. The Late/closed warning copy still shows.
+                            enabled = permGranted,
+                            onClick = {
+                                when {
+                                    !permGranted -> onRequestPermission()
+                                    isRestDay && today?.allowWorkOnOff == true -> showOffConfirm = true
+                                    else -> vm.checkIn()
+                                }
+                            },
+                        )
+                    }
+                }
                 else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     RunningCard(sinceMs = checkInMs, now = now)
                     ClockOutButton(
@@ -542,6 +613,50 @@ private fun AttendanceActionSkeleton() {
     }
 }
 
+/**
+ * "You are on leave" banner shown at the top of the Today card when today is
+ * covered by an approved leave (or the server stamped 'L'). Uses the same
+ * info-blue token as the Leave calendar band/pill so the colour reads coherently.
+ */
+@Composable
+private fun OnLeaveBanner(leaveType: String?, untilLabel: String?) {
+    val c = LocalAppColors.current
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(c.infoSurface)
+            .border(BorderStroke(1.dp, c.info.copy(alpha = 0.35f)), RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(c.info.copy(alpha = 0.18f)),
+        ) {
+            Icon(Icons.Filled.EventBusy, contentDescription = null, tint = c.info, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (untilLabel != null) "You are on leave" else "You are on leave today",
+                fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.info,
+            )
+            val sub = buildString {
+                if (!leaveType.isNullOrBlank()) append(leaveType)
+                if (untilLabel != null) {
+                    if (isNotEmpty()) append(" · ")
+                    append("until $untilLabel")
+                }
+            }
+            if (sub.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(sub, fontSize = 12.5.sp, color = c.textSecondary)
+            }
+        }
+    }
+}
+
 @Composable
 private fun TodayStatusPill(status: String) {
     val c = LocalAppColors.current
@@ -585,6 +700,8 @@ private fun GpsChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
+            // TCH-M4: guarantee a 48dp touch target without changing the visual size.
+            .minimumInteractiveComponentSize()
             .clip(CircleShape)
             .background(c.surfaceCard)
             .border(BorderStroke(1.dp, c.divider), CircleShape)
@@ -602,13 +719,13 @@ private fun GpsChip(
 }
 
 @Composable
-private fun ClockInButton(busy: Boolean, onClick: () -> Unit) {
+private fun ClockInButton(busy: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val c = LocalAppColors.current
     BigButton(
         bg = c.accent,
         content = c.textOnAccent,
         onClick = onClick,
-        enabled = !busy,
+        enabled = enabled && !busy,
     ) {
         BigIconBox(tint = c.textOnAccent) { Icon(Icons.Filled.HowToReg, contentDescription = null, tint = c.textOnAccent, modifier = Modifier.size(24.dp)) }
         Text(if (busy) "Clocking in…" else "Clock in", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = c.textOnAccent)
@@ -783,6 +900,9 @@ private fun PillButton(label: String, bg: Color, content: Color, border: Color? 
 private fun CalendarView(
     today: TodayAttendance?,
     history: List<HistoryDay>,
+    leaveDates: Map<String, String>,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
     onBack: () -> Unit,
 ) {
     val c = LocalAppColors.current
@@ -791,11 +911,19 @@ private fun CalendarView(
     var year by remember { mutableStateOf(nowCal.get(Calendar.YEAR)) }
     var month by remember { mutableStateOf(nowCal.get(Calendar.MONTH)) } // 0-based
 
-    // date -> status map from the 30-day history + today's live status.
-    val statusByDate = remember(history, today) {
-        buildMap {
+    // date -> status map from the 30-day history + today's live status, then the
+    // approved-leave overlay. The overlay only paints days whose real mark is
+    // still vacant/absent-not-yet (null/blank/V/A) — it never overrides a stronger
+    // mark (P/T/M/H/O/W). This guarantees approved and FUTURE-dated leaves render
+    // as "Leave" on the calendar even before the server stamps the per-day 'L'.
+    val statusByDate = remember(history, today, leaveDates) {
+        buildMap<String, String> {
             history.forEach { put(it.date, it.status) }
             today?.let { if (it.date.isNotBlank()) put(it.date, it.status) }
+            leaveDates.keys.forEach { date ->
+                val cur = get(date)?.uppercase()
+                if (cur.isNullOrBlank() || cur == "V" || cur == "A") put(date, "L")
+            }
         }
     }
     // Per-day check-in/out times (from me().history + today) so any day can
@@ -849,6 +977,16 @@ private fun CalendarView(
         year = Math.floorDiv(targetAbs, 12)
     }
 
+    // Regularize is a FULL SCREEN now (not a bottom sheet). When open, it REPLACES
+    // the calendar so that Back / keyboard-dismiss can't nuke the typed reason.
+    if (showRegularize) {
+        RegularizeScreen(
+            candidateDates = regularizeCandidates,
+            onDismiss = { showRegularize = false },
+        )
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -866,7 +1004,27 @@ private fun CalendarView(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            SquareIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SquareIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
+                // Re-read attendance so a fresh admin approval (Absent→Present) shows
+                // without leaving the screen. Spins while me() reloads.
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()   // TCH-M4: 48dp touch target
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(c.surfaceCard)
+                        .border(BorderStroke(1.dp, c.divider), RoundedCornerShape(13.dp))
+                        .clickable(enabled = !refreshing, onClick = onRefresh),
+                ) {
+                    if (refreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = c.accent)
+                    } else {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = c.textPrimary, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SquareIconButton(Icons.Filled.ChevronLeft, "Previous month", { shift(-1) }, small = true)
                 Text(
@@ -951,7 +1109,7 @@ private fun CalendarView(
                 week.forEach { day ->
                     Box(modifier = Modifier.weight(1f)) {
                         if (day == null) {
-                            Spacer(Modifier.fillMaxWidth().aspectRatio(0.86f))
+                            Spacer(Modifier.fillMaxWidth().aspectRatio(0.78f))
                         } else {
                             val key = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
                             val dowCal = Calendar.getInstance().apply { clear(); set(year, month, day) }
@@ -974,12 +1132,6 @@ private fun CalendarView(
       }
     }
 
-    if (showRegularize) {
-        RegularizeSheet(
-            candidateDates = regularizeCandidates,
-            onDismiss = { showRegularize = false },
-        )
-    }
 }
 
 @Composable
@@ -993,40 +1145,60 @@ private fun DayCell(
 ) {
     val c = LocalAppColors.current
     val band = statusBand(status, weekend)
+    // The whole cell is now tinted with the status colour (same hue as the legend
+    // swatch / pill) instead of showing a P/A letter — colour alone carries the
+    // status, which reads faster across a month grid and frees the cell for times.
+    val fill = band?.color?.copy(alpha = 0.15f) ?: c.surfaceCard
+    // TCH-M3: status is conveyed by colour only, which TalkBack can't announce.
+    // Build a merged contentDescription so the day, its status and its in/out
+    // times are read aloud as one node.
+    val cellDesc = run {
+        val statusLabel = band?.label ?: if (weekend) "Weekly-off" else "Not marked"
+        val ci = parseIso(checkInAt)?.let { fmtClockOnly(it) }
+        val co = parseIso(checkOutAt)?.let { fmtClockOnly(it) }
+        buildString {
+            append("$day, $statusLabel")
+            if (ci != null) append(", in $ci")
+            if (co != null) append(", out $co")
+        }
+    }
+    val edge = when {
+        isToday   -> c.accent
+        band != null -> band.color.copy(alpha = 0.45f)
+        else      -> c.divider
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(0.86f)
+            .aspectRatio(0.78f)
+            .semantics(mergeDescendants = true) { contentDescription = cellDesc }
             .clip(RoundedCornerShape(14.dp))
-            .background(c.surfaceCard)
+            .background(fill)
             .border(
-                BorderStroke(if (isToday) 2.dp else 1.dp, if (isToday) c.accent else c.divider),
+                BorderStroke(if (isToday) 2.dp else 1.dp, edge),
                 RoundedCornerShape(14.dp),
             )
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text("$day", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
-        if (band != null) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(band.color.copy(alpha = 0.16f))
-                    .padding(horizontal = 7.dp, vertical = 2.dp),
-            ) {
-                Text(band.label, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = band.color, maxLines = 1)
-            }
-        }
-        // Any day with an accepted clock-in shows its check-in → check-out time.
+        // Day number, tinted the status colour so it stays legible on the fill and
+        // reinforces the code without a separate dot/letter.
+        Text(
+            "$day",
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = band?.color ?: c.textPrimary,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.weight(1f))
+        // Bottom: in-time (green) over out-time (grey) — position + colour carry the
+        // meaning, so the short 24h times fit without arrows/labels and never clip.
+        // Approved regularizations feed their claimed times here too (via me()).
         val tin = parseIso(checkInAt)
         val tout = parseIso(checkOutAt)
         if (tin != null) {
-            Spacer(Modifier.weight(1f))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(fmtClockOnly(tin), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = c.success)
-                Text("→", fontSize = 10.sp, color = c.textTertiary)
-                Text(if (tout != null) fmtClockOnly(tout) else "—", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
-            }
+            Text(fmtClockOnly(tin), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = c.success, maxLines = 1)
+            Text(if (tout != null) fmtClockOnly(tout) else "·  ·", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary, maxLines = 1)
         }
     }
 }
@@ -1065,6 +1237,8 @@ private fun SquareIconButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
+            // TCH-M4: keep the visual chip small but expand the touch target to 48dp.
+            .minimumInteractiveComponentSize()
             .size(s)
             .clip(RoundedCornerShape(if (small) 11.dp else 13.dp))
             .background(c.surfaceCard)
@@ -1154,6 +1328,30 @@ private val HM_SHORT = SimpleDateFormat("HH:mm", Locale.US)
 private fun parseIso(iso: String?): Long? {
     if (iso.isNullOrBlank()) return null
     return runCatching { ISO.parse(iso)!!.time }.getOrNull()
+}
+
+private val DATE_KEY = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+
+/**
+ * If today starts a multi-day approved-leave run, return the last consecutive
+ * on-leave date formatted as "d MMM" (e.g. "12 Jul"); null for a single day.
+ * Walks forward from [todayKey] while consecutive dates exist in [leaveDates].
+ */
+private fun leaveUntilLabel(todayKey: String, leaveDates: Map<String, String>): String? {
+    if (!leaveDates.containsKey(todayKey)) return null
+    val start = runCatching { DATE_KEY.parse(todayKey) }.getOrNull() ?: return null
+    val cal = Calendar.getInstance().apply { time = start }
+    var last = todayKey
+    var guard = 0
+    while (guard < 400) {
+        cal.add(Calendar.DAY_OF_MONTH, 1)
+        val k = DATE_KEY.format(cal.time)
+        if (leaveDates.containsKey(k)) { last = k; guard++ } else break
+    }
+    if (last == todayKey) return null
+    return runCatching {
+        SimpleDateFormat("d MMM", Locale.getDefault()).format(DATE_KEY.parse(last)!!)
+    }.getOrNull()
 }
 
 private fun fmtHM(ms: Long?): String = ms?.let { HM.format(Date(it)) } ?: "—"

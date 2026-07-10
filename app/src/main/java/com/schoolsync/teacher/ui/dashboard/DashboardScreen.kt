@@ -1176,25 +1176,27 @@ private fun EventRailCard(event: EventDoc, onClick: () -> Unit) {
             .height(IntrinsicSize.Min)
             .glassCard(cornerRadius = 16.dp)
             .clickable { onClick() }
-            .padding(14.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .width(4.dp)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(4.dp))
-                .background(tint)
+        // Cover = the event's photo (borrowed from its gallery album when the
+        // event doc has none). Photo-less events show a category placeholder.
+        com.schoolsync.teacher.ui.events.EventCoverBox(
+            coverUrl = com.schoolsync.teacher.ui.events.firstEventCover(event.mediaUrls),
+            category = event.category,
+            contentDescription = null,
+            modifier = Modifier.size(46.dp),
+            cornerRadius = 12.dp,
         )
         Spacer(Modifier.width(12.dp))
         Column(
-            modifier = Modifier.width(42.dp),
+            modifier = Modifier.width(40.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(day, style = MetricLarge.copy(fontSize = 20.sp), color = TextPrimary, maxLines = 1)
             Text(mon, style = OverlineLabel, color = TextTertiary, fontSize = 9.sp)
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = event.title,

@@ -255,10 +255,14 @@ class GalleryFirestoreRepository @Inject constructor(
                         "mediaCount" to FieldValue.increment(1L),
                         "updatedAt"  to nowIso
                     )
-                    // Back-fill the album cover from the first image upload
-                    // when it hasn't been set yet (createAlbum writes "").
-                    if (albumDoc.coverImage.isBlank() && type == "image" && url.isNotBlank()) {
-                        updates["coverImage"] = url
+                    // Cover tracks the LATEST upload (this one) so the album
+                    // thumbnail is always the most recent media — UNLESS an admin
+                    // pinned a specific cover via setEventCover (coverPinned).
+                    // Images use their url; videos use the poster thumbnail (a
+                    // video with no extractable poster leaves the cover unchanged).
+                    val coverCandidate = if (type == "image") url else thumbnail
+                    if (!albumDoc.coverPinned && coverCandidate.isNotBlank()) {
+                        updates["coverImage"] = coverCandidate
                     }
                     firestoreService.updateDocument("galleryAlbums", albumDocId, updates)
                 }

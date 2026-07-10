@@ -122,6 +122,7 @@ class DashboardViewModel @Inject constructor(
     private val communicationFirestoreRepo: CommunicationFirestoreRepository,
     private val timetableFirestoreRepo: TimetableFirestoreRepository,
     private val eventsFirestoreRepo: com.schoolsync.teacher.data.repository.firestore.EventsFirestoreRepository,
+    private val galleryFirestoreRepo: com.schoolsync.teacher.data.repository.firestore.GalleryFirestoreRepository,
     private val firestoreService: com.schoolsync.teacher.data.firebase.FirestoreService
 ) : ViewModel() {
 
@@ -490,7 +491,44 @@ class DashboardViewModel @Inject constructor(
                 }
                 .sortedBy { it.startDate }
                 .take(8)
-            _uiState.value = _uiState.value.copy(upcomingEvents = events, eventsLoading = false)
+            _uiState.value = _uiState.value.copy(
+                upcomingEvents = injectEventCovers(events),
+                eventsLoading = false,
+            )
+        }
+    }
+
+    /**
+     * Events usually keep their photo in the linked gallery album (source=
+     * "event"), not on the event doc's own `mediaUrls`. For any event with no
+     * usable cover of its own, borrow the album's `coverImage` (kept at the
+     * latest media by the admin panel / app) so the dashboard rail shows it.
+     * One album query, only when at least one event needs it.
+     */
+    private suspend fun injectEventCovers(
+        events: List<com.schoolsync.teacher.data.model.firestore.EventDoc>
+    ): List<com.schoolsync.teacher.data.model.firestore.EventDoc> {
+        fun hasUsableCover(e: com.schoolsync.teacher.data.model.firestore.EventDoc) =
+            e.mediaUrls.any {
+                com.schoolsync.teacher.util.AttachmentUrlValidator.validate(it) is
+                    com.schoolsync.teacher.util.AttachmentUrlValidator.Result.Valid
+            }
+        if (events.all { hasUsableCover(it) }) return events
+
+        val albums = galleryFirestoreRepo.getAlbums().getOrNull().orEmpty()
+            .filter { it.source == "event" && it.coverImage.isNotBlank() }
+        if (albums.isEmpty()) return events
+
+        return events.map { evt ->
+            if (hasUsableCover(evt)) evt
+            else {
+                // Album stores the RAW event id ("EVT0001"); evt.id is the full
+                // "{schoolId}_{EVT...}" doc id.
+                val cover = albums.firstOrNull { a ->
+                    evt.id == a.eventId || evt.id.endsWith("_${a.eventId}")
+                }?.coverImage
+                if (cover != null) evt.copy(mediaUrls = listOf(cover)) else evt
+            }
         }
     }
 }

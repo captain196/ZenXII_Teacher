@@ -15,7 +15,7 @@ data class LeaveApplicationDoc(
     val leaveType: String = "",      // "SL", "CL", "EL", "ML", "LWP"
     val startDate: String = "",
     val endDate: String = "",
-    val numberOfDays: Int = 0,
+    val numberOfDays: Double = 0.0,   // MEDIUM #5: Double so half-day = 0.5
     val reason: String = "",
     val attachments: List<String> = emptyList(),
     val status: String = "pending",  // "pending", "approved", "rejected", "cancelled"

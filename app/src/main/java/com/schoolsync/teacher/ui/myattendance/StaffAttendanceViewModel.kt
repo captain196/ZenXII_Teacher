@@ -15,6 +15,7 @@ import com.schoolsync.teacher.data.repository.MyAttendance
 import com.schoolsync.teacher.data.repository.PunchResult
 import com.schoolsync.teacher.data.repository.StaffAttendanceError
 import com.schoolsync.teacher.data.repository.StaffAttendanceRepository
+import com.schoolsync.teacher.data.repository.firestore.LeaveFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.SchoolFirestoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +50,7 @@ class StaffAttendanceViewModel @Inject constructor(
     private val locationProvider: LocationProvider,
     private val schoolRepo: SchoolFirestoreRepository,
     private val integrityProvider: PlayIntegrityTokenProvider,
+    private val leaveRepo: LeaveFirestoreRepository,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(StaffAttendanceUiState())
@@ -62,6 +64,10 @@ class StaffAttendanceViewModel @Inject constructor(
 
     /** Load the staff member's own attendance (today + month + history). */
     fun loadMe() {
+        // Own approved-leave dates load concurrently — an overlay that guarantees
+        // approved (and future-dated) leaves colour the calendar even before/without
+        // the server's per-day 'L' stamp. A leave failure must NOT break attendance.
+        loadLeaves()
         viewModelScope.launch {
             _ui.update { it.copy(loading = true, error = null, loadError = null) }
             repo.me()
@@ -82,6 +88,48 @@ class StaffAttendanceViewModel @Inject constructor(
     }
 
     /**
+     * Load the teacher's OWN leave applications and expand every APPROVED one
+     * into its per-day set (startDate..endDate inclusive) mapped to the leave
+     * type label. The screen overlays these onto the calendar so approved and
+     * future-dated leaves show as "Leave" independently of the server stamp.
+     *
+     * getLeaveHistory() already scopes to applicantType=="staff" for this user.
+     * Failure is swallowed — the attendance load stays authoritative and the
+     * overlay is simply skipped.
+     */
+    private fun loadLeaves() {
+        viewModelScope.launch {
+            leaveRepo.getLeaveHistory()
+                .onSuccess { docs ->
+                    val map = buildApprovedLeaveDates(docs)
+                    _ui.update { it.copy(approvedLeaveDates = map) }
+                }
+                // onFailure: keep any prior overlay; never surface as an error.
+        }
+    }
+
+    /** date(yyyy-MM-dd) -> leaveType label, for every day of every APPROVED leave. */
+    private fun buildApprovedLeaveDates(docs: List<com.schoolsync.teacher.data.model.firestore.LeaveApplicationDoc>): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+        for (doc in docs) {
+            if (!doc.status.equals("approved", ignoreCase = true)) continue
+            val start = runCatching { fmt.parse(doc.startDate) }.getOrNull() ?: continue
+            val end = runCatching { fmt.parse(doc.endDate.ifBlank { doc.startDate }) }.getOrNull() ?: start
+            if (end.before(start)) continue
+            val label = doc.leaveType.ifBlank { "Leave" }
+            val cal = java.util.Calendar.getInstance().apply { time = start }
+            var guard = 0
+            while (!cal.time.after(end) && guard < 400) {   // guard against runaway ranges
+                out[fmt.format(cal.time)] = label
+                cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+                guard++
+            }
+        }
+        return out
+    }
+
+    /**
      * Load the campus geofence (centre + radius) for on-screen GUIDANCE only.
      * Read from schools/{id}.attendancePolicy.gps.geofence via the existing
      * SchoolFirestoreRepository raw-map reader — no backend change. The value
@@ -99,18 +147,58 @@ class StaffAttendanceViewModel @Inject constructor(
                 val cLat = (geo?.get("centerLat") as? Number)?.toDouble()
                 val cLng = (geo?.get("centerLng") as? Number)?.toDouble()
                 val rad = (geo?.get("radius") as? Number)?.toInt()
+
+                // Work Schedule for the check-in-time GUIDANCE hint (on-time vs late
+                // vs window-closed). Source of truth = shifts.default.schedule; fall
+                // back to the legacy windows block, then to the server's own defaults
+                // (09:00 start, 0 grace) so the hint matches what the server would do.
+                val shifts = policy?.get("shifts") as? Map<*, *>
+                val def = shifts?.get("default") as? Map<*, *>
+                val sched = def?.get("schedule") as? Map<*, *>
+                val win = def?.get("windows") as? Map<*, *>
+                val shiftStartStr = (sched?.get("shiftStart") as? String)
+                    ?: (win?.get("lateThreshold") as? String)
+                val graceMinutes = ((sched?.get("graceMinutes") as? Number)?.toInt())
+                    ?: ((win?.get("gracePeriodMin") as? Number)?.toInt()) ?: 0
+                val latestStr = (sched?.get("latestCheckIn") as? String)
+                    ?: (win?.get("latestCheckIn") as? String)
+                val earliestStr = (sched?.get("earliestCheckIn") as? String)
+                    ?: (win?.get("earliestCheckIn") as? String)
+                val fullH = (sched?.get("fullDayHours") as? Number)?.toDouble()
+                // '' or the 23:59 sentinel both mean "no hard cutoff".
+                val latestMin = parseHhMmToMin(latestStr)?.takeIf { latestStr != "23:59" }
+                // '' or the 00:00 sentinel both mean "no opening gate".
+                val earliestMin = parseHhMmToMin(earliestStr)?.takeIf { earliestStr != "00:00" }
+
                 _ui.update {
                     it.copy(
                         geoActive = active,
                         geoCenterLat = cLat,
                         geoCenterLng = cLng,
                         geoRadius = rad,
+                        shiftStartMin = parseHhMmToMin(shiftStartStr) ?: (9 * 60),
+                        graceMin = graceMinutes,
+                        earliestCheckInMin = earliestMin,
+                        latestCheckInMin = latestMin,
+                        fullDayHours = fullH,
+                        scheduleLoaded = true,
                     )
                 }
             } catch (_: Exception) {
                 // Guidance is optional — failure just means no distance/inside hint.
             }
         }
+    }
+
+    /** Parse "HH:mm" → minutes-of-day, or null if blank/malformed. */
+    private fun parseHhMmToMin(s: String?): Int? {
+        if (s.isNullOrBlank()) return null
+        val parts = s.trim().split(":")
+        if (parts.size != 2) return null
+        val h = parts[0].toIntOrNull() ?: return null
+        val m = parts[1].toIntOrNull() ?: return null
+        if (h !in 0..23 || m !in 0..59) return null
+        return h * 60 + m
     }
 
     /**
@@ -239,4 +327,15 @@ data class StaffAttendanceUiState(
     val geoCenterLat: Double? = null,
     val geoCenterLng: Double? = null,
     val geoRadius: Int? = null,
+    // Work Schedule (guidance only for the check-in hint; server is authoritative)
+    val shiftStartMin: Int? = null,       // minutes-of-day, e.g. 540 = 09:00
+    val graceMin: Int = 0,
+    val earliestCheckInMin: Int? = null,  // optional opening gate; null = none
+    val latestCheckInMin: Int? = null,    // optional hard cutoff; null = none
+    val fullDayHours: Double? = null,
+    val scheduleLoaded: Boolean = false,
+    /** date(yyyy-MM-dd) -> leaveType label for the teacher's own APPROVED leaves.
+     *  Overlaid onto the calendar so approved/future leave shows as "Leave" even
+     *  before the server stamps the per-day 'L'. Empty when unloaded/failed. */
+    val approvedLeaveDates: Map<String, String> = emptyMap(),
 )

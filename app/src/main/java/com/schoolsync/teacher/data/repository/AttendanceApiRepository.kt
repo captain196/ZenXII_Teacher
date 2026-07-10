@@ -138,6 +138,41 @@ class AttendanceApiRepository @Inject constructor(
         throw AttendanceApiError.Network(e.message ?: "Network error")
     }
 
+    /**
+     * Pull the teacher's own correction requests across ALL statuses
+     * (pending / approved / rejected) for the "My Requests" section. The server
+     * scopes to requestedBy==self for the Teacher role, so this is the teacher's
+     * own history only.
+     */
+    suspend fun listMyCorrections(status: String = "all"): Result<List<MyCorrection>> = runCatching {
+        val resp = api.listCorrections(status = status, limit = 100)
+        if (!resp.isSuccessful) throw resp.toError()
+        val body = resp.body() ?: throw AttendanceApiError.Network("Empty body")
+        val rows = body["requests"] as? List<*> ?: emptyList<Any>()
+        rows.mapNotNull {
+            val m = it as? Map<*, *> ?: return@mapNotNull null
+            fun markStatus(key: String): String =
+                (m[key] as? Map<*, *>)?.get("status") as? String ?: ""
+            MyCorrection(
+                requestId       = m["requestId"]   as? String ?: "",
+                studentId       = m["studentId"]   as? String ?: "",
+                studentName     = m["studentName"] as? String ?: "",
+                date            = m["date"]        as? String ?: "",
+                reason          = m["reason"]      as? String ?: "",
+                status          = (m["status"]     as? String ?: "pending").lowercase(),
+                currentStatus   = markStatus("currentMark"),
+                requestedStatus = markStatus("requestedMark"),
+                reviewedBy      = m["reviewedBy"]  as? String ?: "",
+                className       = m["className"]   as? String ?: "",
+                section         = m["section"]     as? String ?: ""
+            )
+        }
+    }.recoverCatching { e ->
+        if (e is AttendanceApiError) throw e
+        Log.e(TAG, "listMyCorrections failed", e)
+        throw AttendanceApiError.Network(e.message ?: "Network error")
+    }
+
     // ── Helpers ──────────────────────────────────────────────────
 
     private fun retrofit2.Response<Map<String, Any>>.toError(): AttendanceApiError {
@@ -197,6 +232,21 @@ data class PendingCorrection(
     val studentName: String,
     val date: String,
     val reason: String
+)
+
+/** A teacher's own correction request (any status) for the My Requests section. */
+data class MyCorrection(
+    val requestId: String,
+    val studentId: String,
+    val studentName: String,
+    val date: String,            // yyyy-MM-dd
+    val reason: String,
+    val status: String,          // pending | approved | rejected
+    val currentStatus: String,   // P/A/L/… from currentMark
+    val requestedStatus: String, // P/A/L/… from requestedMark
+    val reviewedBy: String,
+    val className: String,
+    val section: String
 )
 
 sealed class AttendanceApiError(message: String) : Exception(message) {
