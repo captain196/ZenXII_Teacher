@@ -121,12 +121,30 @@ fun DashboardScreen(
     onNotificationsClick: () -> Unit = {},
     onOpenStory: (authorId: String) -> Unit = {},
     onNavigate: (route: String) -> Unit = {},
+    // Capability gate — hides tiles the staff member lacks. Defaults to show-all.
+    canAccess: (route: String) -> Boolean = { true },
     viewModel: DashboardViewModel = hiltViewModel(),
     storyViewerViewModel: com.schoolsync.teacher.ui.stories.StoryViewerViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val storyGroups by storyViewerViewModel.groups.collectAsStateWithLifecycle()
     val storiesLoading by storyViewerViewModel.isLoading.collectAsStateWithLifecycle()
+
+    // Role-aware surface. The dashboard's schedule/KPI/substitute tiles assume a
+    // teaching staff member (timetable periods, "classes assigned", "substitute
+    // covering your classes"). Derive "is teaching staff" from the SAME capability
+    // gate the rest of the screen uses, so nothing new has to be plumbed:
+    //   • Fail-open (UNKNOWN caps — legacy teacher, no cap-doc, read error) →
+    //     canAccess() returns true for everything → isTeachingStaff = true →
+    //     the teacher dashboard renders exactly as before (no regression).
+    //   • Populated cap-doc for non-teaching staff (accountant/librarian) with
+    //     none of the teaching modules → isTeachingStaff = false → the empty/broken
+    //     teacher schedule + teaching KPIs + substitute banner are hidden instead
+    //     of shown blank. Quick-actions are already per-action gated by canAccess.
+    val isTeachingStaff = canAccess(Route.Attendance.route) ||
+        canAccess(Route.Homework.route) ||
+        canAccess(Route.Marks.route) ||
+        canAccess(Route.Timetable.route)
 
     // Refresh when the dashboard becomes visible again (e.g. after coming
     // back from Red Flags screen) so counts like "Flags: N active" reflect
@@ -170,8 +188,8 @@ fun DashboardScreen(
                     onSearchClick = { onNavigate(Route.Search.route) }
                 )
 
-                // Substitute info banner
-                state.substituteInfo?.let { subInfo ->
+                // Substitute info banner — teaching staff only.
+                state.substituteInfo?.takeIf { isTeachingStaff }?.let { subInfo ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -223,29 +241,34 @@ fun DashboardScreen(
                 // Both top-aligned on one line. The agenda lifts the live
                 // period; the 2×2 glance shows the day's key counts. The outer
                 // verticalScroll owns scrolling, so no panel is clipped.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ScheduleAgendaTile(
-                        schedule = state.todaySchedule,
-                        isError = state.scheduleError,
-                        onRetry = viewModel::refresh,
-                        modifier = Modifier.weight(0.6f)
-                    )
-                    GlanceKpiGrid(
-                        stats = state.quickStats,
-                        modifier = Modifier.weight(0.4f)
-                    )
-                }
+                // Teaching staff only — both tiles are timetable/class-shaped
+                // (periods, "classes assigned") and render empty for a non-teaching
+                // staff member, so they are hidden rather than shown blank.
+                if (isTeachingStaff) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        ScheduleAgendaTile(
+                            schedule = state.todaySchedule,
+                            isError = state.scheduleError,
+                            onRetry = viewModel::refresh,
+                            modifier = Modifier.weight(0.6f)
+                        )
+                        GlanceKpiGrid(
+                            stats = state.quickStats,
+                            modifier = Modifier.weight(0.4f)
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
 
                 // ── Quick actions (horizontal rail) ──
                 DashSectionHeader(title = "Quick actions", onViewAll = { onNavigate(Route.More.route) })
-                QuickActionsRail(onNavigate = onNavigate)
+                QuickActionsRail(onNavigate = onNavigate, canAccess = canAccess)
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -267,7 +290,7 @@ fun DashboardScreen(
 
                 // ── All modules ──
                 DashSectionHeader(title = "All modules", onViewAll = null)
-                ModulesGrid(onNavigate = onNavigate)
+                ModulesGrid(onNavigate = onNavigate, canAccess = canAccess)
             }
         }
 
@@ -999,7 +1022,7 @@ private fun GlanceKpiCard(
 
 /** Horizontal rail of one-tap quick actions. */
 @Composable
-private fun QuickActionsRail(onNavigate: (String) -> Unit) {
+private fun QuickActionsRail(onNavigate: (String) -> Unit, canAccess: (String) -> Boolean = { true }) {
     val actions = listOf(
         DashItem("Take Attendance", Icons.Filled.HowToReg, Route.Attendance.route, SuccessGreen, SuccessGreenSurface),
         DashItem("Add Homework", Icons.Filled.MenuBook, Route.Homework.route, WarningAmber, WarningAmberSurface),
@@ -1009,7 +1032,7 @@ private fun QuickActionsRail(onNavigate: (String) -> Unit) {
         DashItem("Clock In", Icons.Filled.Fingerprint, Route.MyAttendance.route, Teal, TealSurface),
         DashItem("Red Flags", Icons.Filled.Flag, Route.RedFlags.route, ErrorRed, ErrorRedSurface),
         DashItem("Apply Leave", Icons.Filled.EventNote, Route.Leave.route, InfoBlue, InfoBlueSurface)
-    )
+    ).filter { canAccess(it.route) }
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -1251,7 +1274,7 @@ private fun parseEventDate(iso: String): Pair<String, String> {
 /** Wrapping grid of every module — each tile jumps to its screen. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ModulesGrid(onNavigate: (String) -> Unit) {
+private fun ModulesGrid(onNavigate: (String) -> Unit, canAccess: (String) -> Boolean = { true }) {
     val modules = listOf(
         DashItem("Attendance", Icons.Filled.HowToReg, Route.Attendance.route, Teal, TealSurface),
         DashItem("Marks", Icons.Filled.Grade, Route.Marks.route, Teal, TealSurface),
@@ -1270,7 +1293,7 @@ private fun ModulesGrid(onNavigate: (String) -> Unit) {
         DashItem("Library", Icons.Filled.LocalLibrary, Route.Library.route, Teal, TealSurface),
         DashItem("PTM", Icons.Filled.Groups, Route.Ptm.route, Teal, TealSurface),
         DashItem("Payslips", Icons.Filled.Payments, Route.Payslips.route, Teal, TealSurface)
-    )
+    ).filter { canAccess(it.route) }
     FlowRow(
         modifier = Modifier
             .fillMaxWidth()

@@ -191,8 +191,10 @@ class StoryFirestoreRepository @Inject constructor(
     /**
      * Read who saw a story and what they reacted. Joins the
      * `viewers` + `reactions` subcollections by userId. Viewer/reactor
-     * names are read from the denormalised `userName` field the parent
-     * app writes; older docs without it fall back to "Parent".
+     * names are read from the denormalised `userName` field the client
+     * writes; older docs without it fall back to a neutral "Viewer"
+     * (NOT "Parent" — staff can view stories too, and mislabelling a
+     * staff viewer as a parent is wrong).
      */
     suspend fun getStoryInsights(storyId: String): Result<StoryInsights> {
         return try {
@@ -202,10 +204,19 @@ class StoryFirestoreRepository @Inject constructor(
             val storySnap = storyRef.get().await()
             val story = storySnap.toObject(StoryDoc::class.java)
 
-            val viewersSnap = storyRef.collection(VIEWERS_SUBCOLLECTION).get().await()
+            // The viewers/reactions read rule requires resource.data.schoolId ==
+            // the caller's `school_id` claim, so an UNFILTERED subcollection query
+            // is denied wholesale → empty list ("can't see who viewed"). Filter by
+            // the story's own schoolId (== this same-school teacher's claim) to
+            // authorise the query.
+            val schoolFilter = storySnap.getString("schoolId")?.takeIf { it.isNotBlank() }
+            val viewersSnap = storyRef.collection(VIEWERS_SUBCOLLECTION)
+                .let { if (schoolFilter != null) it.whereEqualTo("schoolId", schoolFilter) else it }
+                .get().await()
             val reactionsSnap = storyRef.collection(
                 com.schoolsync.teacher.data.model.firestore.StorySharedConfig.REACTIONS_SUBCOLLECTION
-            ).get().await()
+            ).let { if (schoolFilter != null) it.whereEqualTo("schoolId", schoolFilter) else it }
+                .get().await()
 
             // reactions keyed by userId → (emoji, name)
             val reactionByUser = reactionsSnap.documents.associate { d ->
@@ -221,13 +232,13 @@ class StoryFirestoreRepository @Inject constructor(
                     .ifBlank { reactionByUser[uid]?.second.orEmpty() }
                 val viewedAt = d.getTimestamp("viewedAt")?.toDate()?.time ?: 0L
                 val emoji = reactionByUser[uid]?.first?.takeIf { it.isNotBlank() }
-                entries[uid] = StoryViewerEntry(uid, nm.ifBlank { "Parent" }, emoji, viewedAt)
+                entries[uid] = StoryViewerEntry(uid, nm.ifBlank { "Viewer" }, emoji, viewedAt)
             }
             // Reactors who somehow aren't in viewers (defensive union).
             reactionByUser.forEach { (uid, pair) ->
                 if (!entries.containsKey(uid)) {
                     entries[uid] = StoryViewerEntry(
-                        uid, pair.second.ifBlank { "Parent" },
+                        uid, pair.second.ifBlank { "Viewer" },
                         pair.first.takeIf { it.isNotBlank() }, 0L
                     )
                 }
@@ -387,6 +398,8 @@ class StoryFirestoreRepository @Inject constructor(
         caption: String = "",
         teacherName: String,
         teacherPic: String = "",
+        /** Video poster URL (empty for images). */
+        thumbnailUrl: String = "",
         /** Canonical class-section tokens (StorySharedConfig.audienceKey).
          *  EMPTY = school-wide. Teacher posts default to their own
          *  class-teacher section(s); "Whole school" clears it. */
@@ -467,6 +480,7 @@ class StoryFirestoreRepository @Inject constructor(
             "teacherPic"      to resolvedPic,
             // Content
             "mediaUrl"        to cleanUrl,
+            "thumbnailUrl"    to (if (cleanType == "video") thumbnailUrl.trim() else ""),
             "type"            to cleanType,
             "caption"         to cleanCaption,
             "priority"        to "normal",
@@ -503,6 +517,24 @@ class StoryFirestoreRepository @Inject constructor(
 
     suspend fun deleteStory(storyId: String): Result<Unit> {
         return try {
+            // Best-effort: purge the Storage media so a manual delete doesn't
+            // orphan the image/video/poster in the bucket. The onStoryDeleted
+            // Cloud Function is the server-side backstop, but deleting here
+            // means cleanup is immediate and still happens even if that CF
+            // isn't deployed. Each delete is swallowed on failure — the doc
+            // delete below is what actually removes the story; the CF sweeps
+            // anything we couldn't reach.
+            runCatching {
+                val fs = FirebaseFirestore.getInstance()
+                val snap = fs.collection(COLLECTION).document(storyId).get().await()
+                val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
+                listOfNotNull(
+                    snap.getString("mediaUrl")?.takeIf { it.isNotBlank() },
+                    snap.getString("thumbnailUrl")?.takeIf { it.isNotBlank() }
+                ).forEach { url ->
+                    runCatching { storage.getReferenceFromUrl(url).delete().await() }
+                }
+            }
             firestoreService.deleteDocument(COLLECTION, storyId)
             Result.success(Unit)
         } catch (e: Exception) {

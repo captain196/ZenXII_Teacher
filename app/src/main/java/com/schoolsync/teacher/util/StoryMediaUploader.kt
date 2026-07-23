@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 /**
  * Uploads story media (image or video) to Firebase Cloud Storage and
@@ -156,7 +157,18 @@ object StoryMediaUploader {
             val path = "stories/${schoolId}/${teacherId}/${System.currentTimeMillis()}.${finalExt}"
             val ref = FirebaseStorage.getInstance().reference.child(path)
 
-            val task = ref.putFile(uploadUri)
+            // Set an EXPLICIT contentType so the Storage rule can gate on MIME
+            // (image/* | video/*) — previously putFile relied on Uri inference
+            // with no metadata, so the rule couldn't reject a mislabelled blob.
+            // Compressed images are always JPEG; videos keep their source MIME
+            // (falling back to video/mp4).
+            val contentType = if (declaredType == "image") "image/jpeg"
+                else mime.takeIf { it.startsWith("video/") } ?: "video/mp4"
+            val metadata = com.google.firebase.storage.StorageMetadata.Builder()
+                .setContentType(contentType)
+                .build()
+
+            val task = ref.putFile(uploadUri, metadata)
             task.addOnProgressListener { snap ->
                 val pct = if (snap.totalByteCount > 0) {
                     ((snap.bytesTransferred * 100) / snap.totalByteCount).toInt().coerceIn(0, 99)
@@ -263,5 +275,48 @@ object StoryMediaUploader {
         true
     } catch (_: Exception) {
         false
+    }
+
+    /**
+     * Extract a poster frame from a VIDEO and upload it as a JPEG thumbnail.
+     * Grabs a frame ~1s in (skips the black opening frame most videos start on)
+     * so panels/apps show a real image instead of a blank/black tile. Best-effort:
+     * returns null on any failure and the caller falls back to first-frame render.
+     */
+    suspend fun uploadThumbnail(
+        context: Context, videoUri: Uri, schoolCode: String, teacherId: String
+    ): String? = withContext(Dispatchers.IO) {
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, videoUri)
+            val durationMs = retriever
+                .extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            val frameUs = (if (durationMs > 1200) 1_000_000L else (durationMs * 1000) / 2)
+                .coerceAtLeast(0L)
+            val bmp = retriever.getFrameAtTime(frameUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.frameAtTime
+                ?: return@withContext null
+            val maxW = 720
+            val scaled = if (bmp.width > maxW) {
+                val h = (bmp.height.toFloat() * maxW / bmp.width).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(bmp, maxW, h, true)
+            } else bmp
+            val baos = java.io.ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+            val path = "stories/$schoolCode/$teacherId/thumb_${System.currentTimeMillis()}.jpg"
+            val ref = FirebaseStorage.getInstance().reference.child(path)
+            // Explicit contentType so the MIME-gated Storage rule accepts it.
+            val meta = com.google.firebase.storage.StorageMetadata.Builder()
+                .setContentType("image/jpeg")
+                .build()
+            ref.putBytes(baos.toByteArray(), meta).await()
+            ref.downloadUrl.await().toString()
+        } catch (e: Exception) {
+            android.util.Log.w("StoryMediaUploader", "thumbnail gen failed (non-fatal): ${e.message}")
+            null
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
     }
 }

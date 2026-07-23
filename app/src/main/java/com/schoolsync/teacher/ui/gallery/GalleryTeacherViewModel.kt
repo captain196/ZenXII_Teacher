@@ -73,28 +73,41 @@ class GalleryTeacherViewModel @Inject constructor(
     /** Handle to the in-flight upload so the user can cancel it. */
     private var uploadJob: Job? = null
 
+    /** Live-listener subscriptions, restarted on manual refresh / retry. */
+    private var albumsJob: Job? = null
+    private var mediaJob: Job? = null
+
     init {
         loadAlbums()
     }
 
+    /**
+     * (Re)subscribe to the real-time albums listener. New/removed albums appear
+     * without a manual refresh; the Refresh button re-subscribes (which also
+     * recovers from a terminal listener error, since a callbackFlow closes on
+     * error and won't re-emit on its own).
+     */
     fun loadAlbums() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingAlbums = true, albumsError = null) }
+        albumsJob?.cancel()
+        _uiState.update { it.copy(isLoadingAlbums = true, albumsError = null) }
+        albumsJob = viewModelScope.launch {
             try {
-                galleryRepository.getAlbums().fold(
-                    onSuccess = { albums ->
-                        Log.d(TAG, "Loaded ${albums.size} albums")
-                        _uiState.update {
-                            it.copy(albums = albums, isLoadingAlbums = false, albumsError = null)
+                galleryRepository.observeAlbums().collect { result ->
+                    result.fold(
+                        onSuccess = { albums ->
+                            Log.d(TAG, "Loaded ${albums.size} albums")
+                            _uiState.update {
+                                it.copy(albums = albums, isLoadingAlbums = false, albumsError = null)
+                            }
+                        },
+                        onFailure = { e ->
+                            Log.e(TAG, "Failed to load albums: ${e.message}", e)
+                            _uiState.update {
+                                it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums")
+                            }
                         }
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Failed to load albums: ${e.message}", e)
-                        _uiState.update {
-                            it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums")
-                        }
-                    }
-                )
+                    )
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load albums", e)
                 _uiState.update { it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums") }
@@ -132,23 +145,34 @@ class GalleryTeacherViewModel @Inject constructor(
         _uiState.update { it.copy(selectedAlbum = album, media = emptyList()) }
         if (album != null) {
             loadMedia(album.albumId)
+        } else {
+            // Back to the album grid — stop listening to the previous album's media.
+            mediaJob?.cancel()
         }
     }
 
+    /**
+     * (Re)subscribe to the real-time media listener for the open album. New
+     * uploads (this teacher's or others') appear live. Cancels any previous
+     * album's subscription so we only ever listen to the selected album.
+     */
     private fun loadMedia(albumId: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingMedia = true, mediaError = null) }
+        mediaJob?.cancel()
+        _uiState.update { it.copy(isLoadingMedia = true, mediaError = null) }
+        mediaJob = viewModelScope.launch {
             try {
-                galleryRepository.getAlbumMedia(albumId).fold(
-                    onSuccess = { media ->
-                        Log.d(TAG, "Loaded ${media.size} media for album $albumId")
-                        _uiState.update { it.copy(media = media, isLoadingMedia = false, mediaError = null) }
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Failed to load media: ${e.message}", e)
-                        _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: "Couldn't load photos") }
-                    }
-                )
+                galleryRepository.observeAlbumMedia(albumId).collect { result ->
+                    result.fold(
+                        onSuccess = { media ->
+                            Log.d(TAG, "Loaded ${media.size} media for album $albumId")
+                            _uiState.update { it.copy(media = media, isLoadingMedia = false, mediaError = null) }
+                        },
+                        onFailure = { e ->
+                            Log.e(TAG, "Failed to load media: ${e.message}", e)
+                            _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: "Couldn't load photos") }
+                        }
+                    )
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load media", e)
                 _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: "Couldn't load photos") }
@@ -184,7 +208,7 @@ class GalleryTeacherViewModel @Inject constructor(
                         Log.d(TAG, "Created album: $albumId")
                         _uiState.update { it.copy(isCreatingAlbum = false, showCreateAlbumDialog = false) }
                         _events.emit(GalleryEvent.Success("Album created successfully"))
-                        loadAlbums()
+                        // The real-time observeAlbums listener surfaces the new album.
                     },
                     onFailure = { e ->
                         Log.e(TAG, "Failed to create album: ${e.message}", e)
@@ -237,6 +261,17 @@ class GalleryTeacherViewModel @Inject constructor(
 
         uploadJob = viewModelScope.launch {
             try {
+                // Quota pre-check (parity with website GALLERY_LIMITS). Runs
+                // BEFORE any Storage write; on failure abort without touching
+                // Storage. The busy-flag guard above already blocked double-submit.
+                val quota = galleryRepository.checkQuota(album.albumId, declaredType)
+                if (quota.isFailure) {
+                    Log.d(TAG, "uploadMediaFile: blocked by quota: ${quota.exceptionOrNull()?.message}")
+                    _uiState.update { it.copy(isUploading = false) }
+                    _events.emit(GalleryEvent.Error(quota.exceptionOrNull()?.message ?: "Upload limit reached"))
+                    return@launch
+                }
+
                 // Canonical school scope: `schoolId` is always populated at
                 // login; `schoolCode` is a fallback for older sessions.
                 val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
@@ -276,8 +311,9 @@ class GalleryTeacherViewModel @Inject constructor(
                             Log.d(TAG, "uploadMediaFile: firestore write OK mediaId=$mediaId")
                             _uiState.update { it.copy(isUploading = false, showUploadMediaDialog = false) }
                             _events.emit(GalleryEvent.Success("Media uploaded successfully"))
-                            loadMedia(album.albumId)
-                            loadAlbums() // refresh count
+                            // Real-time listeners (observeAlbumMedia / observeAlbums)
+                            // pick up the new media row + mediaCount bump on their own,
+                            // so no manual reload is needed here.
                         },
                         onFailure = { e ->
                             Log.e(TAG, "uploadMediaFile: firestore write failed: ${e.message}", e)

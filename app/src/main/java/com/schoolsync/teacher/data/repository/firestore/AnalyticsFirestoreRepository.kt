@@ -8,6 +8,7 @@ import com.schoolsync.teacher.data.model.firestore.DashboardDoc
 import com.schoolsync.teacher.util.Constants
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -77,6 +78,7 @@ class AnalyticsFirestoreRepository @Inject constructor(
                     }
                 }
             }
+            .catch { emit(null) }   // listener error → emit null, keep dashboard flow alive
     }
 
     /**

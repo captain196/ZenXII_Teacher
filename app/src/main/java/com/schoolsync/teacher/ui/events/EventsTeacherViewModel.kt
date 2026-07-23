@@ -9,6 +9,7 @@ import com.schoolsync.teacher.util.AttachmentUrlValidator
 import com.schoolsync.teacher.data.repository.firestore.EventsFirestoreRepository
 import com.schoolsync.teacher.data.repository.firestore.GalleryFirestoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,22 +36,34 @@ class EventsTeacherViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(EventsUiState())
     val uiState: StateFlow<EventsUiState> = _uiState.asStateFlow()
 
+    /** Live-listener subscription, restarted on manual refresh / retry. */
+    private var eventsJob: Job? = null
+
     init {
         loadEvents()
     }
 
+    /**
+     * (Re)subscribe to the real-time events listener so newly-published events
+     * appear without a manual refresh. Refresh re-subscribes (which also
+     * recovers from a terminal listener error, since a callbackFlow closes on
+     * error and won't re-emit on its own).
+     */
     fun loadEvents() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            repo.getEvents().fold(
-                onSuccess = { list ->
-                    _uiState.update { it.copy(events = injectAlbumCovers(list), isLoading = false) }
-                },
-                onFailure = { e ->
-                    Log.e(TAG, "Failed to load events", e)
-                    _uiState.update { it.copy(isLoading = false, error = e.message) }
-                }
-            )
+        eventsJob?.cancel()
+        _uiState.update { it.copy(isLoading = true, error = null) }
+        eventsJob = viewModelScope.launch {
+            repo.observeEvents().collect { result ->
+                result.fold(
+                    onSuccess = { list ->
+                        _uiState.update { it.copy(events = injectAlbumCovers(list), isLoading = false, error = null) }
+                    },
+                    onFailure = { e ->
+                        Log.e(TAG, "Failed to load events", e)
+                        _uiState.update { it.copy(isLoading = false, error = e.message) }
+                    }
+                )
+            }
         }
     }
 

@@ -118,6 +118,7 @@ import java.util.Locale
 
 @Composable
 fun AttendanceScreen(
+    canEdit: Boolean = true,
     viewModel: AttendanceViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -175,7 +176,8 @@ fun AttendanceScreen(
                     // tapping the specific student/cell (the old FAB always opened a
                     // correction for the FIRST student, which was wrong). The locked
                     // banner + row hint tell the teacher to tap a student.
-                    state.isClassTeacher && state.hasUnsavedChanges -> {
+                    // Level-gated: a view-only grantee sees attendance but no Save FAB.
+                    canEdit && state.isClassTeacher && state.hasUnsavedChanges -> {
                         ExtendedFloatingActionButton(
                             onClick = viewModel::saveAttendance,
                             containerColor = Teal,

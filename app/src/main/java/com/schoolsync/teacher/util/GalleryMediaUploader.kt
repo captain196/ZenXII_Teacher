@@ -16,13 +16,13 @@ import java.io.ByteArrayOutputStream
  * Storage path: `galleryMedia/{schoolId}/{albumId}/{epochMillis}.{ext}`
  *
  * Constraints (enforced by [validate]):
- *   - Image: max 10 MB, content-type starts with "image/"
- *   - Video: max 50 MB, content-type starts with "video/"
+ *   - Image: max 3 MB, content-type starts with "image/"
+ *   - Video: max 25 MB, content-type starts with "video/"
  */
 object GalleryMediaUploader {
 
-    private const val MAX_IMAGE_BYTES = 10L * 1024 * 1024
-    private const val MAX_VIDEO_BYTES = 50L * 1024 * 1024
+    private const val MAX_IMAGE_BYTES = 3L * 1024 * 1024
+    private const val MAX_VIDEO_BYTES = 25L * 1024 * 1024
 
     /**
      * Result of a successful Storage upload. [storagePath] is retained so the

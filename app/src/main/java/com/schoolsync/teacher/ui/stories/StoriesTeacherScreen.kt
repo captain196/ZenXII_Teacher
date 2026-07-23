@@ -136,6 +136,7 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun StoriesTeacherScreen(
     onOpenViewer: (authorId: String) -> Unit = {},
+    canEdit: Boolean = true,
     viewModel: StoriesTeacherViewModel = hiltViewModel(),
     viewerViewModel: StoryViewerViewModel = hiltViewModel()
 ) {
@@ -166,15 +167,18 @@ fun StoriesTeacherScreen(
                 }
             },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = viewModel::toggleUploadDialog,
-                    containerColor = Teal,
-                    contentColor = BgStart,
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("New Story", fontWeight = FontWeight.SemiBold)
+                // Level-gated: view-only grantees can browse stories but not post.
+                if (canEdit) {
+                    ExtendedFloatingActionButton(
+                        onClick = viewModel::toggleUploadDialog,
+                        containerColor = Teal,
+                        contentColor = BgStart,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("New Story", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         ) { paddingValues ->

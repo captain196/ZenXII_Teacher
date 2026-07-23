@@ -1,5 +1,6 @@
 package com.schoolsync.teacher.data.firebase
 
+import com.google.firebase.firestore.AggregateSource
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
@@ -64,6 +65,23 @@ class FirestoreService @Inject constructor(
         return snapshot.documents.mapNotNull { it.toObject(T::class.java) }
     }
 
+    /**
+     * Server-side count() aggregation for a query. Avoids downloading docs
+     * just to size a collection (used by the gallery quota pre-check). Falls
+     * back to a bounded `.get().size()` if the aggregation call fails (e.g.
+     * offline / older backend), so callers always get a usable number.
+     */
+    suspend fun countDocuments(
+        collection: String,
+        queryBuilder: (CollectionReference) -> Query
+    ): Long = suspendCancellableCoroutine { cont ->
+        val ref = firestore.collection(collection)
+        val query = queryBuilder(ref)
+        query.count().get(AggregateSource.SERVER)
+            .addOnSuccessListener { snapshot -> cont.resume(snapshot.count) }
+            .addOnFailureListener { e -> cont.resumeWithException(e) }
+    }
+
     // ── Real-time listeners ─────────────────────────────────────────────
 
     fun observeDocument(collection: String, docId: String): Flow<DocumentSnapshot?> =
@@ -86,7 +104,11 @@ class FirestoreService @Inject constructor(
         val registration = firestore.collection(collection).document(docId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    cancel("Firestore listener error", error)
+                    // close() propagates the error to downstream .catch {}.
+                    // cancel() raised CancellationException which .catch
+                    // deliberately ignores, silently killing the flow with
+                    // no fallback and no retry (matches observeQuery below).
+                    close(error)
                     return@addSnapshotListener
                 }
                 val obj = if (snapshot != null && snapshot.exists()) {
@@ -113,6 +135,30 @@ class FirestoreService @Inject constructor(
                 }
                 if (snapshot != null) {
                     trySend(snapshot)
+                }
+            }
+        awaitClose { registration.remove() }
+    }
+
+    /**
+     * Real-time variant of [queryDocumentsAs]: emits the mapped doc list on
+     * every snapshot so the UI updates live without a manual refresh. Errors
+     * are propagated to downstream `.catch {}` via close(error). Detaches the
+     * underlying listener when the collecting scope is cancelled.
+     */
+    inline fun <reified T> observeDocumentsAs(
+        collection: String,
+        crossinline queryBuilder: (CollectionReference) -> Query
+    ): Flow<List<T>> = callbackFlow {
+        val ref = firestore.collection(collection)
+        val registration = queryBuilder(ref)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    trySend(snapshot.documents.mapNotNull { it.toObject(T::class.java) })
                 }
             }
         awaitClose { registration.remove() }

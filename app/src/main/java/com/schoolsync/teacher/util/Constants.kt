@@ -43,8 +43,9 @@ object Constants {
         const val HOMEWORK = "Homework"
         const val HOMEWORK_STATUS = "HomeworkStatus"
 
-        // Red Flags
-        const val STUDENT_FLAGS = "StudentFlags"
+        // Red Flags — canonical collection lives in Constants.Firestore.STUDENT_FLAGS
+        // ("studentFlags"). The legacy RTDB path constant was removed (F8): it was
+        // unreferenced and a name-collision footgun with the Firestore constant.
 
         // Gallery
         const val GALLERY_ALBUMS = "Gallery/Albums"
@@ -55,6 +56,9 @@ object Constants {
     object Firestore {
         const val SCHOOLS = "schools"
         const val STAFF = "staff"
+        // Owner-readable sensitive PII split out of the staff doc (audit fix C1).
+        // Same id as staff: {schoolId}_{staffId}. Rules allow only the owner to read.
+        const val STAFF_PRIVATE = "staffPrivate"
         const val STUDENTS = "students"
         const val PARENTS = "parents"
         const val SECTIONS = "sections"
@@ -139,7 +143,11 @@ object Constants {
         // ── Phase 12: Analytics ────────────────────────────────────────
         const val DASHBOARDS = "dashboards"
         const val AUDIT_LOGS = "auditLogs"
-        const val RBAC_ROLES = "rbacRoles"
+
+        // ── Unified Staff RBAC: server-maintained capability index ─────
+        // staffCapabilities/{uid} (uid == staffId), written by the CF; the app
+        // reads its own doc for UI gating. Absent ⇒ fail-open (show all).
+        const val STAFF_CAPABILITIES = "staffCapabilities"
 
         // ── Phase B (RTDB elimination): Student Red Flags ──────────────
         const val STUDENT_FLAGS = "studentFlags"

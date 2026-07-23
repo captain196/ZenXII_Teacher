@@ -96,6 +96,7 @@ import androidx.compose.ui.semantics.semantics
 
 @Composable
 fun MarksScreen(
+    canEdit: Boolean = true,
     viewModel: MarksViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -124,7 +125,8 @@ fun MarksScreen(
                 }
             },
             floatingActionButton = {
-                if (state.hasUnsavedChanges && !state.isSaving) {
+                // Level-gated: a view-only grantee sees marks but no Save FAB.
+                if (canEdit && state.hasUnsavedChanges && !state.isSaving) {
                     ExtendedFloatingActionButton(
                         onClick = viewModel::saveMarks,
                         containerColor = Teal,

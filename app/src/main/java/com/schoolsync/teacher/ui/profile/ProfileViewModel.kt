@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.ClassAssignment
 import com.schoolsync.teacher.data.model.firestore.StaffDoc
+import com.schoolsync.teacher.data.model.firestore.StaffPrivateDoc
 import com.schoolsync.teacher.data.repository.AuthRepository
 import com.schoolsync.teacher.data.repository.TeacherRepository
 import com.schoolsync.teacher.data.repository.firestore.StaffFirestoreRepository
@@ -18,6 +19,9 @@ import javax.inject.Inject
 data class ProfileUiState(
     val isLoading: Boolean = true,
     val staff: StaffDoc? = null,
+    // Owner-only sensitive PII (audit fix C1). Null pre-migration / on denial;
+    // the screen then falls back to the inline staff-doc values.
+    val staffPrivate: StaffPrivateDoc? = null,
     val assignments: List<ClassAssignment> = emptyList(),
     val classTeacherSections: List<String> = emptyList(),
     val error: String? = null,
@@ -105,6 +109,10 @@ class ProfileViewModel @Inject constructor(
             val docId = "${schoolCode}_${userId}"
             val staffResult = staffRepo.getStaff(docId)
             val assignResult = teacherRepo.getAssignedClasses()
+            // Owner-only sensitive PII, same doc id (audit fix C1). Fail-soft:
+            // returns null pre-migration / on permission denial → the screen
+            // falls back to the inline staff-doc values.
+            val staffPrivate = staffRepo.getStaffPrivate(docId)
 
             val doc = staffResult.getOrNull()
             val assignments = assignResult.getOrDefault(emptyList())
@@ -117,6 +125,7 @@ class ProfileViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 staff = doc,
+                staffPrivate = staffPrivate,
                 assignments = assignments,
                 classTeacherSections = ctSections,
                 cachedName = doc?.name?.ifEmpty { name } ?: name,

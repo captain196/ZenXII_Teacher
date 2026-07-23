@@ -1,5 +1,6 @@
 package com.schoolsync.teacher.data.repository.firestore
 
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.schoolsync.teacher.data.firebase.FirestoreService
@@ -8,7 +9,12 @@ import com.schoolsync.teacher.data.model.GalleryAlbum
 import com.schoolsync.teacher.data.model.GalleryMedia
 import com.schoolsync.teacher.data.model.firestore.GalleryAlbumDoc
 import com.schoolsync.teacher.data.model.firestore.GalleryMediaDoc
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -148,6 +154,121 @@ class GalleryFirestoreRepository @Inject constructor(
         }
     }
 
+    // ── Real-time reads ────────────────────────────────────────────────
+
+    /**
+     * Live variant of [getAlbums]: emits the album list on every snapshot so
+     * new albums (from this or other teachers / admin) appear without a manual
+     * refresh. Same schoolId + isArchived filter, orderBy and limit as the
+     * one-shot read. A terminal listener error is surfaced as Result.failure
+     * (the collector should re-subscribe to recover).
+     */
+    fun observeAlbums(): Flow<Result<List<GalleryAlbum>>> = flow {
+        val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
+        if (schoolId == null) {
+            emit(Result.failure(Exception("School code not available")))
+            return@flow
+        }
+        emitAll(
+            firestoreService.observeDocumentsAs<GalleryAlbumDoc>("galleryAlbums") { ref ->
+                ref.whereEqualTo("schoolId", schoolId)
+                    .whereEqualTo("isArchived", false)
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .limit(200)
+            }.map { docs -> Result.success(docs.map { it.toAlbum() }) }
+        )
+    }.catch { e -> emit(Result.failure(e)) }
+
+    /**
+     * Live variant of [getAlbumMedia] for a single album. Same required
+     * schoolId + albumId + isArchived filter, orderBy and limit as the
+     * one-shot read.
+     */
+    fun observeAlbumMedia(albumId: String): Flow<Result<List<GalleryMedia>>> = flow {
+        val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
+        if (schoolId == null) {
+            emit(Result.failure(Exception("School code not available")))
+            return@flow
+        }
+        emitAll(
+            firestoreService.observeDocumentsAs<GalleryMediaDoc>("galleryMedia") { ref ->
+                ref.whereEqualTo("schoolId", schoolId)
+                    .whereEqualTo("albumId", albumId)
+                    .whereEqualTo("isArchived", false)
+                    .orderBy("uploadedAt", Query.Direction.DESCENDING)
+                    .limit(300)
+            }.map { docs -> Result.success(docs.map { it.toMedia() }) }
+        )
+    }.catch { e -> emit(Result.failure(e)) }
+
+    // ── Quota (parity with website GALLERY_LIMITS) ─────────────────────
+
+    /**
+     * Pre-upload capacity gate mirroring the website's GALLERY_LIMITS:
+     * school-wide max [MAX_SCHOOL_IMAGES] images / [MAX_SCHOOL_VIDEOS] videos,
+     * and per-album max [MAX_ALBUM_FILES] files. Uses server-side count()
+     * aggregation, falling back to a bounded `.get()` size when aggregation is
+     * unavailable. Returns Result.failure with a user-facing message when a
+     * limit would be exceeded (>= limit before adding); Result.success to
+     * proceed. Fails OPEN on an unresolvable count error (advisory quota;
+     * Storage rules still gate) so a transient hiccup can't block uploads.
+     */
+    suspend fun checkQuota(albumId: String, type: String): Result<Unit> {
+        val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(Exception("School code not available"))
+
+        return try {
+            if (type == "video") {
+                val videos = countMedia { ref ->
+                    ref.whereEqualTo("schoolId", schoolId)
+                        .whereEqualTo("type", "video")
+                        .whereEqualTo("isArchived", false)
+                }
+                if (videos >= MAX_SCHOOL_VIDEOS) {
+                    return Result.failure(Exception("School video limit reached ($MAX_SCHOOL_VIDEOS)"))
+                }
+            } else {
+                val images = countMedia { ref ->
+                    ref.whereEqualTo("schoolId", schoolId)
+                        .whereEqualTo("type", "image")
+                        .whereEqualTo("isArchived", false)
+                }
+                if (images >= MAX_SCHOOL_IMAGES) {
+                    return Result.failure(Exception("School photo limit reached ($MAX_SCHOOL_IMAGES)"))
+                }
+            }
+
+            val albumFiles = countMedia { ref ->
+                ref.whereEqualTo("schoolId", schoolId)
+                    .whereEqualTo("albumId", albumId)
+                    .whereEqualTo("isArchived", false)
+            }
+            if (albumFiles >= MAX_ALBUM_FILES) {
+                return Result.failure(Exception("Album is full (max $MAX_ALBUM_FILES files)"))
+            }
+
+            Result.success(Unit)
+        } catch (_: Exception) {
+            // Can't determine the count (offline / SDK) — allow the upload.
+            Result.success(Unit)
+        }
+    }
+
+    /**
+     * Count matching `galleryMedia` docs via server-side aggregation, falling
+     * back to a bounded `.get().size()` if count() isn't available. Bounded at
+     * limit+1 so the fallback stays cheap yet still detects an over-limit set.
+     */
+    private suspend fun countMedia(queryBuilder: (com.google.firebase.firestore.CollectionReference) -> Query): Long {
+        return try {
+            firestoreService.countDocuments("galleryMedia", queryBuilder)
+        } catch (_: Exception) {
+            firestoreService.queryDocumentsAs<GalleryMediaDoc>("galleryMedia") { ref ->
+                queryBuilder(ref).limit(QUOTA_FALLBACK_SCAN)
+            }.size.toLong()
+        }
+    }
+
     // ── Writes ─────────────────────────────────────────────────────────
 
     /**
@@ -250,7 +371,7 @@ class GalleryFirestoreRepository @Inject constructor(
                 }
                 val albumDoc = albumDocs.firstOrNull()
                 val albumDocId = albumDoc?.id
-                if (albumDocId != null) {
+                if (albumDoc != null && albumDocId != null) {
                     val updates = hashMapOf<String, Any>(
                         "mediaCount" to FieldValue.increment(1L),
                         "updatedAt"  to nowIso
@@ -265,6 +386,32 @@ class GalleryFirestoreRepository @Inject constructor(
                         updates["coverImage"] = coverCandidate
                     }
                     firestoreService.updateDocument("galleryAlbums", albumDocId, updates)
+
+                    // First media in this album → notify parents once. `mediaCount`
+                    // read above is the PRE-upload count (the increment lands only
+                    // via the updateDocument just issued), so ==0 means this upload
+                    // is the album's first. Best-effort: a push hiccup must never
+                    // fail the upload (mirrors RedFlagRepository). Doc-id is
+                    // byte-identical to the website's `{schoolId}_gallery_{eventId}`
+                    // for event albums so the create-only CF trigger can't double-send.
+                    if (albumDoc.mediaCount == 0) {
+                        try {
+                            val dedupEntity = albumDoc.eventId.ifBlank { albumId }
+                            val reqId = "${schoolId}_gallery_${dedupEntity}"
+                            firestoreService.setDocument("pushRequests", reqId, mapOf(
+                                "mark"         to "GALLERY_ADDED",
+                                "schoolId"     to schoolId,
+                                "target_group" to "All Parents",
+                                "albumId"      to dedupEntity,
+                                "title"        to "New Photos",
+                                "body"         to ("New photos have been added" +
+                                    (if (albumDoc.title.isNotBlank()) " to ${albumDoc.title}" else "") + "."),
+                                "category"     to albumDoc.category,
+                                "status"       to "pending",
+                                "createdAt"    to Timestamp.now()
+                            ))
+                        } catch (_: Exception) { /* best-effort push */ }
+                    }
                 }
             } catch (_: Exception) { /* best-effort */ }
 
@@ -278,4 +425,13 @@ class GalleryFirestoreRepository @Inject constructor(
     private fun nowIso(): String =
         java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US)
             .format(java.util.Date())
+
+    companion object {
+        // Mirrors the website's GALLERY_LIMITS (Events.php).
+        private const val MAX_SCHOOL_IMAGES = 200L
+        private const val MAX_SCHOOL_VIDEOS = 30L
+        private const val MAX_ALBUM_FILES   = 50L
+        // Bound for the .get() fallback when count() aggregation is unavailable.
+        private const val QUOTA_FALLBACK_SCAN = 250L
+    }
 }

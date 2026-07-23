@@ -6,6 +6,7 @@ import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.LeaveApplicationDoc
 import com.schoolsync.teacher.util.Constants
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -167,7 +168,7 @@ class LeaveFirestoreRepository @Inject constructor(
         return firestoreService.observeDocumentAs<LeaveApplicationDoc>(
             Constants.Firestore.LEAVE_APPLICATIONS,
             leaveId
-        )
+        ).catch { emit(null) }   // listener error → emit null, keep flow alive (no UI crash)
     }
 
     /**

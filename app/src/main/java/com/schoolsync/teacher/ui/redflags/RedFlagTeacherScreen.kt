@@ -97,6 +97,7 @@ import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun RedFlagTeacherScreen(
+    canEdit: Boolean = true,
     viewModel: RedFlagTeacherViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -175,6 +176,8 @@ fun RedFlagTeacherScreen(
                 }
             },
             floatingActionButton = {
+                // Level-gated: a view-only grantee can read flags but not raise them.
+                if (canEdit) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         // Phase 6A — FAB now opens the quick flag sheet
@@ -207,6 +210,7 @@ fun RedFlagTeacherScreen(
                     Icon(Icons.Filled.Flag, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("New Flag", fontWeight = FontWeight.SemiBold)
+                }
                 }
             }
         ) { paddingValues ->

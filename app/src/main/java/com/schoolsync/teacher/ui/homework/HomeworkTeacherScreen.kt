@@ -146,6 +146,7 @@ import kotlinx.coroutines.flow.collectLatest
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeworkTeacherScreen(
+    canEdit: Boolean = true,
     viewModel: HomeworkTeacherViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -174,7 +175,8 @@ fun HomeworkTeacherScreen(
                 }
             },
             floatingActionButton = {
-                if (!state.showDetailSheet) {
+                // Level-gated: a view-only grantee can read homework but not create it.
+                if (canEdit && !state.showDetailSheet) {
                     ExtendedFloatingActionButton(
                         onClick = viewModel::showCreateDialog,
                         containerColor = Teal,

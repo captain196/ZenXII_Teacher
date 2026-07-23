@@ -349,6 +349,21 @@ fun MainScaffold(navController: NavHostController) {
     val schoolName by mainViewModel.schoolName.collectAsStateWithLifecycle()
     val position by mainViewModel.position.collectAsStateWithLifecycle()
 
+    // Live staff capabilities → nav gating. UNKNOWN (pre-rollout) shows all.
+    val caps by mainViewModel.capabilities.collectAsStateWithLifecycle()
+
+    // Capability-guarded navigation chokepoint. Every arbitrary-route jump
+    // (dashboard tiles, search) routes through here; a disallowed module is a
+    // no-op (its tile is also hidden). Fail-open while caps are UNKNOWN.
+    val guardedNav: (String) -> Unit = guardedNav@{ route ->
+        if (!com.schoolsync.teacher.util.ModuleGate.canAccess(route, caps)) return@guardedNav
+        innerNavController.navigate(route) {
+            popUpTo(Route.Dashboard.route) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     var moreExpanded by remember { mutableStateOf(false) }
     // Auto-expand More section if a sub-route is active
     LaunchedEffect(currentRoute) {
@@ -363,6 +378,9 @@ fun MainScaffold(navController: NavHostController) {
     // Use the SAME navigate options as the NavRail click handlers below —
     // popUpTo(Dashboard) keeps the back stack clean so tapping Home later
     // actually returns to Dashboard instead of getting stuck.
+    // Deep-link notice id (from a tapped notice push) to auto-open on arrival.
+    var pendingNoticeId by remember { mutableStateOf<String?>(null) }
+
     val pendingDeepLink by com.schoolsync.teacher.util.DeepLinkBridge.pending.collectAsState()
     LaunchedEffect(pendingDeepLink) {
         val target = pendingDeepLink ?: return@LaunchedEffect
@@ -370,14 +388,18 @@ fun MainScaffold(navController: NavHostController) {
             Route.Dashboard.route, Route.Events.route, Route.Notices.route,
             Route.Messages.route,  Route.Attendance.route, Route.Leave.route
         )
-        if (target in known) {
-            innerNavController.navigate(target) {
+        if (target.route in known && com.schoolsync.teacher.util.ModuleGate.canAccess(target.route, caps)) {
+            // Stash a notice id (if any) so NoticesScreen auto-selects it.
+            if (target.route == Route.Notices.route) {
+                target.arg?.let { pendingNoticeId = it }
+            }
+            innerNavController.navigate(target.route) {
                 popUpTo(Route.Dashboard.route) { saveState = true }
                 launchSingleTop = true
                 restoreState = true
             }
             // If this is a "more" sub-item, expand the More group so it's visible
-            if (target in moreRoutes) moreExpanded = true
+            if (target.route in moreRoutes) moreExpanded = true
         }
         com.schoolsync.teacher.util.DeepLinkBridge.consume()
     }
@@ -428,11 +450,15 @@ fun MainScaffold(navController: NavHostController) {
             )
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Primary items
-            mainNavItems.forEach { item ->
+            // App-wide unread/pending counts (e.g. Notices) → per-route badge.
+            val badgeCounts by hiltViewModel<BadgeViewModel>().counts.collectAsState()
+
+            // Primary items (capability-gated; UNKNOWN caps → all shown)
+            mainNavItems.filter { com.schoolsync.teacher.util.ModuleGate.canAccess(it.route.route, caps) }.forEach { item ->
                 NavRailEntry(
                     item = item,
                     isSelected = currentRoute == item.route.route,
+                    badgeCount = badgeCounts[item.route.route] ?: 0,
                     onClick = {
                         if (currentRoute != item.route.route) {
                             innerNavController.navigate(item.route.route) {
@@ -496,10 +522,11 @@ fun MainScaffold(navController: NavHostController) {
                 exit = shrinkVertically() + fadeOut()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    moreSubItems.forEach { item ->
+                    moreSubItems.filter { com.schoolsync.teacher.util.ModuleGate.canAccess(it.route.route, caps) }.forEach { item ->
                         NavRailEntry(
                             item = item,
                             isSelected = currentRoute == item.route.route,
+                            badgeCount = badgeCounts[item.route.route] ?: 0,
                             onClick = {
                                 if (currentRoute != item.route.route) {
                                     innerNavController.navigate(item.route.route) {
@@ -545,26 +572,30 @@ fun MainScaffold(navController: NavHostController) {
                             restoreState = true
                         }
                     },
-                    onNavigate = { route ->
-                        innerNavController.navigate(route) {
-                            popUpTo(Route.Dashboard.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onNavigate = guardedNav,
+                    canAccess = { route -> com.schoolsync.teacher.util.ModuleGate.canAccess(route, caps) },
                     onOpenStory = { authorId -> storyViewerAuthorId = authorId },
                     storyViewerViewModel = storyViewerViewModel
                 )
             }
-            composable(Route.Attendance.route) { AttendanceScreen() }
+            composable(Route.Attendance.route) {
+                AttendanceScreen(canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Attendance.route, caps))
+            }
             composable(Route.MyAttendance.route) { MyAttendanceScreen() }
-            composable(Route.Marks.route) { MarksScreen() }
+            composable(Route.Marks.route) {
+                MarksScreen(canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Marks.route, caps))
+            }
             composable(Route.Results.route) { ResultsScreen() }
             composable(Route.Timetable.route) { TimetableScreen() }
             composable(Route.LessonPlan.route) { TodayLessonsScreen() }
             composable(Route.Students.route) { StudentsScreen() }
             composable(Route.Messages.route) { MessagesScreen() }
-            composable(Route.Notices.route) { NoticesScreen() }
+            composable(Route.Notices.route) {
+                NoticesScreen(
+                    deepLinkNoticeId = pendingNoticeId,
+                    onDeepLinkConsumed = { pendingNoticeId = null }
+                )
+            }
             composable(Route.Events.route) {
                 EventsTeacherScreen(
                     onOpenAlbum = { albumId ->
@@ -581,11 +612,16 @@ fun MainScaffold(navController: NavHostController) {
                 com.schoolsync.teacher.ui.ptm.MyPtmScreen()
             }
             composable(Route.Leave.route) { LeaveScreen() }
-            composable(Route.Homework.route) { HomeworkTeacherScreen() }
-            composable(Route.RedFlags.route) { RedFlagTeacherScreen() }
+            composable(Route.Homework.route) {
+                HomeworkTeacherScreen(canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Homework.route, caps))
+            }
+            composable(Route.RedFlags.route) {
+                RedFlagTeacherScreen(canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.RedFlags.route, caps))
+            }
             composable(Route.Stories.route) {
                 StoriesTeacherScreen(
                     onOpenViewer = { authorId -> storyViewerAuthorId = authorId },
+                    canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Stories.route, caps),
                     viewerViewModel = storyViewerViewModel
                 )
             }
@@ -613,11 +649,14 @@ fun MainScaffold(navController: NavHostController) {
                 com.schoolsync.teacher.ui.search.SearchScreen(
                     onBack = { innerNavController.popBackStack() },
                     onNavigateRoute = { route ->
-                        // Drop Search from the back stack so Back from the
-                        // target lands on the dashboard, not on search.
-                        innerNavController.navigate(route) {
-                            popUpTo(Route.Search.route) { inclusive = true }
-                            launchSingleTop = true
+                        // Capability-gated: a disallowed module is a no-op.
+                        if (com.schoolsync.teacher.util.ModuleGate.canAccess(route, caps)) {
+                            // Drop Search from the back stack so Back from the
+                            // target lands on the dashboard, not on search.
+                            innerNavController.navigate(route) {
+                                popUpTo(Route.Search.route) { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
                     }
                 )

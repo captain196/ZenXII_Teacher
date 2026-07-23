@@ -3,8 +3,10 @@ package com.schoolsync.teacher.data.repository.firestore
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.StaffDoc
+import com.schoolsync.teacher.data.model.firestore.StaffPrivateDoc
 import com.schoolsync.teacher.util.Constants
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,6 +39,26 @@ class StaffFirestoreRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Fetch the current staff member's OWN staffPrivate doc (audit fix C1).
+     * Doc id is the SAME as the staff doc: {schoolId}_{staffId}. Rules permit
+     * reading only the owner's own doc.
+     *
+     * Fail-soft: a missing doc (pre-migration), a permission denial, or any
+     * error returns null rather than throwing, so the caller falls back to the
+     * inline staff-doc values and the profile never breaks.
+     */
+    suspend fun getStaffPrivate(staffId: String): StaffPrivateDoc? {
+        return try {
+            firestoreService.getDocumentAs<StaffPrivateDoc>(
+                Constants.Firestore.STAFF_PRIVATE,
+                staffId
+            )
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -107,7 +129,7 @@ class StaffFirestoreRepository @Inject constructor(
         return firestoreService.observeDocumentAs<StaffDoc>(
             Constants.Firestore.STAFF,
             staffId
-        )
+        ).catch { emit(null) }   // listener error → emit null, keep flow alive (no UI crash)
     }
 
     private suspend fun getSchoolCode(): String? {

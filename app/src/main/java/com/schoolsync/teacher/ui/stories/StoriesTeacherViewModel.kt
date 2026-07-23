@@ -66,6 +66,8 @@ data class StoriesUiState(
      * can roll back the Storage upload (Hardening #5).
      */
     val uploadStoragePath: String = "",
+    /** Generated poster URL for a picked VIDEO (empty for images). */
+    val uploadThumbnailUrl: String = "",
     /** Local content:// Uri of the picked media — shown as a live
      *  preview WHILE the upload is in flight (before the download URL
      *  returns). Cleared on publish / clear / dialog close. */
@@ -219,6 +221,7 @@ class StoriesTeacherViewModel @Inject constructor(
                     caption     = state.uploadCaption.trim(),
                     teacherName = teacherName,
                     teacherPic  = "",  // resolved from cached profile pic in repo
+                    thumbnailUrl = state.uploadThumbnailUrl.trim(),
                     audienceClassKeys = state.selectedAudience.toList()  // empty = school-wide
                 ).fold(
                     onSuccess = { storyId ->
@@ -230,6 +233,7 @@ class StoriesTeacherViewModel @Inject constructor(
                                 showUploadDialog = false,
                                 uploadUrl = "",
                                 uploadStoragePath = "",
+                                uploadThumbnailUrl = "",
                                 pickedLocalUri = "",
                                 uploadCaption = "",
                                 uploadType = "image",
@@ -434,6 +438,16 @@ class StoriesTeacherViewModel @Inject constructor(
                                 mediaUploadPercent = 100
                             )
                         }
+                        // For videos, generate + upload a real poster frame so the
+                        // story never shows a blank/black tile. Best-effort — a null
+                        // result just falls back to first-frame rendering.
+                        if (declaredType == "video") {
+                            val thumb = com.schoolsync.teacher.util.StoryMediaUploader
+                                .uploadThumbnail(context, uri, schoolCode, teacherId)
+                            if (!thumb.isNullOrBlank()) {
+                                _uiState.update { it.copy(uploadThumbnailUrl = thumb) }
+                            }
+                        }
                         _events.emit(StoriesEvent.Success("Media ready — tap Share Story to post"))
                     }
                     is com.schoolsync.teacher.util.StoryMediaUploader.UploadProgress.Failed -> {
@@ -452,7 +466,7 @@ class StoriesTeacherViewModel @Inject constructor(
      */
     fun clearPickedMedia() {
         val path = _uiState.value.uploadStoragePath
-        _uiState.update { it.copy(uploadUrl = "", uploadStoragePath = "", pickedLocalUri = "", mediaUploadPercent = -1) }
+        _uiState.update { it.copy(uploadUrl = "", uploadStoragePath = "", uploadThumbnailUrl = "", pickedLocalUri = "", mediaUploadPercent = -1) }
         if (path.isNotBlank()) {
             viewModelScope.launch {
                 com.schoolsync.teacher.util.StoryMediaUploader.deleteByPath(path)

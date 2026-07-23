@@ -209,9 +209,14 @@ private fun AuthorStoryPage(
     val scope = rememberCoroutineScope()
 
     // Mark the story seen as it becomes current (persists + counts the view
-    // unless this staff member is the author — handled in the VM).
+    // unless this staff member is the author — handled in the VM). Require a
+    // brief dwell so merely swiping PAST a story doesn't count as a view; if
+    // the page changes before the delay elapses the effect is cancelled.
     LaunchedEffect(story.storyId, isCurrentPage) {
-        if (isCurrentPage) onSeen(story.storyId, group.authorId)
+        if (isCurrentPage) {
+            kotlinx.coroutines.delay(500)
+            onSeen(story.storyId, group.authorId)
+        }
     }
 
     // ── Progress state ─────────────────────────────────────────────

@@ -51,8 +51,9 @@ data class StaffDoc(
     var employmentType: String = "",
 
     val teaching_subjects: List<String> = emptyList(),
-    val staff_roles: List<String> = emptyList(),
-    val primary_role: String = "",
+    // staff_roles / primary_role removed (supersession cleanup): the app never read
+    // them — the staffCapabilities CF reads the Firestore staff doc directly and the
+    // app gates on the resolved capabilities, not raw role ids.
 
     // ── Statutory IDs ────────────────────────────────────
     val panNumber: String = "",

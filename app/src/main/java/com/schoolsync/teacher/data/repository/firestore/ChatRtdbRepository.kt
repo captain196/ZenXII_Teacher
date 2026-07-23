@@ -7,6 +7,7 @@ import com.schoolsync.teacher.data.model.rtdb.NotifBadgeRtdb
 import com.schoolsync.teacher.data.model.rtdb.PresenceRtdb
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -64,6 +65,7 @@ class ChatRtdbRepository @Inject constructor(
                 if (userId == null) flowOf(null)
                 else firestoreService.observeDocumentAs<NotifBadgeRtdb>(COL_NOTIF_BADGES, userId)
             }
+            .catch { emit(null) }   // listener error → emit null, keep badge flow alive
     }
 
     // ── Presence ────────────────────────────────────────────────────────────
@@ -100,6 +102,7 @@ class ChatRtdbRepository @Inject constructor(
 
     fun observePresence(userId: String): Flow<PresenceRtdb?> =
         firestoreService.observeDocumentAs<PresenceRtdb>(COL_PRESENCE, userId)
+            .catch { emit(null) }   // listener error → emit null, keep presence flow alive
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 

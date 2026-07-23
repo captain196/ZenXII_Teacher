@@ -44,19 +44,38 @@ object GeofenceGuide {
         centerLng: Double?,
         radiusMeters: Int?,
     ): GpsStatus {
+        val haveFence = centerLat != null && centerLng != null && radiusMeters != null && radiusMeters > 0
+        val campuses = if (haveFence) listOf(Campus(centerLat!!, centerLng!!, radiusMeters!!, null)) else emptyList()
+        return evaluateMulti(fix, campuses)
+    }
+
+    /**
+     * Multi-campus variant: distance is to the NEAREST campus, and
+     * [GpsStatus.insideGeofence] is true when the fix is within ANY campus's
+     * radius. When [campuses] is empty the fence is unknown → inside is null
+     * (as today). GUIDANCE ONLY — never an attendance decision.
+     */
+    fun evaluateMulti(fix: LocationFix?, campuses: List<Campus>): GpsStatus {
         if (fix == null) {
             return GpsStatus(available = false, accuracyMeters = null, distanceMeters = null, insideGeofence = null)
         }
-        val haveFence = centerLat != null && centerLng != null && radiusMeters != null && radiusMeters > 0
-        if (!haveFence) {
+        if (campuses.isEmpty()) {
             return GpsStatus(available = true, accuracyMeters = fix.accuracyMeters, distanceMeters = null, insideGeofence = null)
         }
-        val dist = distanceMeters(fix.latitude, fix.longitude, centerLat!!, centerLng!!)
+        var nearestDist = Double.MAX_VALUE
+        var nearestName: String? = null
+        var inside = false
+        for (campus in campuses) {
+            val d = distanceMeters(fix.latitude, fix.longitude, campus.centerLat, campus.centerLng)
+            if (d < nearestDist) { nearestDist = d; nearestName = campus.name }
+            if (d <= campus.radiusMeters.toDouble()) inside = true
+        }
         return GpsStatus(
             available = true,
             accuracyMeters = fix.accuracyMeters,
-            distanceMeters = dist,
-            insideGeofence = dist <= radiusMeters!!.toDouble(),
+            distanceMeters = nearestDist,
+            insideGeofence = inside,
+            nearestCampusName = nearestName,
         )
     }
 }

@@ -115,6 +115,17 @@ fun MyProfileScreen(
                     .padding(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 val doc = state.staff
+                val priv = state.staffPrivate
+
+                // Sensitive PII (audit fix C1): prefer the owner-only
+                // staffPrivate doc, fall back to the inline staff-doc values so
+                // the screen works BOTH before the migration (fields still on
+                // the staff doc) AND after (fields moved to staffPrivate).
+                val panNumber    = priv?.panNumber?.ifEmpty { doc?.panNumber } ?: doc?.panNumber
+                val aadharNumber = priv?.aadharNumber?.ifEmpty { doc?.aadharNumber } ?: doc?.aadharNumber
+                val pfNumber     = priv?.pfNumber?.ifEmpty { doc?.pfNumber } ?: doc?.pfNumber
+                val esiNumber    = priv?.esiNumber?.ifEmpty { doc?.esiNumber } ?: doc?.esiNumber
+                val bankDetails  = priv?.bankDetails?.takeIf { it.isNotEmpty() } ?: doc?.bankDetails
 
                 // ── Hero strip: avatar + name + chips ──
                 Row(
@@ -240,7 +251,7 @@ fun MyProfileScreen(
                             f("Subjects", doc?.teaching_subjects?.joinToString(", ")),
                         ))
 
-                        val bank = doc?.bankDetails
+                        val bank = bankDetails
                         if (bank != null && bank.isNotEmpty()) {
                             InfoCard("Bank", Icons.Filled.AccountBalance, c.slateBluePrimary, listOfNotNull(
                                 f("Bank", bank["bankName"]?.toString()),
@@ -260,14 +271,14 @@ fun MyProfileScreen(
                             f("Emergency", buildEmergency(doc?.emergencyContact)),
                         ))
 
-                        val hasStat = listOf(doc?.panNumber, doc?.aadharNumber, doc?.pfNumber, doc?.esiNumber)
+                        val hasStat = listOf(panNumber, aadharNumber, pfNumber, esiNumber)
                             .any { !it.isNullOrBlank() }
                         if (hasStat) {
                             InfoCard("Statutory IDs", Icons.Filled.CreditCard, c.warning, listOfNotNull(
-                                f("PAN", doc?.panNumber),
-                                f("Aadhar", doc?.aadharNumber),
-                                f("PF / UAN", doc?.pfNumber),
-                                f("ESI", doc?.esiNumber),
+                                f("PAN", panNumber),
+                                f("Aadhar", aadharNumber),
+                                f("PF / UAN", pfNumber),
+                                f("ESI", esiNumber),
                             ))
                         }
 

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.media.RingtoneManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.schoolsync.teacher.MainActivity
@@ -82,13 +83,18 @@ class FCMService : FirebaseMessagingService() {
         }
 
         if (remoteMessage.data.isNotEmpty()) {
-            Log.d(TAG, "Data payload: ${remoteMessage.data}")
+            // Log only the shape (type + keys), never values — payloads can carry
+            // names/messages/PII that must not land in logcat.
+            Log.d(TAG, "Data payload type=${remoteMessage.data["type"]} keys=${remoteMessage.data.keys}")
             handleDataPayload(remoteMessage.data)
         }
     }
 
     private fun handleDataPayload(data: Map<String, String>) {
-        val type = data["type"] ?: return
+        // Empty (not early-return) so a data-only push that omits `type` but
+        // carries title/body still shows via the else branch instead of being
+        // silently dropped.
+        val type = data["type"] ?: ""
 
         when (type) {
             "notice", "notice_created" -> {
@@ -145,6 +151,15 @@ class FCMService : FirebaseMessagingService() {
                 val body  = data["body"]  ?: "Tap to view details"
                 showNotification(title, body, data)
             }
+            // Story pushes normally target parents only (the universal dispatcher's
+            // STORY_POSTED audience is parents), so a teacher rarely sees this — but
+            // handle it explicitly so it shows on the STORIES channel with sensible
+            // text instead of falling through to the generic else.
+            "story", "story_created" -> {
+                val title = data["title"] ?: "New Story"
+                val body  = data["body"]  ?: "A new story was posted. Tap to view."
+                showNotification(title, body, data)
+            }
             else -> {
                 val title = data["title"] ?: "ZenXii"
                 val body = data["body"] ?: ""
@@ -183,7 +198,8 @@ class FCMService : FirebaseMessagingService() {
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val notification = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.mipmap.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_zenxii)
+            .setColor(ContextCompat.getColor(this, R.color.notification_color))
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)

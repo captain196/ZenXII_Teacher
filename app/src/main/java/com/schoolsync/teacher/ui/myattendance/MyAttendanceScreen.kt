@@ -268,6 +268,23 @@ private fun HomeView(
     val done = checkInMs != null && checkOutMs != null
     val isRestDay = today?.isWeeklyOff == true || today?.isHoliday == true
     val restLabel = if (today?.isHoliday == true) "holiday" else "weekly-off"
+
+    // FIX 2 — location gating for Clock-In (UX only; the server stays authoritative).
+    // Enabled only when a real fix is available AND (inside a campus OR no fence is
+    // configured, in which case the server decides). Never hard-blocks on schedule.
+    val campuses = ui.campuses
+    val fixReady = ui.gps?.available == true && !ui.gpsRefreshing
+    val insideOk = ui.gps?.insideGeofence == true || campuses.isEmpty()
+    val locationEligible = fixReady && insideOk
+
+    // FIX 3 — an admin panel mark sets today.status (P/T/M/A/L/H/O/W) with NO punch
+    // timestamps. Treat that as already-recorded so we don't show a bare Clock-In.
+    // A rest day the school allows working on is the exception: the extra-work
+    // confirm flow may still offer the action.
+    val restDayWorkAllowed = isRestDay && today?.allowWorkOnOff == true
+    val statusU = (today?.status ?: "V").uppercase()
+    val alreadyMarked = statusU in setOf("P", "T", "M", "A", "L", "H", "O", "W") &&
+        checkInMs == null && !restDayWorkAllowed
     var showOffConfirm by remember { mutableStateOf(false) }
     // On a rest day before any punch, today.status is still "V"; surface the
     // rest-day nature in the pill so the employee sees Weekly-off / Holiday.
@@ -478,7 +495,24 @@ private fun HomeView(
                     text = "All done for today · ${fmtHM(checkInMs)} — ${fmtHM(checkOutMs)}",
                     color = c.success, surface = c.successSurface, icon = Icons.Filled.CheckCircle,
                 )
-                checkInMs == null -> {
+                // A real check-in punch exists (no checkout yet) → let them clock out.
+                checkInMs != null -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    RunningCard(sinceMs = checkInMs, now = now)
+                    ClockOutButton(
+                        busy = ui.punching,
+                        onClick = { if (!permGranted) onRequestPermission() else vm.checkOut() },
+                    )
+                }
+                // FIX 3 — admin/status-only mark (status set, no punch) → already
+                // recorded; no bare Clock-In. The on-leave banner above covers 'L'.
+                alreadyMarked -> {
+                    if (!onLeaveToday) InfoLine(
+                        text = "Attendance already recorded today (${humanStatus(statusU)}).",
+                        color = c.info, surface = c.infoSurface, icon = Icons.Filled.CheckCircle,
+                    )
+                }
+                else -> {
+                    // Normal Clock-In flow (checkInMs == null, not admin-marked).
                     // Check-in-time GUIDANCE (mirror of the server window): show
                     // on-time / late / window-closed before the tap; the server is
                     // still the authority. Skipped on a rest day (handled by dialog).
@@ -511,15 +545,30 @@ private fun HomeView(
                                 CheckInWindow.UNKNOWN -> Unit
                             }
                         }
+                        // FIX 2 — location guidance shown before the tap. Advisory copy;
+                        // the server still validates the coordinates it receives.
+                        if (permGranted && !locationEligible) {
+                            when {
+                                ui.gpsRefreshing || ui.gps == null -> InfoLine(
+                                    text = "Getting your location…",
+                                    color = c.textSecondary, surface = c.surfaceCard, icon = Icons.Filled.Refresh,
+                                )
+                                ui.gps?.available == true && ui.gps?.insideGeofence == false && campuses.isNotEmpty() -> InfoLine(
+                                    text = "You're ${fmtDistance(ui.gps?.distanceMeters)} from ${ui.gps?.nearestCampusName ?: "campus"} — move closer to clock in.",
+                                    color = c.warning, surface = c.warningSurface, icon = Icons.Filled.WarningAmber,
+                                )
+                                else -> Unit   // no fix / GPS error → StatePrompt handles it
+                            }
+                        }
                         ClockInButton(
                             busy = ui.punching,
-                            // TCH-H1: the window hint above is ADVISORY only. A wrong
-                            // device clock or stale schedule config must NOT hard-lock a
-                            // legitimate punch — the server is the sole authority on
-                            // whether a punch is accepted. Gate only on location
-                            // permission (needed to acquire a fix), mirroring the rest
-                            // of the flow. The Late/closed warning copy still shows.
-                            enabled = permGranted,
+                            // FIX 2: gate on a real location fix + geofence. Enabled when
+                            // permission is missing (so a tap can request it) OR location
+                            // is eligible (fix acquired AND inside a campus, or no fence is
+                            // configured). The schedule hint stays ADVISORY — a wrong device
+                            // clock or stale config must not hard-lock a legit punch; the
+                            // server is the sole authority on acceptance.
+                            enabled = !permGranted || locationEligible,
                             onClick = {
                                 when {
                                     !permGranted -> onRequestPermission()
@@ -529,13 +578,6 @@ private fun HomeView(
                             },
                         )
                     }
-                }
-                else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    RunningCard(sinceMs = checkInMs, now = now)
-                    ClockOutButton(
-                        busy = ui.punching,
-                        onClick = { if (!permGranted) onRequestPermission() else vm.checkOut() },
-                    )
                 }
             }
 
@@ -1352,6 +1394,19 @@ private fun leaveUntilLabel(todayKey: String, leaveDates: Map<String, String>): 
     return runCatching {
         SimpleDateFormat("d MMM", Locale.getDefault()).format(DATE_KEY.parse(last)!!)
     }.getOrNull()
+}
+
+/** Map a server status letter → human words for the "already recorded" line. */
+private fun humanStatus(status: String): String = when (status.uppercase()) {
+    "P" -> "Present"
+    "T" -> "Late"
+    "M" -> "Half-day"
+    "A" -> "Absent"
+    "L" -> "On leave"
+    "H" -> "Holiday"
+    "O" -> "Weekly-off"
+    "W" -> "Extra work"
+    else -> "Recorded"
 }
 
 private fun fmtHM(ms: Long?): String = ms?.let { HM.format(Date(it)) } ?: "—"

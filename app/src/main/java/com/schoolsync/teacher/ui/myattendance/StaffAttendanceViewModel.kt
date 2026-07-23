@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.BuildConfig
+import com.schoolsync.teacher.data.location.Campus
 import com.schoolsync.teacher.data.location.GeofenceGuide
 import com.schoolsync.teacher.data.location.GpsStatus
 import com.schoolsync.teacher.data.location.LocationError
@@ -148,6 +149,26 @@ class StaffAttendanceViewModel @Inject constructor(
                 val cLng = (geo?.get("centerLng") as? Number)?.toDouble()
                 val rad = (geo?.get("radius") as? Number)?.toInt()
 
+                // Multi-campus: attendancePolicy.gps.geofences[] = [{id,name,centerLat,
+                // centerLng,radius,active}]. A punch is valid inside ANY active campus.
+                // Fall back to the singular gps.geofence (primary campus) when the array
+                // is absent/empty, mirroring the backend's back-compat behaviour.
+                val geofencesRaw = gps?.get("geofences") as? List<*>
+                val campuses = buildList {
+                    geofencesRaw?.forEach { item ->
+                        val m = item as? Map<*, *> ?: return@forEach
+                        if ((m["active"] as? Boolean) != true) return@forEach
+                        val gLat = (m["centerLat"] as? Number)?.toDouble() ?: return@forEach
+                        val gLng = (m["centerLng"] as? Number)?.toDouble() ?: return@forEach
+                        val gRad = (m["radius"] as? Number)?.toInt() ?: return@forEach
+                        if (gRad <= 0) return@forEach
+                        add(Campus(gLat, gLng, gRad, m["name"] as? String))
+                    }
+                    if (isEmpty() && active && cLat != null && cLng != null && rad != null && rad > 0) {
+                        add(Campus(cLat, cLng, rad, geo?.get("name") as? String))
+                    }
+                }
+
                 // Work Schedule for the check-in-time GUIDANCE hint (on-time vs late
                 // vs window-closed). Source of truth = shifts.default.schedule; fall
                 // back to the legacy windows block, then to the server's own defaults
@@ -172,7 +193,8 @@ class StaffAttendanceViewModel @Inject constructor(
 
                 _ui.update {
                     it.copy(
-                        geoActive = active,
+                        geoActive = campuses.isNotEmpty(),
+                        campuses = campuses,
                         geoCenterLat = cLat,
                         geoCenterLng = cLng,
                         geoRadius = rad,
@@ -183,6 +205,14 @@ class StaffAttendanceViewModel @Inject constructor(
                         fullDayHours = fullH,
                         scheduleLoaded = true,
                     )
+                }
+
+                // If a fix was already acquired before campuses were known (the
+                // screen fires refreshGpsStatus concurrently with loadGeofence),
+                // recompute the guidance now so inside/nearest reflect the real
+                // fence rather than an "unknown" from the empty-campus snapshot.
+                _ui.value.lastFix?.let { fix ->
+                    _ui.update { it.copy(gps = GeofenceGuide.evaluateMulti(fix, campuses)) }
                 }
             } catch (_: Exception) {
                 // Guidance is optional — failure just means no distance/inside hint.
@@ -216,7 +246,7 @@ class StaffAttendanceViewModel @Inject constructor(
                         it.copy(
                             gpsRefreshing = false,
                             lastFix = out.fix,
-                            gps = GeofenceGuide.evaluate(out.fix, s.geoCenterLat, s.geoCenterLng, s.geoRadius),
+                            gps = GeofenceGuide.evaluateMulti(out.fix, s.campuses),
                         )
                     }
                 is LocationOutcome.Failure ->
@@ -244,7 +274,7 @@ class StaffAttendanceViewModel @Inject constructor(
                     _ui.update { it.copy(punching = false, gpsError = out.error) }
                 is LocationOutcome.Success -> {
                     val fix = out.fix
-                    _ui.update { it.copy(gps = GeofenceGuide.evaluate(fix, s.geoCenterLat, s.geoCenterLng, s.geoRadius), lastFix = fix) }
+                    _ui.update { it.copy(gps = GeofenceGuide.evaluateMulti(fix, s.campuses), lastFix = fix) }
 
                     // W6: reuse the pending id when retrying the SAME direction
                     // after a transient failure; otherwise mint a fresh one.
@@ -324,6 +354,9 @@ data class StaffAttendanceUiState(
     val loadError: StaffAttendanceError? = null,
     // Campus geofence (guidance only; never sent to the server)
     val geoActive: Boolean = false,
+    /** All active campuses (multi-campus). A punch is valid inside ANY of them.
+     *  Empty = no fence configured → the server decides; the client won't hard-block. */
+    val campuses: List<Campus> = emptyList(),
     val geoCenterLat: Double? = null,
     val geoCenterLng: Double? = null,
     val geoRadius: Int? = null,

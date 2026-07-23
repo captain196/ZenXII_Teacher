@@ -9,6 +9,18 @@ package com.schoolsync.teacher.data.location
  * mentions the geofence is for on-screen GUIDANCE only.
  */
 
+/**
+ * A single campus geofence for on-screen GUIDANCE only. The backend supports
+ * SEVERAL active campuses (attendancePolicy.gps.geofences[]); a punch is valid
+ * inside ANY active one. The server re-validates — this is advisory.
+ */
+data class Campus(
+    val centerLat: Double,
+    val centerLng: Double,
+    val radiusMeters: Int,
+    val name: String?,
+)
+
 /** A clean, transport-ready location reading. */
 data class LocationFix(
     val latitude: Double,
@@ -45,4 +57,6 @@ data class GpsStatus(
     val accuracyMeters: Float?,
     val distanceMeters: Double?,
     val insideGeofence: Boolean?,
+    /** Name of the NEAREST campus (multi-campus). null when unknown/no fence. */
+    val nearestCampusName: String? = null,
 )

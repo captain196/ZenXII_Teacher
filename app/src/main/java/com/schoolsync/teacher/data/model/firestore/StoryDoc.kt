@@ -66,6 +66,10 @@ data class StoryDoc(
 
     // ── Content ────────────────────────────────────────────────────
     val mediaUrl: String = "",
+    /** Poster image for VIDEO stories — a frame extracted + uploaded at post
+     *  time so panels/apps show a real thumbnail instead of a black/blank first
+     *  frame. Empty for images (use mediaUrl) and for legacy videos. */
+    val thumbnailUrl: String = "",
     /** "image" | "video". */
     val type: String = "image",
     /** ≤ 500 chars. */
