@@ -74,6 +74,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -88,6 +89,12 @@ import java.util.Date
 import java.util.Locale
 
 private const val IMAGE_DURATION_MS = 6000L
+/**
+ * How long a story video may sit in STATE_BUFFERING before it is treated as
+ * failed. ExoPlayer emits no error for "still buffering", so without a watchdog
+ * a stalled video holds the viewer on a black frame indefinitely.
+ */
+private const val VIDEO_LOAD_TIMEOUT_MS = 12000L
 private const val DISMISS_THRESHOLD_PX = 250f
 /** Drag distance over which the story fully fades out while swiping down. */
 private const val DISMISS_DISTANCE_PX = 620f
@@ -223,6 +230,11 @@ private fun AuthorStoryPage(
     // Image: elapsed-ms timer that starts once the image is DISPLAYED
     // and pauses while zoomed. Video: driven by real playback position.
     var imageDisplayed by remember(index, group.authorId) { mutableStateOf(false) }
+    // Load failure must be tracked separately. imageDisplayed was only ever set
+    // in onSuccess and there was no onError, so a 404 / expired token left the
+    // viewer on an infinite spinner: the progress driver below waits on
+    // imageDisplayed, so the timer never started and the story never advanced.
+    var imageFailed by remember(index, group.authorId) { mutableStateOf(false) }
 
     var imageElapsed by remember(index, group.authorId) { mutableLongStateOf(0L) }
     var videoProgress by remember(index, group.authorId) { mutableFloatStateOf(0f) }
@@ -266,8 +278,15 @@ private fun AuthorStoryPage(
 
     // Image progress driver — also frozen while dismissing so the timer
     // doesn't advance (or appear to restart) during a swipe-down.
-    LaunchedEffect(index, isCurrentPage, isPaused, isVideo, mediaZoomed, imageDisplayed, isDismissing) {
+    LaunchedEffect(index, isCurrentPage, isPaused, isVideo, mediaZoomed, imageDisplayed, imageFailed, isDismissing) {
         if (isVideo || !isCurrentPage || isPaused || mediaZoomed || isDismissing) return@LaunchedEffect
+        // A failed image still has to advance — otherwise the viewer hangs on it
+        // forever. Give it a moment so the error message can be read, then move on.
+        if (imageFailed) {
+            kotlinx.coroutines.delay(2500)
+            if (index < stories.size - 1) index++ else onGroupFinished()
+            return@LaunchedEffect
+        }
         if (!imageDisplayed) return@LaunchedEffect   // wait until visible (start-on-load)
         var last = 0L
         while (imageElapsed < IMAGE_DURATION_MS) {
@@ -333,11 +352,16 @@ private fun AuthorStoryPage(
                         contentDescription = story.caption.ifBlank { "Story by ${group.authorName}" },
                         contentScale = ContentScale.Fit,
                         onSuccess = { imageDisplayed = true },
+                        onError = { imageFailed = true },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
             }
-            if (!isVideo && !imageDisplayed) {
+            if (!isVideo && imageFailed) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Couldn't load this story", color = Color.White)
+                }
+            } else if (!isVideo && !imageDisplayed) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.5.dp, modifier = Modifier.size(36.dp))
                 }
@@ -650,18 +674,61 @@ private fun VideoStoryPlayer(
         player.volume = if (isMuted) 0f else 1f
     }
 
+    var isBuffering by remember(url) { mutableStateOf(true) }
+    var videoFailed by remember(url) { mutableStateOf(false) }
+
     // Advance the story when the video actually ends (accurate to the
     // clip length, unlike a fixed timer).
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
+                isBuffering = state == Player.STATE_BUFFERING
                 if (state == Player.STATE_ENDED) onEnded()
+            }
+            // There was NO error handler at all. On STATE_IDLE after a failure
+            // onEnded never fired, the video progress stayed at 0, and the
+            // segment timer is skipped for video — so the viewer sat on a black
+            // screen with a frozen bar and never advanced or reported anything.
+            override fun onPlayerError(error: PlaybackException) {
+                android.util.Log.e(
+                    "StoryViewerScreen",
+                    "Video playback failed (code=${error.errorCodeName}) url=$url",
+                    error
+                )
+                videoFailed = true
+                isBuffering = false
             }
         }
         player.addListener(listener)
         onDispose {
             player.removeListener(listener)
             player.release()
+        }
+    }
+
+    // Pause when the app leaves the foreground — otherwise the story keeps
+    // playing (audibly) behind the lock screen and the progress bar drifts out
+    // of sync with the real playback position.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, player) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) player.pause()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Watchdog — a video stuck buffering never emits an error.
+    LaunchedEffect(url, isBuffering, isCurrentPage, isPaused) {
+        if (!isBuffering || !isCurrentPage || isPaused) return@LaunchedEffect
+        kotlinx.coroutines.delay(VIDEO_LOAD_TIMEOUT_MS)
+        if (isBuffering) videoFailed = true
+    }
+
+    LaunchedEffect(videoFailed) {
+        if (videoFailed) {
+            kotlinx.coroutines.delay(2500)
+            onEnded()
         }
     }
 
@@ -692,8 +759,22 @@ private fun VideoStoryPlayer(
                 )
             }
         },
+        // Rebind on player change: the slot is reused across url changes, so
+        // without this PlayerView keeps pointing at the RELEASED player and the
+        // new one never gets a surface (black frame, audio only).
+        update = { view -> if (view.player !== player) view.player = player },
         modifier = Modifier.fillMaxSize()
     )
+
+    if (videoFailed) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Couldn't load this story", color = Color.White)
+        }
+    } else if (isBuffering) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Color.White, strokeWidth = 2.5.dp, modifier = Modifier.size(36.dp))
+        }
+    }
 }
 
 private fun formatStoryTime(timestamp: Long): String {

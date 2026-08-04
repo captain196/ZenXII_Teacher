@@ -92,7 +92,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.view.ViewGroup
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -213,6 +216,8 @@ fun GalleryTeacherScreen(
             val ctx = androidx.compose.ui.platform.LocalContext.current
             UploadMediaDialog(
                 isUploading = state.isUploading,
+                isCompressing = state.isCompressing,
+                compressPercent = state.compressPercent,
                 onDismiss = viewModel::hideUploadMediaDialog,
                 onCancelUpload = viewModel::cancelUpload,
                 onUpload = { uri, type, caption ->
@@ -811,6 +816,8 @@ private fun CreateAlbumDialog(
 @Composable
 private fun UploadMediaDialog(
     isUploading: Boolean,
+    isCompressing: Boolean,
+    compressPercent: Int,
     onDismiss: () -> Unit,
     onCancelUpload: () -> Unit,
     onUpload: (uri: android.net.Uri, type: String, caption: String) -> Unit
@@ -976,7 +983,15 @@ private fun UploadMediaDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text(if (isUploading) "Uploading..." else "Upload")
+                // Transcoding a long clip takes a while; label it so the teacher
+                // isn't staring at a stalled-looking "Uploading...".
+                Text(
+                    when {
+                        isCompressing -> "Compressing $compressPercent%"
+                        isUploading   -> "Uploading..."
+                        else          -> "Upload"
+                    }
+                )
             }
         },
         dismissButton = {
@@ -1281,16 +1296,76 @@ private fun GalleryVideoPlayer(url: String) {
             playWhenReady = true
         }
     }
+    var isBuffering by remember(url) { mutableStateOf(true) }
+    var failed by remember(url) { mutableStateOf(false) }
+
     DisposableEffect(player) {
-        onDispose { player.release() }
-    }
-    AndroidView(
-        factory = { ctx ->
-            PlayerView(ctx).apply {
-                this.player = player
-                useController = true
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                isBuffering = state == Player.STATE_BUFFERING
             }
-        },
-        modifier = Modifier.fillMaxWidth().padding(16.dp)
-    )
+            override fun onPlayerError(error: PlaybackException) {
+                android.util.Log.e(
+                    "GalleryVideoPlayer",
+                    "Video playback failed (code=${error.errorCodeName}) url=$url",
+                    error
+                )
+                failed = true
+                isBuffering = false
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+            player.release()
+        }
+    }
+
+    // Pause when the app leaves the foreground — otherwise audio continues
+    // behind the lock screen or another app.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, player) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) player.pause()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    this.player = player
+                    useController = true
+                    // MUST set explicit MATCH_PARENT layout params. AndroidView
+                    // gives a View with no LayoutParams WRAP_CONTENT, and
+                    // PlayerView's AspectRatioFrameLayout/SurfaceView children are
+                    // MATCH_PARENT — so they measure to 0 against a wrap-content
+                    // parent before the video size is known. The player collapsed
+                    // to nothing: audio played, nothing was visible.
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                }
+            },
+            update = { view ->
+                if (view.player !== player) view.player = player
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (failed) {
+            Text(
+                text = "This video couldn't be played.",
+                color = Color.White
+            )
+        } else if (isBuffering) {
+            CircularProgressIndicator(color = Color.White)
+        }
+    }
 }

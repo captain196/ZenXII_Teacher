@@ -34,6 +34,10 @@ data class GalleryUiState(
     val isLoadingAlbums: Boolean = false,
     val isLoadingMedia: Boolean = false,
     val isUploading: Boolean = false,
+    /** True while a picked video is being transcoded before upload. */
+    val isCompressing: Boolean = false,
+    /** Compression progress 0..100 (only meaningful while [isCompressing]). */
+    val compressPercent: Int = 0,
     val isCreatingAlbum: Boolean = false,
     val showCreateAlbumDialog: Boolean = false,
     val showUploadMediaDialog: Boolean = false,
@@ -278,6 +282,37 @@ class GalleryTeacherViewModel @Inject constructor(
                     ?: tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
                     ?: throw Exception("School ID not available")
 
+                // Videos: transcode to ~720p/2Mbps BEFORE the size check, exactly
+                // as Stories does. Without this the raw clip goes straight at the
+                // 25 MB cap — and a modern phone shoots 1080p60 at ~40-60 Mbps, so
+                // 25 MB is 4-8 SECONDS of video. Practically every real clip was
+                // rejected with "Video too large", which reads as "gallery video
+                // upload is broken". The compressor returns the ORIGINAL uri on
+                // any failure, so this can only help.
+                val sourceUri = if (declaredType == "video") {
+                    _uiState.update { it.copy(isCompressing = true, compressPercent = 0) }
+                    try {
+                        com.schoolsync.teacher.util.StoryVideoCompressor.compress(context, uri) { pct ->
+                            _uiState.update { it.copy(compressPercent = pct) }
+                        }
+                    } finally {
+                        _uiState.update { it.copy(isCompressing = false, compressPercent = 0) }
+                    }
+                } else {
+                    uri
+                }
+
+                // Size is checked HERE, against the compressed output, not the
+                // raw pick (see GalleryMediaUploader.validateSize).
+                if (declaredType == "video") {
+                    val sizeError = GalleryMediaUploader.validateSize(context, sourceUri, declaredType)
+                    if (sizeError != null) {
+                        _uiState.update { it.copy(isUploading = false) }
+                        _events.emit(GalleryEvent.Error(sizeError))
+                        return@launch
+                    }
+                }
+
                 val timeout = if (declaredType == "video") VIDEO_UPLOAD_TIMEOUT_MS else IMAGE_UPLOAD_TIMEOUT_MS
                 withTimeout(timeout) {
                     Log.d(TAG, "uploadMediaFile: starting upload type=$declaredType")
@@ -286,7 +321,8 @@ class GalleryTeacherViewModel @Inject constructor(
                         uri         = uri,
                         schoolId    = schoolId,
                         albumId     = album.albumId,
-                        declaredType= declaredType
+                        declaredType= declaredType,
+                        sourceUri   = sourceUri
                     )
                     uploadedPath = upload.storagePath
                     Log.d(TAG, "uploadMediaFile: storage upload OK")

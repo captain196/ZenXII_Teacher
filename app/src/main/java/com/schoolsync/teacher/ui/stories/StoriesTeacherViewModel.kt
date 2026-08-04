@@ -475,19 +475,34 @@ class StoriesTeacherViewModel @Inject constructor(
     }
 
     // ─── Mapper: Firestore doc → existing UI Story model ───────────
+    /**
+     * Parse an ISO-8601 timestamp to epoch millis, or 0 when unparseable
+     * (which the UI renders as "no time" rather than a wrong one).
+     * Needed because the admin panel writes createdAt as a string.
+     */
+    private fun parseIsoMillis(s: String): Long = runCatching {
+        java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli()
+    }.recoverCatching {
+        java.time.Instant.parse(s).toEpochMilli()
+    }.getOrDefault(0L)
+
     private fun StoryDoc.toStory(): Story {
         // createdAt is Any? — Firestore may deliver Timestamp; convert
         // to epoch millis for the UI's existing Long-typed field.
         val createdMillis = when (val ts = createdAt) {
             is com.google.firebase.Timestamp -> ts.seconds * 1000L + ts.nanoseconds / 1_000_000L
             is Number -> ts.toLong()
-            is String -> 0L  // server timestamp pending — show as 0
+            // Admin-panel stories write createdAt as an ISO-8601 STRING
+            // (Stories.php uses date('c')), not a Timestamp. Returning 0 here
+            // made every admin-posted story render with a blank timestamp.
+            is String -> parseIsoMillis(ts)
             else -> 0L
         }
         return Story(
             storyId    = id,
             mediaUrl   = mediaUrl,
             type       = type,
+            thumbnailUrl = thumbnailUrl,
             caption    = caption,
             createdAt  = createdMillis,
             expiresAt  = expiresAtMillis,      // canonical Timestamp → Long

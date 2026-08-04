@@ -444,22 +444,36 @@ private fun StoryCard(
                 .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
                 .background(SurfaceDark)
         ) {
-            if (story.mediaUrl.isNotBlank()) {
+            // For a video, the tile must show the POSTER, never the video URL.
+            // This used to pass story.mediaUrl straight to Coil for both types;
+            // Coil's BitmapFactoryDecoder cannot decode an .mp4, so every video
+            // story rendered as a permanently blank box (the Videocam fallback
+            // below only fires when mediaUrl is empty, which it never is).
+            // Deliberately NOT using VideoFrameDecoder here: it needs a local
+            // file, so it would download the whole video to draw a thumbnail.
+            val isVideoStory = story.type.equals("video", ignoreCase = true)
+            val tileUrl = storyTileUrl(story)
+            var tileFailed by remember(tileUrl) { mutableStateOf(false) }
+
+            if (tileUrl.isNotBlank() && !tileFailed) {
                 AsyncImage(
-                    model = story.mediaUrl,
+                    model = tileUrl,
                     contentDescription = story.caption.ifBlank { "Story" },
                     modifier = Modifier
                         .fillMaxSize()
                         .let { if (isExpired) it.background(Color.Black.copy(alpha = 0.4f)) else it },
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    onError = { tileFailed = true }
                 )
             } else {
+                // No poster (older video story, or poster extraction failed) or
+                // the poster 404'd — show the type glyph rather than a blank box.
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        if (story.type == "video") Icons.Filled.Videocam else Icons.Filled.Image,
+                        if (isVideoStory) Icons.Filled.Videocam else Icons.Filled.Image,
                         contentDescription = null,
                         tint = TextTertiary,
                         modifier = Modifier.size(40.dp)
@@ -1074,11 +1088,15 @@ private fun StoryInsightsSheet(
                             .clip(RoundedCornerShape(10.dp))
                             .background(Glass)
                     ) {
-                        if (story.mediaUrl.isNotBlank()) {
+                        // Poster URL, not the video. VideoFrameDecoder needs a
+                        // LOCAL file, so pointing it at a remote .mp4 made Coil
+                        // buffer the entire video to disk just to draw this 46dp
+                        // box — routinely timing out and leaving it blank.
+                        val posterOrImage = storyTileUrl(story)
+                        if (posterOrImage.isNotBlank()) {
                             AsyncImage(
                                 model = coil.request.ImageRequest.Builder(LocalContext.current)
-                                    .data(story.mediaUrl)
-                                    .apply { if (story.type == "video") decoderFactory(coil.decode.VideoFrameDecoder.Factory()) }
+                                    .data(posterOrImage)
                                     .crossfade(true).build(),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
@@ -1339,11 +1357,12 @@ private fun ArchivedThumb(story: Story, viewCount: Int, onClick: () -> Unit) {
                 .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
                 .background(SurfaceDark)
         ) {
-            if (story.mediaUrl.isNotBlank()) {
+            // Poster URL, not the video — see storyTileUrl().
+            val archivedTileUrl = storyTileUrl(story)
+            if (archivedTileUrl.isNotBlank()) {
                 AsyncImage(
                     model = coil.request.ImageRequest.Builder(LocalContext.current)
-                        .data(story.mediaUrl)
-                        .apply { if (story.type == "video") decoderFactory(coil.decode.VideoFrameDecoder.Factory()) }
+                        .data(archivedTileUrl)
                         .crossfade(true).build(),
                     contentDescription = story.caption.ifBlank { "Story" },
                     contentScale = ContentScale.Crop,
@@ -1637,6 +1656,18 @@ private suspend fun downloadStoryMedia(context: android.content.Context, story: 
     }
 
 @androidx.annotation.OptIn(UnstableApi::class)
+/**
+ * The URL to render as a story's still thumbnail.
+ *
+ * For a video that is the uploaded POSTER, never the video itself: Coil's image
+ * decoder cannot decode an .mp4 (blank tile), and VideoFrameDecoder requires a
+ * local file so it would download the entire video to produce one frame. Videos
+ * uploaded before posters were wired through return "" — callers fall back to a
+ * type glyph. Type match is case-insensitive so a legacy "Video" still works.
+ */
+private fun storyTileUrl(story: Story): String =
+    if (story.type.equals("video", ignoreCase = true)) story.thumbnailUrl else story.mediaUrl
+
 @Composable
 private fun ArchivedVideoPlayer(url: String) {
     val context = LocalContext.current
@@ -1653,7 +1684,12 @@ private fun ArchivedVideoPlayer(url: String) {
             prepare()
         }
     }
-    DisposableEffect(Unit) { onDispose { player.release() } }
+    // Key on `player`, NOT Unit. The player is remember(url)-keyed, so when the
+    // url changes in a retained slot a new ExoPlayer is built while a Unit-keyed
+    // effect never re-runs: the old instance is never released AND onDispose
+    // still captures the FIRST player, so the current one leaks too — audio kept
+    // playing from the orphan.
+    DisposableEffect(player) { onDispose { player.release() } }
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
@@ -1661,6 +1697,7 @@ private fun ArchivedVideoPlayer(url: String) {
                 useController = true
             }
         },
+        update = { view -> if (view.player !== player) view.player = player },
         modifier = Modifier.fillMaxSize()
     )
 }
