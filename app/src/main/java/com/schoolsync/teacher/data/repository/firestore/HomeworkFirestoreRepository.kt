@@ -79,6 +79,40 @@ class HomeworkFirestoreRepository @Inject constructor(
             val suffix = random.joinToString("") { "%02x".format(it) }
             return "${schoolCode}_${System.currentTimeMillis()}_$suffix"
         }
+
+        /**
+         * Normalise a dueDate to ISO 8601 with timezone offset (school's
+         * local time, IST = +05:30). Inputs already in ISO-with-TZ form are
+         * passed through unchanged; date-only "YYYY-MM-DD" is pinned to end
+         * of day so date-picker UIs keep working. Reads on legacy docs are
+         * unaffected — this is write-side only.
+         *
+         * Pure string logic (no instance state / no Firebase). Lives in the
+         * companion so JVM unit tests (HomeworkDateLogicTest) can exercise it
+         * without a live Firestore/TokenManager. Call sites inside the class
+         * are unchanged — companion members resolve unqualified.
+         */
+        internal fun normalizeDueDate(input: String): String {
+            val s = input.trim()
+            if (s.isEmpty()) return s
+            val isoTz = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}([+-]\\d{2}:?\\d{2}|Z)$")
+            if (isoTz.matches(s)) return s
+            if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(s)) return "${s}T23:59:59+05:30"
+            return s
+        }
+
+        /**
+         * Whitelist a caller-supplied review status. Any value outside the
+         * accepted set falls back to "reviewed"; accepted values are
+         * lower-cased. Extracted from [reviewOrMark] so the whitelist can be
+         * unit-tested in isolation. Behaviour is identical to the previous
+         * inline `safeStatus` expression.
+         */
+        internal fun sanitizeReviewStatus(status: String): String =
+            when (status.lowercase()) {
+                "reviewed", "complete", "incomplete", "submitted", "pending" -> status.lowercase()
+                else -> "reviewed"
+            }
     }
 
     /**
@@ -230,6 +264,52 @@ class HomeworkFirestoreRepository @Inject constructor(
     }
 
     /**
+     * Edit an existing homework's text fields + dueDate + subject WITHOUT
+     * touching submissions, teacherMarks, submissionCount, totalStudents or
+     * attachments. Mirrors create's input-boundary length validation and
+     * dueDate normalisation (end-of-day IST ISO) so edits stay consistent
+     * with freshly-created docs. A retroactively-shortened dueDate is allowed
+     * to land as-is — the Parent app's isOverdue() handles it the same way it
+     * handles any past-due homework, so no special force flag is needed.
+     */
+    suspend fun updateHomework(
+        homeworkId: String,
+        title: String,
+        description: String,
+        subject: String,
+        dueDate: String
+    ): Result<Unit> {
+        if (title.toByteArray().size > 200) {
+            return Result.failure(IllegalArgumentException("Title exceeds 200 characters."))
+        }
+        if (subject.toByteArray().size > 100) {
+            return Result.failure(IllegalArgumentException("Subject exceeds 100 characters."))
+        }
+        if (description.toByteArray().size > 10000) {
+            return Result.failure(IllegalArgumentException("Description exceeds 10000 characters."))
+        }
+
+        val normalizedDueDate = normalizeDueDate(dueDate)
+        return try {
+            firestoreService.updateDocument(
+                Constants.Firestore.HOMEWORK,
+                homeworkId,
+                mapOf(
+                    "title" to title,
+                    "description" to description,
+                    "subject" to subject,
+                    "dueDate" to normalizedDueDate
+                )
+            )
+            debugLog("ACC_HW_UPDATE_OK hwId=$homeworkId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            debugLog("ACC_HW_UPDATE_FAILED hwId=$homeworkId err=${e.javaClass.simpleName}:${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Fetch all homework for a section, ordered by creation date descending.
      *
      * Primary query: `schoolId + sectionKey + orderBy(createdAt desc)`. This
@@ -241,28 +321,42 @@ class HomeworkFirestoreRepository @Inject constructor(
     suspend fun getHomework(sectionKey: String): Result<List<HomeworkDoc>> {
         val schoolCode = getSchoolCode()
             ?: return Result.failure(Exception("School code not available"))
+        // S1 session scoping: when an active session is set, filter homework
+        // to that session so docs from prior academic sessions don't leak in.
+        // Blank/absent session ⇒ null ⇒ run the legacy unfiltered query (no
+        // behavioural change for callers without a seeded session). The
+        // composite index for the filtered path is
+        // [schoolId, sectionKey, session, createdAt DESC] — see fallback below
+        // for the not-yet-deployed window.
+        val session = getSession()
 
         return try {
             val homework = firestoreService.queryDocumentsAs<HomeworkDoc>(
                 Constants.Firestore.HOMEWORK
             ) { ref ->
-                ref.whereEqualTo("schoolId", schoolCode)
+                var q: Query = ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("sectionKey", sectionKey)
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                if (session != null) q = q.whereEqualTo("session", session)
+                q.orderBy("createdAt", Query.Direction.DESCENDING)
             }
             Result.success(homework)
         } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
             if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION) {
                 android.util.Log.w(
                     "HomeworkRepo",
-                    "Composite index missing for homework(schoolId+sectionKey+createdAt) — falling back to client-side sort"
+                    "Composite index missing for homework(schoolId+sectionKey+session+createdAt) — falling back to client-side sort"
                 )
                 runCatching {
                     val rows = firestoreService.queryDocumentsAs<HomeworkDoc>(
                         Constants.Firestore.HOMEWORK
                     ) { ref ->
-                        ref.whereEqualTo("schoolId", schoolCode)
+                        var q: Query = ref.whereEqualTo("schoolId", schoolCode)
                             .whereEqualTo("sectionKey", sectionKey)
+                        // Keep the same session scoping in the fallback so the
+                        // result set is identical whether or not the composite
+                        // index is deployed yet.
+                        if (session != null) q = q.whereEqualTo("session", session)
+                        q
                     }
                     rows.sortedByDescending { row ->
                         // createdAt is Any? — could be a Firestore Timestamp,
@@ -383,16 +477,13 @@ class HomeworkFirestoreRepository @Inject constructor(
         // status flows through to both the submission (existing students) and
         // the teacherMark (non-submitters) so the displayed pill always
         // matches what the teacher selected.
-        val safeStatus = when (status.lowercase()) {
-            "reviewed", "complete", "incomplete", "submitted", "pending" -> status.lowercase()
-            else -> "reviewed"
-        }
+        val safeStatus = sanitizeReviewStatus(status)
 
         val firestore = FirebaseFirestore.getInstance()
         val docId = "${homeworkId}_${studentId}"
         val homeworkRef = firestore.collection(Constants.Firestore.HOMEWORK).document(homeworkId)
         val submissionRef = firestore.collection(Constants.Firestore.SUBMISSIONS).document(docId)
-        val markRef = firestore.collection("teacherMarks").document(docId)
+        val markRef = firestore.collection(Constants.Firestore.TEACHER_MARKS).document(docId)
         val trimmedRemark = remark.trim()
 
         return try {
@@ -580,27 +671,18 @@ class HomeworkFirestoreRepository @Inject constructor(
         }
     }
 
+    // NOTE (issue #9): tokenManager.schoolId and tokenManager.schoolCode hold
+    // the SAME value in practice. AuthRepository sets LoginUser.schoolCode =
+    // schoolId, then calls saveProfile (KEY_SCHOOL_ID = schoolId) AND
+    // saveSchoolCode(schoolId). So homework queries (schoolId) and the roster
+    // query / Storage path scope (schoolCode) resolve to the same SCH_XXXXXX
+    // value — they do NOT diverge. The two TokenManager keys are kept distinct
+    // only for historical reasons (schoolCode once held the numeric login code).
     private suspend fun getSchoolCode(): String? {
         return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun getSession(): String? {
         return tokenManager.session.firstOrNull()?.takeIf { it.isNotBlank() }
-    }
-
-    /**
-     * Normalise a dueDate to ISO 8601 with timezone offset (school's
-     * local time, IST = +05:30). Inputs already in ISO-with-TZ form are
-     * passed through unchanged; date-only "YYYY-MM-DD" is pinned to end
-     * of day so date-picker UIs keep working. Reads on legacy docs are
-     * unaffected — this is write-side only.
-     */
-    private fun normalizeDueDate(input: String): String {
-        val s = input.trim()
-        if (s.isEmpty()) return s
-        val isoTz = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}([+-]\\d{2}:?\\d{2}|Z)$")
-        if (isoTz.matches(s)) return s
-        if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(s)) return "${s}T23:59:59+05:30"
-        return s
     }
 }

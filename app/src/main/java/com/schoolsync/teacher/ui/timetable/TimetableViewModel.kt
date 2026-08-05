@@ -68,14 +68,19 @@ class TimetableViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                // Get assigned classes from TeacherRepository (Firestore-only)
-                val assignmentsResult = teacherRepository.getAssignedClasses()
-                val classSections = assignmentsResult.getOrNull()
-                    ?.map { it.className to it.section }?.distinct()
-                    ?: emptyList()
+                // Get assigned classes from TeacherRepository (still RTDB for assignments)
+                val assignments = teacherRepository.getAssignedClasses().getOrNull() ?: emptyList()
+                val classSections = assignments
+                    .map { it.className to it.section }.distinct()
+                // Subject keys let the reader claim blank-teacherId periods that
+                // match one of my assigned (class, section, subject) tuples —
+                // covers admin timetables published without a teacher on a slot.
+                val mySubjectKeys = TimetableFirestoreRepository.subjectKeysOf(
+                    assignments.map { Triple(it.className, it.section, it.subject) }
+                )
 
                 // Fetch timetable from Firestore
-                timetableFirestoreRepo.getMyTimetable(classSections).fold(
+                timetableFirestoreRepo.getMyTimetable(classSections, mySubjectKeys).fold(
                     onSuccess = { dayTimetables ->
                         val maxPeriods = dayTimetables.maxOfOrNull { it.periods.size } ?: 8
                         val totalPeriods = maxPeriods.coerceAtLeast(8)

@@ -15,6 +15,7 @@ data class GalleryAlbumDoc(
     val title: String = "",
     val description: String = "",
     val coverImage: String = "",           // canonical: NOT coverUrl
+    val coverPinned: Boolean = false,      // true = admin pinned cover; uploads must NOT auto-advance it
     val source: String = "general",        // "event" | "general"
     val eventId: String = "",
     val session: String = "",
@@ -38,6 +39,8 @@ data class GalleryMediaDoc(
     val albumId: String = "",
     val url: String = "",
     val type: String = "image",            // "image" | "video"
+    val thumbnail: String = "",            // poster frame for video (cross-system contract)
+    val duration: String = "",             // video length label (cross-system contract; written as string, may be "")
     val caption: String = "",
     val isArchived: Boolean = false,
     val uploadedBy: String = "",

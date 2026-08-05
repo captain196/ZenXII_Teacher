@@ -1,6 +1,7 @@
 package com.schoolsync.teacher.data.repository
 
 import android.util.Log
+import com.schoolsync.teacher.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.Query
@@ -127,6 +128,10 @@ class RedFlagRepository @Inject constructor(
         if (severity !in ALLOWED_SEVERITIES) {
             return Result.failure(IllegalArgumentException("Invalid severity: $severity"))
         }
+        // Cap message length to match the admin panel (F10) — an unbounded
+        // free-text "more options" message would bloat the doc and the
+        // parent-app render.
+        val message = flag.message.trim().take(MAX_MESSAGE_LENGTH)
 
         return try {
             val schoolId   = resolveSchoolId()
@@ -154,7 +159,7 @@ class RedFlagRepository @Inject constructor(
                 "type"         to type,
                 "severity"     to severity,
                 "status"       to "active",
-                "message"      to flag.message,
+                "message"      to message,
                 "subject"      to flag.subject,
                 "teacherId"    to teacherUid,
                 "teacherName"  to flag.teacherName,
@@ -173,12 +178,14 @@ class RedFlagRepository @Inject constructor(
                 "isArchived"    to false
             )
 
-            // Loud log so the parent-side mismatch (studentId not matching
-            // parent's user.userId) can be diagnosed via:
-            //   adb logcat -s RedFlagRepo:*
-            Log.i(TAG, "createFlag write -> docId=$docId, studentId=${flag.studentId}, " +
-                "schoolId=$schoolId, teacherUid=$teacherUid, className='${flag.className}', " +
-                "section='${flag.section}'")
+            // Diagnostic for parent-side studentId mismatch. Debug builds only —
+            // studentId/schoolId/teacherUid are PII and must not persist in
+            // release logcat. adb logcat -s RedFlagRepo:*
+            if (BuildConfig.DEBUG) {
+                Log.i(TAG, "createFlag write -> docId=$docId, studentId=${flag.studentId}, " +
+                    "schoolId=$schoolId, teacherUid=$teacherUid, className='${flag.className}', " +
+                    "section='${flag.section}'")
+            }
 
             // The write is idempotent — docId is `{schoolId}_{flagId}` and
             // `flagId` is generated as a UUID-suffixed timestamp, so a
@@ -204,7 +211,7 @@ class RedFlagRepository @Inject constructor(
                     "severity"    to severity,
                     "flagType"    to type,
                     "subject"     to flag.subject,
-                    "message"     to flag.message,
+                    "message"     to message,
                     "teacherName" to flag.teacherName,
                     "status"      to "pending",
                     "createdAt"   to com.google.firebase.Timestamp.now()
@@ -221,11 +228,37 @@ class RedFlagRepository @Inject constructor(
     }
 
     /**
+     * Locate the actual stored docId for a flagId, tolerating schoolId /
+     * schoolCode prefix drift (F7): a flag created before schoolId was
+     * populated carries a schoolCode-prefixed docId, so resolve/delete
+     * computed from the (now-populated) schoolId would miss it. Returns the
+     * real docId + parsed flag, or null if not found under either prefix.
+     */
+    private suspend fun findFlagDoc(flagId: String): Pair<String, StudentFlag>? {
+        val schoolId = resolveSchoolId() ?: return null
+        val candidates = linkedSetOf(docIdFor(schoolId, flagId))
+        resolveSchoolCode()?.let { candidates.add(docIdFor(it, flagId)) }
+        for (docId in candidates) {
+            val doc = try {
+                firestoreService.firestore
+                    .collection(Constants.Firestore.STUDENT_FLAGS)
+                    .document(docId).get(Source.SERVER).await()
+            } catch (e: Exception) { null }
+            if (doc != null && doc.exists()) return docId to snapshotToFlag(doc)
+        }
+        return null
+    }
+
+    /**
      * Resolve an existing flag (status -> "resolved").
      *
      * Note: Firestore rules enforce that teachers can only resolve flags
      * they themselves created (request.auth.uid == resource.data.teacherId).
      * Admin roles can resolve any flag in their school.
+     *
+     * On success, queues a best-effort FLAG_RESOLVED push so the parent is
+     * told the flag was cleared (mirrors the create producer). Also drift-safe
+     * on the docId (F7).
      */
     suspend fun resolveFlag(flagId: String): Result<Unit> {
         return try {
@@ -235,7 +268,10 @@ class RedFlagRepository @Inject constructor(
                 ?: tokenManager.userId.firstOrNull().orEmpty()
             val nowMs      = System.currentTimeMillis()
 
-            val docId = docIdFor(schoolId, flagId)
+            // Drift-safe: locate the real doc and reuse its data for the push.
+            val found = findFlagDoc(flagId)
+            val docId = found?.first ?: docIdFor(schoolId, flagId)
+
             firestoreService.updateDocument(
                 Constants.Firestore.STUDENT_FLAGS,
                 docId,
@@ -246,6 +282,31 @@ class RedFlagRepository @Inject constructor(
                     "updatedAt"    to firestoreService.serverTimestamp()
                 )
             )
+
+            // Best-effort — notify the flagged student's parent that the flag
+            // was cleared. Cloud Function FLAG_RESOLVED mark targets studentId.
+            found?.second?.let { flag ->
+                try {
+                    val reqId = "${schoolId}_flagresolved_${flagId}"
+                    firestoreService.setDocument("pushRequests", reqId, mapOf(
+                        "mark"        to "FLAG_RESOLVED",
+                        "schoolId"    to schoolId,
+                        "flagId"      to flagId,
+                        "studentId"   to flag.studentId,
+                        "studentName" to flag.studentName,
+                        "severity"    to flag.severity,
+                        "flagType"    to flag.type,
+                        "subject"     to flag.subject,
+                        "message"     to flag.message,
+                        "teacherName" to flag.teacherName,
+                        "status"      to "pending",
+                        "createdAt"   to com.google.firebase.Timestamp.now()
+                    ))
+                } catch (e: Exception) {
+                    Log.w(TAG, "resolve pushRequests write failed (non-fatal): ${e.message}")
+                }
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -269,17 +330,23 @@ class RedFlagRepository @Inject constructor(
                 ?: tokenManager.userId.firstOrNull().orEmpty()
             val nowMs      = System.currentTimeMillis()
 
-            val docId = docIdFor(schoolId, flagId)
-            firestoreService.updateDocument(
-                Constants.Firestore.STUDENT_FLAGS,
-                docId,
-                mapOf(
-                    "status"      to "deleted",
-                    "deletedAtMs" to nowMs,
-                    "deletedBy"   to teacherUid,
-                    "updatedAt"   to firestoreService.serverTimestamp()
-                )
+            val updates = mapOf(
+                "status"      to "deleted",
+                "deletedAtMs" to nowMs,
+                "deletedBy"   to teacherUid,
+                "updatedAt"   to firestoreService.serverTimestamp()
             )
+            try {
+                firestoreService.updateDocument(
+                    Constants.Firestore.STUDENT_FLAGS, docIdFor(schoolId, flagId), updates
+                )
+            } catch (e: Exception) {
+                // docId prefix drift (F7): update() throws NOT_FOUND if the flag
+                // was stored under the schoolCode prefix. Retry the alternate.
+                val alt = resolveSchoolCode()?.takeIf { it != schoolId }?.let { docIdFor(it, flagId) }
+                    ?: throw e
+                firestoreService.updateDocument(Constants.Firestore.STUDENT_FLAGS, alt, updates)
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "softDeleteFlag failed for $flagId", e)
@@ -306,7 +373,7 @@ class RedFlagRepository @Inject constructor(
             val snap = try {
                 query.get(Source.SERVER).await()
             } catch (e: Exception) {
-                Log.w(TAG, "Server fetch failed for student $studentId, falling back to cache: ${e.message}")
+                if (BuildConfig.DEBUG) Log.w(TAG, "Server fetch failed for student $studentId, falling back to cache: ${e.message}")
                 query.get(Source.CACHE).await()
             }
             // Hide soft-deleted flags.
@@ -477,6 +544,7 @@ class RedFlagRepository @Inject constructor(
     companion object {
         private const val TAG = "RedFlagRepo"
         private const val DEFAULT_WINDOW_DAYS = 60L
+        private const val MAX_MESSAGE_LENGTH = 1000   // matches admin panel MAX_MESSAGE_LENGTH
         private val ALLOWED_TYPES      = setOf("homework", "behavior", "performance")
         private val ALLOWED_SEVERITIES = setOf("low", "medium", "high")
     }

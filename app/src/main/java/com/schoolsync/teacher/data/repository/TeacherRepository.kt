@@ -151,23 +151,71 @@ class TeacherRepository @Inject constructor(
             val session = tokenManager.session.firstOrNull() ?: return@flow
             val teacherId = tokenManager.userId.firstOrNull() ?: return@flow
 
+            // Query by schoolId + teacherId; filter session client-side (mirrors
+            // getAssignedClasses — avoids a 3-field composite index).
             firestoreService.observeQuery(Constants.Firestore.SUBJECT_ASSIGNMENTS) { ref ->
                 ref.whereEqualTo("schoolId", schoolId)
-                    .whereEqualTo("session", session)
                     .whereEqualTo("teacherId", teacherId)
             }.collect { snapshot ->
-                val assignments = snapshot.documents.mapNotNull { doc ->
-                    val obj = doc.toObject(SubjectAssignmentDoc::class.java) ?: return@mapNotNull null
-                    if (obj.archived) return@mapNotNull null
-                    ClassAssignment(
-                        assignmentId = doc.id,
-                        teacherId = obj.teacherId,
-                        teacherName = obj.teacherName,
-                        className = Constants.classKey(obj.className),
-                        section = Constants.sectionKey(obj.section),
-                        subject = obj.subjectName.ifBlank { obj.subjectCode },
-                        classTeacher = obj.isClassTeacher
-                    )
+                val assignments = mutableListOf<ClassAssignment>()
+                for (docSnap in snapshot.documents) {
+                    val obj = docSnap.toObject(SubjectAssignmentDoc::class.java) ?: continue
+                    if (obj.session != session || obj.archived) continue
+                    val ck = Constants.classKey(obj.className)
+
+                    if (obj.section.isNotBlank()) {
+                        assignments.add(
+                            ClassAssignment(
+                                assignmentId = docSnap.id,
+                                teacherId = obj.teacherId,
+                                teacherName = obj.teacherName,
+                                className = ck,
+                                section = Constants.sectionKey(obj.section),
+                                subject = obj.subjectName.ifBlank { obj.subjectCode },
+                                classTeacher = obj.isClassTeacher
+                            )
+                        )
+                    } else {
+                        // Class-wide (section="") → expand across every section
+                        // of the class, same as the one-shot getAssignedClasses.
+                        val sectionLetters = try {
+                            firestoreService.queryDocumentsAs<com.schoolsync.teacher.data.model.firestore.SectionDoc>(
+                                Constants.Firestore.SECTIONS
+                            ) { ref ->
+                                ref.whereEqualTo("schoolId", schoolId)
+                                    .whereEqualTo("className", ck)
+                            }.filter { it.session == session }.map { it.section }
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        if (sectionLetters.isEmpty()) {
+                            assignments.add(
+                                ClassAssignment(
+                                    assignmentId = docSnap.id,
+                                    teacherId = obj.teacherId,
+                                    teacherName = obj.teacherName,
+                                    className = ck,
+                                    section = "",
+                                    subject = obj.subjectName.ifBlank { obj.subjectCode },
+                                    classTeacher = obj.isClassTeacher
+                                )
+                            )
+                        } else {
+                            for (sec in sectionLetters) {
+                                assignments.add(
+                                    ClassAssignment(
+                                        assignmentId = "${docSnap.id}_$sec",
+                                        teacherId = obj.teacherId,
+                                        teacherName = obj.teacherName,
+                                        className = ck,
+                                        section = Constants.sectionKey(sec),
+                                        subject = obj.subjectName.ifBlank { obj.subjectCode },
+                                        classTeacher = obj.isClassTeacher
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
                 emit(assignments)
             }

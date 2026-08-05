@@ -1,11 +1,16 @@
 package com.schoolsync.teacher.util
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 import com.schoolsync.teacher.data.model.firestore.Attachment
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -85,6 +90,15 @@ object HomeworkAttachmentUploader {
 
     /** Bytes-per-MiB constant for human-readable error messages. */
     private const val MIB: Long = 1024L * 1024L
+
+    /**
+     * Longest-edge cap (px) for image attachments. Images are downscaled +
+     * re-encoded to JPEG on-device before upload (mirrors StoryMediaUploader),
+     * so a 12 MP phone photo lands in Storage as a few-hundred-KB JPEG instead
+     * of several MB. Non-image files (PDFs) are uploaded byte-for-byte.
+     */
+    private const val MAX_IMAGE_DIMEN = 1600
+    private const val JPEG_QUALITY = 80
 
     /**
      * Pre-upload validation. Returns null on success, or a user-facing
@@ -179,10 +193,28 @@ object HomeworkAttachmentUploader {
         }
 
         val cr = context.contentResolver
-        val mime = cr.getType(uri).orEmpty().lowercase()
-        val sizeBytes: Long = try {
+        val originalMime = cr.getType(uri).orEmpty().lowercase()
+        var sizeBytes: Long = try {
             cr.openAssetFileDescriptor(uri, "r")?.use { it.length.takeIf { len -> len > 0 } } ?: 0L
         } catch (_: Exception) { 0L }
+
+        // Downscale + re-encode images on-device before upload (mirrors
+        // StoryMediaUploader.compressImage). Non-image files (PDFs) upload
+        // unchanged. compressImage returns the original uri on any failure so
+        // the upload still proceeds.
+        val isImage   = originalMime.startsWith("image/")
+        val uploadUri = if (isImage) compressImage(context, uri) else uri
+        val compressed = isImage && uploadUri != uri
+        if (compressed) {
+            // Report the compressed byte count, not the original.
+            sizeBytes = try {
+                uploadUri.path?.let { File(it).length() }?.takeIf { it > 0 } ?: sizeBytes
+            } catch (_: Exception) { sizeBytes }
+        }
+        // A compressed image is always re-encoded to JPEG, so its stored
+        // Content-Type + extension must reflect that — a .png slug carrying
+        // JPEG bytes would mis-declare its type on download.
+        val mime = if (compressed) "image/jpeg" else originalMime
 
         val originalName = queryDisplayName(context, uri)
         val slug         = sanitizeSlug(originalName)
@@ -200,7 +232,7 @@ object HomeworkAttachmentUploader {
 
         try {
             val ref = FirebaseStorage.getInstance().reference.child(storagePath)
-            ref.putFile(uri).await()
+            ref.putFile(uploadUri).await()
             val downloadUrl = ref.downloadUrl.await().toString()
             val elapsed = System.currentTimeMillis() - started
 
@@ -251,6 +283,68 @@ object HomeworkAttachmentUploader {
     }
 
     // ─── Internal helpers ──────────────────────────────────────────────
+
+    /**
+     * Downscale + re-encode an image to a JPEG no larger than
+     * [MAX_IMAGE_DIMEN] on its longest edge, honouring EXIF rotation, and
+     * write it to the cache dir. Returns a file:// Uri for the compressed
+     * copy, or the original [uri] unchanged on any failure (so upload still
+     * proceeds). Reused verbatim from StoryMediaUploader.compressImage so a
+     * 12 MP phone photo (~5–10 MB) uploads as a ~200–500 KB JPEG.
+     */
+    private fun compressImage(context: Context, uri: Uri): Uri {
+        return try {
+            val cr = context.contentResolver
+
+            // 1. Read bounds only (no full decode) to compute a sane sample.
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            val srcW = bounds.outWidth
+            val srcH = bounds.outHeight
+            if (srcW <= 0 || srcH <= 0) return uri
+
+            // 2. Power-of-two downsample to get within ~2× of target cheaply.
+            var sample = 1
+            val longest = maxOf(srcW, srcH)
+            while (longest / sample > MAX_IMAGE_DIMEN * 2) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            var bmp = cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+                ?: return uri
+
+            // 3. Precise scale to the longest-edge cap.
+            val scale = MAX_IMAGE_DIMEN.toFloat() / maxOf(bmp.width, bmp.height)
+            if (scale < 1f) {
+                bmp = Bitmap.createScaledBitmap(
+                    bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true
+                )
+            }
+
+            // 4. Honour EXIF orientation so portrait photos don't upload sideways.
+            val orientation = cr.openInputStream(uri)?.use {
+                android.media.ExifInterface(it).getAttributeInt(
+                    android.media.ExifInterface.TAG_ORIENTATION,
+                    android.media.ExifInterface.ORIENTATION_NORMAL
+                )
+            } ?: android.media.ExifInterface.ORIENTATION_NORMAL
+            val rotation = when (orientation) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+            if (rotation != 0f) {
+                val m = Matrix().apply { postRotate(rotation) }
+                bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            }
+
+            // 5. Encode JPEG to cache and hand back a file:// Uri.
+            val out = File(context.cacheDir, "hw_attach_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(out).use { bmp.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+            Uri.fromFile(out)
+        } catch (_: Exception) {
+            uri
+        }
+    }
 
     /**
      * Pull the display filename from the ContentResolver. Returns empty

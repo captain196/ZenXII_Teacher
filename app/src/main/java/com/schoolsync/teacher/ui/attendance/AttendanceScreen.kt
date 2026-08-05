@@ -4,9 +4,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,9 +24,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,8 +38,10 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
@@ -72,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.schoolsync.teacher.data.repository.MyCorrection
 import com.schoolsync.teacher.ui.theme.AttendanceAbsent
 import com.schoolsync.teacher.ui.theme.AttendanceHoliday
 import com.schoolsync.teacher.ui.theme.AttendanceLeave
@@ -110,6 +118,7 @@ import java.util.Locale
 
 @Composable
 fun AttendanceScreen(
+    canEdit: Boolean = true,
     viewModel: AttendanceViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -117,6 +126,7 @@ fun AttendanceScreen(
 
     // Presentation-only view switch. Today is always the default landing view.
     var showHistory by remember { mutableStateOf(false) }
+    var showRequests by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
@@ -162,24 +172,12 @@ fun AttendanceScreen(
                             Text("Saving…", fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    state.isClassTeacher && state.stage == Stage.S3_LOCKED -> {
-                        ExtendedFloatingActionButton(
-                            onClick = {
-                                val firstStudent = state.students.firstOrNull()
-                                if (firstStudent != null) {
-                                    viewModel.openCorrectionDialog(firstStudent.studentId, state.todayDay)
-                                }
-                            },
-                            containerColor = ErrorRed,
-                            contentColor = BgStart,
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Icon(Icons.Filled.PersonOff, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Request Correction", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                    state.isClassTeacher && state.hasUnsavedChanges -> {
+                    // NOTE: no auto-FAB in the locked state — a correction is filed by
+                    // tapping the specific student/cell (the old FAB always opened a
+                    // correction for the FIRST student, which was wrong). The locked
+                    // banner + row hint tell the teacher to tap a student.
+                    // Level-gated: a view-only grantee sees attendance but no Save FAB.
+                    canEdit && state.isClassTeacher && state.hasUnsavedChanges -> {
                         ExtendedFloatingActionButton(
                             onClick = viewModel::saveAttendance,
                             containerColor = Teal,
@@ -199,17 +197,31 @@ fun AttendanceScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                if (showHistory) {
-                    HistoryView(
+                when {
+                    showRequests -> RequestsView(
                         state = state,
-                        viewModel = viewModel,
-                        onBackToToday = { showHistory = false }
+                        onBack = { showRequests = false },
+                        onRefresh = viewModel::loadMyCorrections
                     )
-                } else {
-                    TodayView(
+                    showHistory -> HistoryView(
                         state = state,
                         viewModel = viewModel,
-                        onOpenHistory = { showHistory = true }
+                        // Reset to the current month when returning to Today so the
+                        // home view doesn't keep showing the browsed month's marks
+                        // for today's day-number (the "June 10 on the home page" bug).
+                        onBackToToday = {
+                            showHistory = false
+                            viewModel.returnToCurrentMonth()
+                        }
+                    )
+                    else -> TodayView(
+                        state = state,
+                        viewModel = viewModel,
+                        onOpenHistory = { showHistory = true },
+                        onOpenRequests = {
+                            showRequests = true
+                            viewModel.loadMyCorrections()
+                        }
                     )
                 }
             }
@@ -239,7 +251,7 @@ fun AttendanceScreen(
                 onDismissRequest = viewModel::dismissTardyDialog,
                 title = { Text("Arrival Time", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
-                    Column {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         Text(
                             "Enter the student's arrival time (HH:mm, 24-hour):",
                             color = TextSecondary,
@@ -283,7 +295,7 @@ fun AttendanceScreen(
                 onDismissRequest = viewModel::closeCorrectionDialog,
                 title = { Text("Request Correction", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                         Text(
                             "${state.correctionStudentName}  ·  ${state.correctionDate}",
                             color = TextSecondary, fontSize = 12.sp
@@ -368,6 +380,38 @@ fun AttendanceScreen(
                 shape = RoundedCornerShape(16.dp)
             )
         }
+
+        // Discard-unsaved-changes confirmation. Refresh / class-switch / month-switch
+        // all route through the ViewModel's guardUnsaved(): when there are unsaved
+        // marks it raises showDiscardDialog and stashes the navigation. Without this
+        // dialog rendered, that navigation was stashed and NEVER run — so Refresh
+        // silently did nothing and the stale local edit stuck on screen (looked
+        // "saved" but wasn't). Confirming discards the edits and runs the reload.
+        if (state.showDiscardDialog) {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissDiscardChanges,
+                title = { Text("Discard unsaved changes?", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "You have attendance marks that haven't been saved. Continuing will discard them and reload the latest saved data.",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = viewModel::confirmDiscardChanges) {
+                        Text("Discard & reload", color = ErrorRed, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = viewModel::dismissDiscardChanges) {
+                        Text("Keep editing", color = TextSecondary)
+                    }
+                },
+                containerColor = SurfaceDark,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
     }
 }
 
@@ -379,45 +423,36 @@ fun AttendanceScreen(
 private fun TodayView(
     state: AttendanceUiState,
     viewModel: AttendanceViewModel,
-    onOpenHistory: () -> Unit
+    onOpenHistory: () -> Unit,
+    onOpenRequests: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         TodayHeader(
             state = state,
             onClassSelected = viewModel::selectClass,
             onOpenHistory = onOpenHistory,
+            onOpenRequests = onOpenRequests,
             onRefresh = viewModel::refresh
         )
 
-        // Stage governance banner (unchanged) — includes the S2 reason field.
-        if (state.selectedClass != null && state.stage != Stage.UNKNOWN) {
-            StageBanner(
-                stage = state.stage,
-                lockedBy = state.lockedBy,
-                editReason = state.editReason,
-                onReasonChange = viewModel::setEditReason
-            )
-        }
-
-        if (!state.isClassTeacher && state.selectedClass != null) {
-            ReadOnlyWarning()
-        }
-
+        // NOTE: the governance banner (incl. the S2 reason field) and the
+        // read-only notice now live INSIDE TodayScrollBody's LazyColumn so they
+        // scroll away with the content — keeping only the compact header pinned
+        // gives the roster the full screen while marking.
         when {
-            state.isLoading -> LoadingState()
-            state.students.isEmpty() -> EmptyState()
+            state.isLoading -> LoadingState(modifier = Modifier.weight(1f))
+            state.students.isEmpty() -> EmptyState(
+                modifier = Modifier.weight(1f),
+                selectedClass = state.selectedClass,
+                hasOtherClasses = state.availableClasses.size > 1
+            )
             else -> {
-                TodaySummaryCard(state = state)
-
-                if (state.isClassTeacher && state.stage != Stage.S3_LOCKED) {
-                    BulkActionsRow(
-                        onAllPresent = viewModel::markAllPresentToday,
-                        onAllAbsent = viewModel::markAllAbsentToday
-                    )
-                }
-
-                RosterList(
+                TodayScrollBody(
                     state = state,
+                    modifier = Modifier.weight(1f),
+                    onAllPresent = viewModel::markAllPresentToday,
+                    onAllAbsent = viewModel::markAllAbsentToday,
+                    onReasonChange = viewModel::setEditReason,
                     onStudentTap = { studentId ->
                         when {
                             !state.isClassTeacher -> Unit
@@ -425,6 +460,14 @@ private fun TodayView(
                                 viewModel.openCorrectionDialog(studentId, state.todayDay)
                             else ->
                                 viewModel.cycleStatus(studentId, state.todayDay)
+                        }
+                    },
+                    // TCH-C1: long-press → mark Late for today (arrival-time dialog).
+                    // Only meaningful when the teacher can mark and the run isn't
+                    // locked; markTardyToday re-guards these internally too.
+                    onStudentLongPress = { studentId ->
+                        if (state.isClassTeacher && state.stage != Stage.S3_LOCKED) {
+                            viewModel.markTardyToday(studentId)
                         }
                     }
                 )
@@ -438,12 +481,13 @@ private fun TodayHeader(
     state: AttendanceUiState,
     onClassSelected: (ClassSection) -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenRequests: () -> Unit,
     onRefresh: () -> Unit
 ) {
     var classDropdownExpanded by remember { mutableStateOf(false) }
 
-    val todayLabel = remember {
-        SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault())
+    val todayShort = remember {
+        SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault())
             .format(Calendar.getInstance().time)
     }
     val cls = state.selectedClass
@@ -460,87 +504,88 @@ private fun TodayHeader(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Today's Attendance",
-                    color = TextTertiary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = cls?.let { "${it.className} · ${it.section}" } ?: "Select a class",
+                    text = "Attendance",
                     color = TextPrimary,
-                    fontSize = 20.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = todayLabel,
+                    text = todayShort,
                     color = TextSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.width(8.dp))
+
+            // Top-bar actions: class selector + refresh + history, all inline.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box {
+                    OutlinedButton(
+                        onClick = { classDropdownExpanded = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(GlassBorder)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                        modifier = Modifier.widthIn(max = 150.dp)
+                    ) {
+                        Text(
+                            text = cls?.let { "${it.className} · ${it.section}" } ?: "Select Class",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change class", modifier = Modifier.size(18.dp))
+                    }
+                    DropdownMenu(
+                        expanded = classDropdownExpanded,
+                        onDismissRequest = { classDropdownExpanded = false },
+                        modifier = Modifier.background(SurfaceDark)
+                    ) {
+                        if (state.availableClasses.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("No classes assigned", color = TextTertiary) },
+                                onClick = { classDropdownExpanded = false }
+                            )
+                        } else {
+                            state.availableClasses.forEach { classSection ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            classSection.displayName,
+                                            color = if (classSection == state.selectedClass) Teal else TextPrimary
+                                        )
+                                    },
+                                    onClick = {
+                                        onClassSelected(classSection)
+                                        classDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
                 }
-                // Month history entry point
-                OutlinedButton(
-                    onClick = onOpenHistory,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Teal),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = androidx.compose.ui.graphics.SolidColor(Teal.copy(alpha = 0.4f))
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("History", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = onOpenHistory, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.DateRange, contentDescription = "History", tint = Teal)
                 }
-            }
-        }
-
-        // Class switcher — only when the teacher has more than one class.
-        if (state.availableClasses.size > 1) {
-            Spacer(Modifier.height(10.dp))
-            Box {
-                OutlinedButton(
-                    onClick = { classDropdownExpanded = true },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = androidx.compose.ui.graphics.SolidColor(GlassBorder)
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(
-                        text = cls?.displayName ?: "Select Class",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(20.dp))
-                }
-                DropdownMenu(
-                    expanded = classDropdownExpanded,
-                    onDismissRequest = { classDropdownExpanded = false },
-                    modifier = Modifier.background(SurfaceDark)
-                ) {
-                    state.availableClasses.forEach { classSection ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    classSection.displayName,
-                                    color = if (classSection == state.selectedClass) Teal else TextPrimary
-                                )
-                            },
-                            onClick = {
-                                onClassSelected(classSection)
-                                classDropdownExpanded = false
-                            }
-                        )
-                    }
+                // My correction requests — right of the History button.
+                IconButton(onClick = onOpenRequests, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = "My Requests", tint = Teal)
                 }
             }
         }
@@ -682,48 +727,92 @@ private fun BulkActionsRow(
 }
 
 @Composable
-private fun RosterList(
+private fun TodayScrollBody(
     state: AttendanceUiState,
-    onStudentTap: (studentId: String) -> Unit
+    onStudentTap: (studentId: String) -> Unit,
+    onStudentLongPress: (studentId: String) -> Unit,
+    onAllPresent: () -> Unit,
+    onAllAbsent: () -> Unit,
+    onReasonChange: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val today = state.todayDay
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = if (state.isClassTeacher)
-                "Tap a student's status to change it (cycles through the states)."
-            else
-                "Read-only — only the class teacher can mark attendance.",
-            color = TextTertiary,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
-        )
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            contentPadding = PaddingValues(bottom = 96.dp) // clear the FAB
-        ) {
-            items(state.students, key = { it.studentId }) { student ->
+    // Everything scrolls TOGETHER — the governance/reason banner, summary/stat
+    // counts and bulk actions are NOT pinned; they scroll up with the roster so
+    // the student list gets the full screen as you scroll (previously the banner
+    // + summary were a fixed band and only the list scrolled beneath them).
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(bottom = 96.dp) // clear the FAB
+    ) {
+        // Governance banner (S1/S2/S3) incl. the S2 "reason" field — scrolls away.
+        if (state.selectedClass != null && state.stage != Stage.UNKNOWN) {
+            item(key = "stage") {
+                StageBanner(
+                    stage = state.stage,
+                    lockedBy = state.lockedBy,
+                    editReason = state.editReason,
+                    onReasonChange = onReasonChange
+                )
+            }
+        }
+
+        if (!state.isClassTeacher && state.selectedClass != null) {
+            item(key = "readonly") { ReadOnlyWarning() }
+        }
+
+        item(key = "summary") { TodaySummaryCard(state = state) }
+
+        if (state.isClassTeacher && state.stage != Stage.S3_LOCKED) {
+            item(key = "bulk") {
+                BulkActionsRow(onAllPresent = onAllPresent, onAllAbsent = onAllAbsent)
+            }
+        }
+
+        item(key = "hint") {
+            Text(
+                text = when {
+                    !state.isClassTeacher ->
+                        "Read-only — only the class teacher can mark attendance."
+                    state.stage == Stage.S3_LOCKED ->
+                        "Attendance is locked for today. Tap a student to request a correction."
+                    else ->
+                        "Tap a student to cycle Present / Absent / Leave · long-press to mark Late."
+                },
+                color = TextTertiary,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
+        }
+
+        items(state.students, key = { it.studentId }) { student ->
+            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 StudentRow(
                     rollNo = student.rollNo,
                     name = student.name,
                     status = student.dayStatuses[today],
                     enabled = state.isClassTeacher,
-                    onClick = { onStudentTap(student.studentId) }
+                    pending = state.pendingCorrectionIds.contains(student.studentId),
+                    onClick = { onStudentTap(student.studentId) },
+                    onLongClick = { onStudentLongPress(student.studentId) }
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StudentRow(
     rollNo: Int,
     name: String,
     status: AttendanceStatus?,
     enabled: Boolean,
-    onClick: () -> Unit
+    pending: Boolean = false,
+    onClick: () -> Unit,
+    // TCH-C1: long-press marks the student Late for today (opens the arrival-time
+    // dialog). The tap cycle can't reach Tardy, so this is its discoverable entry.
+    onLongClick: () -> Unit = {}
 ) {
     val statusColor = status?.let { getStatusColor(it) } ?: TextTertiary
     val initial = name.trim().firstOrNull()?.uppercase() ?: "?"
@@ -736,7 +825,7 @@ private fun StudentRow(
             .clip(RoundedCornerShape(14.dp))
             .background(Glass.copy(alpha = 0.10f))
             .border(1.dp, GlassBorder.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-            .clickable(enabled = enabled, onClick = onClick)
+            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -761,7 +850,37 @@ private fun StudentRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text("Roll $rollText", color = TextTertiary, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Roll $rollText", color = TextTertiary, fontSize = 12.sp)
+                // Correction-request pending marker: the teacher filed a
+                // correction for this student and it's awaiting admin review.
+                // Without it the row looked unchanged after submit and a teacher
+                // could re-tap (the server dedups, but it read as "nothing happened").
+                if (pending) {
+                    Spacer(Modifier.width(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(WarningAmberSurface)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.HourglassEmpty,
+                            contentDescription = null,
+                            tint = WarningAmber,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            "Correction pending",
+                            color = WarningAmber,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.width(8.dp))
         // Status chip (tap to cycle)
@@ -813,8 +932,8 @@ private fun StatusChip(status: AttendanceStatus?, color: Color, enabled: Boolean
 /* ── Shared small states ─────────────────────────────────────────────── */
 
 @Composable
-private fun LoadingState() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+private fun LoadingState(modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = Teal)
             Spacer(modifier = Modifier.height(8.dp))
@@ -824,9 +943,36 @@ private fun LoadingState() {
 }
 
 @Composable
-private fun EmptyState() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun EmptyState(
+    modifier: Modifier = Modifier,
+    selectedClass: ClassSection? = null,
+    hasOtherClasses: Boolean = false
+) {
+    // Distinguish "no class chosen yet" from "this section has no students".
+    // The latter is the common real case (a section with zero enrolled
+    // students) and previously showed the misleading "Select a class" even
+    // though a class WAS selected — so the teacher had no idea to switch.
+    val title: String
+    val subtitle: String
+    when {
+        selectedClass == null -> {
+            title = "No students found"
+            subtitle = "Select a class to view attendance"
+        }
+        hasOtherClasses -> {
+            title = "No students in ${selectedClass.displayName}"
+            subtitle = "This section has no enrolled students. Pick another class from the selector above."
+        }
+        else -> {
+            title = "No students in ${selectedClass.displayName}"
+            subtitle = "This section has no enrolled students yet."
+        }
+    }
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        ) {
             Icon(
                 Icons.Filled.PersonOff,
                 contentDescription = null,
@@ -834,8 +980,19 @@ private fun EmptyState() {
                 modifier = Modifier.size(64.dp)
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Text("No students found", style = MaterialTheme.typography.titleMedium, color = TextSecondary)
-            Text("Select a class to view attendance", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -861,6 +1018,126 @@ private fun ReadOnlyWarning() {
             fontWeight = FontWeight.Medium
         )
     }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   MY REQUESTS — the teacher's own correction requests (pending/approved/rejected)
+   ════════════════════════════════════════════════════════════════════════ */
+
+@Composable
+private fun RequestsView(
+    state: AttendanceUiState,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.ChevronLeft, contentDescription = "Back", tint = TextSecondary)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("My Correction Requests", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Requests you filed and their status", color = TextSecondary, fontSize = 12.sp)
+            }
+            IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+            }
+        }
+
+        when {
+            state.isLoadingRequests -> LoadingState(modifier = Modifier.weight(1f))
+            state.requestsError != null -> Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    state.requestsError,
+                    color = ErrorRed, fontSize = 13.sp, textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(24.dp)
+                )
+            }
+            state.myCorrections.isEmpty() -> Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(56.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("No correction requests yet", color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+                    Text("Requests you file from a locked or past day appear here.", color = TextTertiary, fontSize = 12.sp, textAlign = TextAlign.Center)
+                }
+            }
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(state.myCorrections, key = { it.requestId }) { req -> RequestCard(req) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RequestCard(req: MyCorrection) {
+    val badgeColor: Color
+    val badgeBg: Color
+    when (req.status) {
+        "approved" -> { badgeColor = AttendancePresent; badgeBg = AttendancePresent.copy(alpha = 0.15f) }
+        "rejected" -> { badgeColor = ErrorRed;          badgeBg = ErrorRed.copy(alpha = 0.15f) }
+        else       -> { badgeColor = WarningAmber;      badgeBg = WarningAmberSurface }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Glass.copy(alpha = 0.10f))
+            .border(1.dp, GlassBorder.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    req.studentName.ifBlank { req.studentId },
+                    color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    listOf(req.date, "${req.className} ${req.section}".trim())
+                        .filter { it.isNotBlank() }.joinToString("  ·  "),
+                    color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                req.status.replaceFirstChar { it.uppercase() },
+                color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(badgeBg).padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(statusLabelOf(req.currentStatus), color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(16.dp))
+            Text(statusLabelOf(req.requestedStatus), color = Teal, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        if (req.reason.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text("“${req.reason}”", color = TextTertiary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+private fun statusLabelOf(code: String): String = when (code.uppercase()) {
+    "P" -> "Present"
+    "A" -> "Absent"
+    "L" -> "Leave"
+    "T" -> "Tardy"
+    "H" -> "Holiday"
+    "V" -> "Vacation"
+    else -> code.ifBlank { "—" }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -918,10 +1195,39 @@ private fun HistoryView(
         }
 
         when {
-            state.isLoading -> LoadingState()
-            state.students.isEmpty() -> EmptyState()
+            state.isLoading -> LoadingState(modifier = Modifier.weight(1f))
+            state.students.isEmpty() -> EmptyState(
+                modifier = Modifier.weight(1f),
+                selectedClass = state.selectedClass,
+                hasOtherClasses = state.availableClasses.size > 1
+            )
             else -> {
-                AttendanceGrid(state = state, onCellClick = viewModel::cycleStatus)
+                AttendanceGrid(
+                    state = state,
+                    modifier = Modifier.weight(1f),
+                    onCellClick = { studentId, day ->
+                        // History grid: gate on class-teacher, then route each tap.
+                        // Today's cell is a free cycle-edit ONLY when the run is not
+                        // locked — when S3-locked it must go to the correction flow,
+                        // exactly like the Today view. (Previously History cycled a
+                        // locked today-cell, which can never save: a misleading
+                        // dead-end that looked like it changed but silently reverted.)
+                        // Past days always go to correction; future days aren't markable.
+                        if (state.isClassTeacher) {
+                            when {
+                                viewModel.isViewingCurrentMonth() && day == state.todayDay ->
+                                    if (state.stage == Stage.S3_LOCKED)
+                                        viewModel.openCorrectionDialog(studentId, day)
+                                    else
+                                        viewModel.cycleStatus(studentId, day)
+                                viewModel.isViewingCurrentMonth() && day > state.todayDay ->
+                                    Unit // future day — not markable
+                                else ->
+                                    viewModel.openCorrectionDialog(studentId, day)
+                            }
+                        }
+                    }
+                )
                 AttendanceLegend()
             }
         }
@@ -1036,6 +1342,13 @@ private fun AttendanceTopBar(
         }
         SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
     }
+    // "All P/All A" mark TODAY only, so they are meaningless on a past month —
+    // disable them there instead of showing an enabled button that silently no-ops.
+    val isCurrentMonth = remember(state.selectedMonth, state.selectedYear) {
+        val now = Calendar.getInstance()
+        state.selectedMonth == now.get(Calendar.MONTH) && state.selectedYear == now.get(Calendar.YEAR)
+    }
+    val bulkEnabled = state.isClassTeacher && isCurrentMonth
 
     Row(
         modifier = Modifier
@@ -1107,14 +1420,14 @@ private fun AttendanceTopBar(
         ) {
             OutlinedButton(
                 onClick = onMarkAllPresent,
-                enabled = state.isClassTeacher,
+                enabled = bulkEnabled,
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = AttendancePresent,
                     disabledContentColor = TextTertiary.copy(alpha = 0.4f)
                 ),
                 border = ButtonDefaults.outlinedButtonBorder.copy(
                     brush = androidx.compose.ui.graphics.SolidColor(
-                        if (state.isClassTeacher) AttendancePresent.copy(alpha = 0.4f)
+                        if (bulkEnabled) AttendancePresent.copy(alpha = 0.4f)
                         else TextTertiary.copy(alpha = 0.2f)
                     )
                 ),
@@ -1127,14 +1440,14 @@ private fun AttendanceTopBar(
             }
             OutlinedButton(
                 onClick = onMarkAllAbsent,
-                enabled = state.isClassTeacher,
+                enabled = bulkEnabled,
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = AttendanceAbsent,
                     disabledContentColor = TextTertiary.copy(alpha = 0.4f)
                 ),
                 border = ButtonDefaults.outlinedButtonBorder.copy(
                     brush = androidx.compose.ui.graphics.SolidColor(
-                        if (state.isClassTeacher) AttendanceAbsent.copy(alpha = 0.4f)
+                        if (bulkEnabled) AttendanceAbsent.copy(alpha = 0.4f)
                         else TextTertiary.copy(alpha = 0.2f)
                     )
                 ),
@@ -1155,17 +1468,22 @@ private fun AttendanceTopBar(
 @Composable
 private fun AttendanceGrid(
     state: AttendanceUiState,
-    onCellClick: (studentId: String, day: Int) -> Unit
+    onCellClick: (studentId: String, day: Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val horizontalScrollState = rememberScrollState()
+    // Shared vertical scroll for BOTH the frozen roll/name column and the
+    // day-cell grid. Without this each LazyColumn kept its OWN scroll offset,
+    // so vertical scrolling desynced the name column from the marks and a
+    // teacher could read one student's name against another's row.
+    val rowScrollState = rememberLazyListState()
     val rollWidth = 40.dp
     val nameWidth = 120.dp
     val dayCellSize = 36.dp
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .fillMaxHeight()
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .glassCard(cornerRadius = 12.dp)
     ) {
@@ -1195,7 +1513,7 @@ private fun AttendanceGrid(
                         Text("Student", style = MaterialTheme.typography.labelMedium, color = TextTertiary, fontWeight = FontWeight.Bold, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp))
                     }
                 }
-                LazyColumn {
+                LazyColumn(state = rowScrollState) {
                     items(state.students, key = { it.studentId }) { student ->
                         Row(modifier = Modifier.border(0.5.dp, DividerColor.copy(alpha = 0.5f))) {
                             Box(
@@ -1263,7 +1581,7 @@ private fun AttendanceGrid(
                         }
                     }
                 }
-                LazyColumn {
+                LazyColumn(state = rowScrollState) {
                     items(state.students, key = { it.studentId }) { student ->
                         Row {
                             for (day in 1..state.daysInMonth) {

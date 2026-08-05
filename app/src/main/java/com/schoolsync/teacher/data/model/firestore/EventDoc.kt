@@ -20,6 +20,7 @@ data class EventDoc(
     val startDate: String = "",       // "2026-04-15"
     val endDate: String = "",
     val location: String = "",
+    val organizer: String = "",
     val status: String = "scheduled", // canonical: scheduled / ongoing / completed / cancelled
     val mediaUrls: List<String> = emptyList(),
     val createdBy: String = "",

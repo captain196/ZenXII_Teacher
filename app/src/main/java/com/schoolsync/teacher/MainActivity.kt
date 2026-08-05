@@ -121,10 +121,16 @@ class MainActivity : ComponentActivity() {
             "circular", "circular_created"                     -> "notices"
             "message"                                          -> "messages"
             "attendance_reminder"                              -> "attendance"
-            "leave_update"                                     -> "leave"
+            "leave_update", "leave_approved", "leave_rejected" -> "leave"
             else -> null
         } ?: return
-        DeepLinkBridge.publish(target)
+        // Carry the tapped notice/circular id (set by the push dispatcher as
+        // noticeId/circularId) so the notices screen can auto-open it. Null-safe:
+        // a payload without an id degrades to plain tab navigation.
+        val arg = if (target == "notices") {
+            intent.getStringExtra("noticeId") ?: intent.getStringExtra("circularId")
+        } else null
+        DeepLinkBridge.publish(target, arg)
     }
 
     private fun requestNotificationPermissionIfNeeded() {

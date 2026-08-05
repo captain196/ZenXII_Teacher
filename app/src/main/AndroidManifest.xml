@@ -13,6 +13,15 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
+    <!-- No advertising / no Ad ID. Firebase Analytics (play-services-measurement)
+         merges these Advertising-ID + Privacy-Sandbox attribution permissions by
+         default; ZenXii uses none of them, so strip them from the merged manifest.
+         Keeps the "no advertising SDKs / no Ad ID" statement in our Privacy Policy
+         and the Play Data Safety form accurate. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+
     <application
         android:name=".SchoolSyncApp"
         android:allowBackup="false"
@@ -47,6 +56,21 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="school_sync_channel" />
+
+        <!-- Icon + tint used when FCM handles a notification-payload while the
+             app is background/closed (system-tray path, no onMessageReceived). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_zenxii" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+
+        <!-- Belt-and-suspenders: tell Firebase Analytics not to collect the
+             Advertising ID at all (in addition to removing the permission above). -->
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
 
     </application>
 </manifest>

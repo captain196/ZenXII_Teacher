@@ -16,9 +16,16 @@ import kotlinx.coroutines.flow.asStateFlow
  * Targets are plain `Route.route` strings — "events", "notices", etc.
  */
 object DeepLinkBridge {
-    private val _pending = MutableStateFlow<String?>(null)
-    val pending: StateFlow<String?> = _pending.asStateFlow()
+    /**
+     * A pending deep-link target. [arg] optionally carries a resource id from
+     * the push payload (e.g. the tapped notice's id) so the destination screen
+     * can auto-select it. Null [arg] ⇒ plain tab navigation.
+     */
+    data class Target(val route: String, val arg: String? = null)
 
-    fun publish(route: String) { _pending.value = route }
+    private val _pending = MutableStateFlow<Target?>(null)
+    val pending: StateFlow<Target?> = _pending.asStateFlow()
+
+    fun publish(route: String, arg: String? = null) { _pending.value = Target(route, arg) }
     fun consume() { _pending.value = null }
 }

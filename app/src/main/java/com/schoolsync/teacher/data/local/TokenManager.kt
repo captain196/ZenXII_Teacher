@@ -3,6 +3,7 @@ package com.schoolsync.teacher.data.local
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -55,6 +56,11 @@ class TokenManager @Inject constructor(
 
         // Theme
         val KEY_THEME_MODE = stringPreferencesKey("theme_mode")  // "system", "light", "dark"
+
+        // Force-change-password flag (mirrored from Firebase Auth custom claim
+        // at login). Cleared by the force-change flow once the user picks
+        // a new password.
+        val KEY_MUST_CHANGE_PASSWORD = booleanPreferencesKey("must_change_password")
     }
 
     private val dataStore = context.dataStore
@@ -139,6 +145,16 @@ class TokenManager @Inject constructor(
 
     suspend fun saveThemeMode(mode: String) {
         dataStore.edit { it[KEY_THEME_MODE] = mode }
+    }
+
+    // --- Force-change-password ---
+
+    val mustChangePassword: Flow<Boolean> = dataStore.data.map {
+        it[KEY_MUST_CHANGE_PASSWORD] ?: false
+    }
+
+    suspend fun saveMustChangePassword(value: Boolean) {
+        dataStore.edit { it[KEY_MUST_CHANGE_PASSWORD] = value }
     }
 
     /**

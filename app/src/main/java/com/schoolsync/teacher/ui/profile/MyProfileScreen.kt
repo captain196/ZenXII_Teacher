@@ -2,7 +2,16 @@ package com.schoolsync.teacher.ui.profile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -63,9 +72,26 @@ import com.schoolsync.teacher.ui.theme.glassCard
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
+fun MyProfileScreen(
+    onLogout: () -> Unit = {},
+    viewModel: ProfileViewModel = hiltViewModel()
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val c = LocalAppColors.current
+
+    // Once the session is cleared, hand off to the caller to return to Login.
+    LaunchedEffect(state.logoutSuccess) {
+        if (state.logoutSuccess) onLogout()
+    }
+
+    // Confirm dialog with an in-button spinner while signing out.
+    if (state.showLogoutDialog) {
+        LogoutDialog(
+            isLoggingOut = state.isLoggingOut,
+            onDismiss = { viewModel.setShowLogoutDialog(false) },
+            onConfirm = { viewModel.logout() }
+        )
+    }
 
     // Profile-screen palette override — rose tones to differentiate the
     // teacher's "My Profile" page from the rest of the app's accent
@@ -89,6 +115,17 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                     .padding(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 val doc = state.staff
+                val priv = state.staffPrivate
+
+                // Sensitive PII (audit fix C1): prefer the owner-only
+                // staffPrivate doc, fall back to the inline staff-doc values so
+                // the screen works BOTH before the migration (fields still on
+                // the staff doc) AND after (fields moved to staffPrivate).
+                val panNumber    = priv?.panNumber?.ifEmpty { doc?.panNumber } ?: doc?.panNumber
+                val aadharNumber = priv?.aadharNumber?.ifEmpty { doc?.aadharNumber } ?: doc?.aadharNumber
+                val pfNumber     = priv?.pfNumber?.ifEmpty { doc?.pfNumber } ?: doc?.pfNumber
+                val esiNumber    = priv?.esiNumber?.ifEmpty { doc?.esiNumber } ?: doc?.esiNumber
+                val bankDetails  = priv?.bankDetails?.takeIf { it.isNotEmpty() } ?: doc?.bankDetails
 
                 // ── Hero strip: avatar + name + chips ──
                 Row(
@@ -214,7 +251,7 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                             f("Subjects", doc?.teaching_subjects?.joinToString(", ")),
                         ))
 
-                        val bank = doc?.bankDetails
+                        val bank = bankDetails
                         if (bank != null && bank.isNotEmpty()) {
                             InfoCard("Bank", Icons.Filled.AccountBalance, c.slateBluePrimary, listOfNotNull(
                                 f("Bank", bank["bankName"]?.toString()),
@@ -234,14 +271,14 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                             f("Emergency", buildEmergency(doc?.emergencyContact)),
                         ))
 
-                        val hasStat = listOf(doc?.panNumber, doc?.aadharNumber, doc?.pfNumber, doc?.esiNumber)
+                        val hasStat = listOf(panNumber, aadharNumber, pfNumber, esiNumber)
                             .any { !it.isNullOrBlank() }
                         if (hasStat) {
                             InfoCard("Statutory IDs", Icons.Filled.CreditCard, c.warning, listOfNotNull(
-                                f("PAN", doc?.panNumber),
-                                f("Aadhar", doc?.aadharNumber),
-                                f("PF / UAN", doc?.pfNumber),
-                                f("ESI", doc?.esiNumber),
+                                f("PAN", panNumber),
+                                f("Aadhar", aadharNumber),
+                                f("PF / UAN", pfNumber),
+                                f("ESI", esiNumber),
                             ))
                         }
 
@@ -282,7 +319,114 @@ fun MyProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                     }
                 }
 
+                Spacer(Modifier.height(16.dp))
+
+                // ── Log out (only place logout lives; removed from sidebar) ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { viewModel.setShowLogoutDialog(true) }
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = null,
+                        tint = c.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Log out",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = c.error,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
                 Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
+}
+
+// ── Logout confirmation dialog (same UX as the Parent app) ──
+@Composable
+private fun LogoutDialog(
+    isLoggingOut: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val c = LocalAppColors.current
+    Dialog(
+        onDismissRequest = { if (!isLoggingOut) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 40.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(c.surfaceElevated)
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = "👋", fontSize = 36.sp)
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Log out?",
+                style = MaterialTheme.typography.titleMedium,
+                color = c.textPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "You’ll need to sign in again next time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textSecondary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(24.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = onDismiss,
+                    enabled = !isLoggingOut,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = c.accentSurface,
+                        contentColor = c.accent
+                    ),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    Text("Cancel", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                }
+                Button(
+                    onClick = onConfirm,
+                    enabled = !isLoggingOut,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = c.error,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    if (isLoggingOut) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Log out", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
     }

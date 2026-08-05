@@ -2,42 +2,13 @@ package com.schoolsync.teacher.util
 
 import com.schoolsync.teacher.data.model.ClassAssignment
 
-data class TeacherPermissions(
-    val canMarkAttendance: Boolean,
-    val canViewAllStudents: Boolean,
-    val canApproveLeaves: Boolean,
-    val canCreateAnyFlag: Boolean,
-    val canCreateSubjectFlag: Boolean,
-    val canCreateHomework: Boolean,
-    val canUploadGallery: Boolean = true
-)
-
+// RBAC NOTE: the old TeacherPermissions data class + getPermissions() (a
+// teacher-only, class-assignment-derived permission model) were REMOVED — the
+// centralized Staff & Roles module (staffCapabilities + ModuleGate.canEdit/
+// canManage) is now the single gating authority. RoleHelper keeps ONLY the
+// class/section ASSIGNMENT-scoping helpers, which are orthogonal to capability
+// grants (caps grant the module; assignments scope which classes within it).
 object RoleHelper {
-    fun getPermissions(
-        assignments: List<ClassAssignment>,
-        className: String,
-        section: String,
-        subject: String? = null
-    ): TeacherPermissions {
-        val isClassTeacher = assignments.any {
-            it.className == className && it.section == section && it.classTeacher
-        }
-        val isSubjectTeacher = subject?.let { subj ->
-            assignments.any {
-                it.className == className && it.section == section && it.subject == subj
-            }
-        } ?: false
-
-        return TeacherPermissions(
-            canMarkAttendance = isClassTeacher,
-            canViewAllStudents = isClassTeacher,
-            canApproveLeaves = isClassTeacher,
-            canCreateAnyFlag = isClassTeacher,
-            canCreateSubjectFlag = isSubjectTeacher || isClassTeacher,
-            canCreateHomework = isSubjectTeacher || isClassTeacher
-        )
-    }
-
     fun getAssignedClasses(assignments: List<ClassAssignment>): List<Pair<String, String>> =
         assignments.map { it.className to it.section }.distinct()
 

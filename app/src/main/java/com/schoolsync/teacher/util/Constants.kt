@@ -9,6 +9,9 @@ object Constants {
     object Firestore {
         const val SCHOOLS = "schools"
         const val STAFF = "staff"
+        // Owner-readable sensitive PII split out of the staff doc (audit fix C1).
+        // Same id as staff: {schoolId}_{staffId}. Rules allow only the owner to read.
+        const val STAFF_PRIVATE = "staffPrivate"
         const val STUDENTS = "students"
         const val PARENTS = "parents"
         const val SECTIONS = "sections"
@@ -18,6 +21,7 @@ object Constants {
         const val HOMEWORK = "homework"
         const val SUBMISSIONS = "submissions"
         const val LEAVE_APPLICATIONS = "leaveApplications"
+        const val ATTENDANCE_REGULARIZATIONS = "attendanceRegularizations"
         const val EXAMS = "exams"
         const val EXAM_SCHEDULE = "examSchedule"
         const val MARKS = "marks"
@@ -96,7 +100,11 @@ object Constants {
         // ── Phase 12: Analytics ────────────────────────────────────────
         const val DASHBOARDS = "dashboards"
         const val AUDIT_LOGS = "auditLogs"
-        const val RBAC_ROLES = "rbacRoles"
+
+        // ── Unified Staff RBAC: server-maintained capability index ─────
+        // staffCapabilities/{uid} (uid == staffId), written by the CF; the app
+        // reads its own doc for UI gating. Absent ⇒ fail-open (show all).
+        const val STAFF_CAPABILITIES = "staffCapabilities"
 
         // ── Phase B (RTDB elimination): Student Red Flags ──────────────
         const val STUDENT_FLAGS = "studentFlags"

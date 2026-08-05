@@ -5,6 +5,7 @@ import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.StudentDoc
 import com.schoolsync.teacher.util.Constants
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -139,7 +140,7 @@ class StudentFirestoreRepository @Inject constructor(
             Constants.Firestore.STUDENTS,
             docId
         ).collect { emit(it) }
-    }
+    }.catch { emit(null) }   // listener error → emit null, keep student flow alive (no UI crash)
 
     private suspend fun getSchoolCode(): String? {
         return tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }

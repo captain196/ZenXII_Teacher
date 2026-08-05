@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,16 +8,34 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Load release-signing credentials from a gitignored keystore.properties at the
+// project root. Absent on machines that only build debug (release signing is skipped).
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.schoolsync.teacher"
     compileSdk = 35
 
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.schoolsync.teacher"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        versionCode = 2
+        versionName = "1.0.1"
 
         vectorDrawables { useSupportLibrary = true }
 
@@ -32,14 +52,19 @@ android {
         //   - same-WiFi LAN access:    http://<PC_LAN_IP>/ZenX/school/
         //   - emulator:                http://10.0.2.2/ZenX/school/
         //   - USB tether (legacy):     localhost:8080 + `adb reverse tcp:8080 tcp:80`
-        //
-        // Phase 12: repointed from the legacy /Grader/school/ path to the
-        // canonical ZenX backend (/ZenX/school/). Update the host/IP per env.
-        buildConfigField("String", "BASE_URL", "\"http://localhost:8080/ZenX/school/\"")
+        // Production: ZenXii admin panel + Node backend on Lightsail, served at the
+        // host ROOT of https://www.zenxii.com (verified: /attendance/* and /admin_login
+        // resolve at root; the legacy /Grader/school/ and /ZenX/school/ subpaths 404).
+        // ApiService uses relative paths (attendance/*, staff_attendance/*) -> host root;
+        // AuthApi uses leading-slash paths (/auth/*) -> also host root (Node backend).
+        buildConfigField("String", "BASE_URL", "\"https://www.zenxii.com/\"")
     }
 
     buildTypes {
         release {
+            if (keystorePropsFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -100,6 +125,7 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-functions-ktx")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
@@ -117,16 +143,33 @@ dependencies {
     // Location — FusedLocationProviderClient (GPS staff attendance, Phase 11)
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
+    // Play Integrity — anti-spoof attestation for GPS staff attendance.
+    // Inert until a cloud project number is set (PlayIntegrityTokenProvider) AND
+    // the server enables it (config/play_integrity.php).
+    implementation("com.google.android.play:integrity:1.4.0")
+
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
 
     // Image loading
     implementation("io.coil-kt:coil-compose:2.6.0")
+    // Video frame decoding — renders a first-frame thumbnail for the
+    // story upload preview (and any video thumbnails).
+    implementation("io.coil-kt:coil-video:2.6.0")
     // Video playback (Stories viewer — Round 1a).
     // Media3 = modern ExoPlayer; stable, Compose-friendly via AndroidView.
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
+    // Stories viewer upgrade — disk cache for smooth video re-watch /
+    // swipe-back (SimpleCache + CacheDataSource) and the cache DB provider.
+    implementation("androidx.media3:media3-datasource:1.3.1")
+    implementation("androidx.media3:media3-database:1.3.1")
+
+    // Client-side video compression for story uploads — transcodes large
+    // clips to ~720p/2Mbps before upload (MediaCodec, Telegram-derived),
+    // mirroring WhatsApp/Instagram. JitPack-hosted.
+    implementation("com.github.AbedElazizShe:LightCompressor:1.3.3")
 
     // Lottie animations
     implementation("com.airbnb.android:lottie-compose:6.4.0")
@@ -136,5 +179,10 @@ dependencies {
 
     // Razorpay checkout
     implementation("com.razorpay:checkout:1.6.38")
+
+    // Unit tests (JVM). Pure-logic homework harness — no Firebase/Android runtime.
+    testImplementation("junit:junit:4.13.2")
+    // Matches the app's kotlinx-coroutines-core version (1.7.3, via -android).
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }
 

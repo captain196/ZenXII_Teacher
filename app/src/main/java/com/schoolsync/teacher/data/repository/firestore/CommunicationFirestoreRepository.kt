@@ -1,8 +1,10 @@
 package com.schoolsync.teacher.data.repository.firestore
 
+import android.util.Log
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.schoolsync.teacher.data.firebase.FirestoreService
+import com.schoolsync.teacher.util.toEpochMillisOrNull
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.CircularDoc
 import com.schoolsync.teacher.data.model.firestore.CircularReadDoc
@@ -38,7 +40,81 @@ class CommunicationFirestoreRepository @Inject constructor(
     private val tokenManager: TokenManager
 ) {
 
+    companion object {
+        private const val TAG = "CommRepo"
+
+        /**
+         * Legacy `targetRoles`/`targetType` tokens (case-insensitive) that denote
+         * a teacher/staff audience. Used only for legacy docs with no
+         * `audienceKeys`.
+         */
+        private val TEACHER_ROLE_TOKENS = setOf(
+            "teacher", "teachers", "staff", "teaching staff", "teaching",
+            "non-teaching staff", "non-teaching", "all staff", "employee", "employees"
+        )
+
+        /**
+         * Legacy `targetType` values that denote a broadcast reaching staff
+         * (case-insensitive). Anything else that is class/parent/student-scoped
+         * must NOT surface to a teacher.
+         */
+        private val BROADCAST_TARGET_TYPES = setOf(
+            "", "all", "everyone", "all staff", "all students & staff",
+            "all students and staff", "students & staff", "students and staff",
+            "school", "school-wide", "schoolwide"
+        )
+    }
+
     // ── Circulars ──────────────────────────────────────────────────────────
+
+    /**
+     * Canonical audience keys the current teacher matches: school-wide,
+     * staff/teacher role, and their OWN user key (for individually-targeted
+     * staff notices).
+     */
+    private fun teacherAudienceKeys(userId: String?): Set<String> {
+        val keys = mutableSetOf("all", "role:teacher", "role:staff")
+        userId?.takeIf { it.isNotBlank() }?.let { keys.add("user:$it") }
+        return keys
+    }
+
+    private suspend fun teacherAudienceKeys(): Set<String> = teacherAudienceKeys(getUserId())
+
+    /**
+     * Audience gate.
+     *
+     * Canonical path: when `audienceKeys` is present, a teacher sees the doc iff
+     * their key set intersects it.
+     *
+     * Legacy path (no `audienceKeys`): consult the legacy targeting fields in a
+     * strict order so a doc explicitly aimed at parents / other cohorts is NOT
+     * leaked to teachers (confidentiality hardening — mirrors the Parent app fix):
+     *   1. `targetRoles` non-empty  → visible iff a teacher/staff role is listed.
+     *   2. `targetClasses` non-empty → class-scoped (students/parents of those
+     *      classes). The teacher's class set is not available in this layer, so we
+     *      stay conservative and do NOT expose it.
+     *   3. otherwise → visible only if `targetType` is a broadcast (or explicitly
+     *      a teacher/staff audience).
+     */
+    private fun matchesTeacherAudience(c: CircularDoc, myKeys: Set<String>): Boolean {
+        if (c.audienceKeys.isNotEmpty()) return c.audienceKeys.any { it in myKeys }
+
+        val roles = c.targetRoles.filter { it.isNotBlank() }
+        if (roles.isNotEmpty()) {
+            return roles.any { it.trim().lowercase() in TEACHER_ROLE_TOKENS }
+        }
+        val classes = c.targetClasses.filter { it.isNotBlank() }
+        if (classes.isNotEmpty()) {
+            // Class-scoped legacy doc → conservative: not visible to teachers.
+            return false
+        }
+        val tt = c.targetType.trim().lowercase()
+        return tt in BROADCAST_TARGET_TYPES || tt in TEACHER_ROLE_TOKENS
+    }
+
+    /** Hide circulars whose expiry has passed (expiresAt is optional). */
+    private fun notExpired(c: CircularDoc): Boolean =
+        c.expiresAt.toEpochMillisOrNull()?.let { it > System.currentTimeMillis() } ?: true
 
     /**
      * Fetch sent circulars AND notices for the current school, merged and
@@ -70,15 +146,37 @@ class CommunicationFirestoreRepository @Inject constructor(
                 }
             } catch (e: Exception) {
                 // Notices collection is optional — if the index isn't deployed yet
-                // or the query fails, fall through with circulars only.
+                // or the query fails, fall through with circulars only. Log it so a
+                // missing composite index doesn't silently vanish Notice Board posts.
+                Log.e(TAG, "notices query failed (check composite index schoolId+status+sentAt)", e)
                 emptyList()
             }
+            val myKeys = teacherAudienceKeys()
             val merged = (circulars + notices)
-                .sortedByDescending { it.sentAt?.toString().orEmpty() }
+                .filter { matchesTeacherAudience(it, myKeys) && notExpired(it) }
+                .sortedByDescending { it.sentAt.toEpochMillisOrNull() ?: 0L }
                 .take(limit)
             Result.success(merged)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * The set of circular/notice IDs the current teacher has already opened
+     * (from `circularReads`). Empty on any failure — read-state is a display
+     * nicety, never a hard dependency.
+     */
+    suspend fun getReadCircularIds(): Set<String> {
+        val userId = getUserId() ?: return emptySet()
+        return try {
+            firestoreService.queryDocumentsAs<CircularReadDoc>(
+                Constants.Firestore.CIRCULAR_READS
+            ) { ref -> ref.whereEqualTo("userId", userId) }
+                .mapNotNull { it.circularId.takeIf { c -> c.isNotBlank() } }
+                .toSet()
+        } catch (e: Exception) {
+            emptySet()
         }
     }
 
@@ -117,77 +215,6 @@ class CommunicationFirestoreRepository @Inject constructor(
     }
 
     /**
-     * Create a new circular. Returns the generated circular document ID.
-     * Teacher-only operation.
-     */
-    suspend fun createCircular(
-        title: String,
-        body: String,
-        category: String,
-        priority: String,
-        targetType: String,
-        targetClasses: List<String>,
-        targetRoles: List<String>,
-        attachmentUrl: String,
-        channels: List<String>
-    ): Result<String> {
-        val schoolCode = getSchoolCode()
-            ?: return Result.failure(Exception("School code not available"))
-        val userId = getUserId()
-            ?: return Result.failure(Exception("User ID not available"))
-        val userName = getUserName()
-
-        val docId = "${schoolCode}_${System.currentTimeMillis()}"
-        val data = mapOf(
-            "schoolId" to schoolCode,
-            "title" to title,
-            "body" to body,
-            "author" to userName,
-            "authorId" to userId,
-            "category" to category,
-            "priority" to priority,
-            "targetType" to targetType,
-            "targetClasses" to targetClasses,
-            "targetRoles" to targetRoles,
-            "attachmentUrl" to attachmentUrl,
-            "requireAcknowledgement" to false,
-            "totalRecipients" to 0,
-            "readCount" to 0,
-            "channels" to channels,
-            "status" to "sent",
-            "sentAt" to FieldValue.serverTimestamp()
-        )
-
-        return try {
-            firestoreService.setDocument(
-                Constants.Firestore.CIRCULARS,
-                docId,
-                data
-            )
-            Result.success(docId)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Get read receipts for a specific circular.
-     * Teacher-only operation for tracking who has read the circular.
-     */
-    suspend fun getCircularReadReceipts(circularId: String): Result<List<CircularReadDoc>> {
-        return try {
-            val receipts = firestoreService.queryDocumentsAs<CircularReadDoc>(
-                Constants.Firestore.CIRCULAR_READS
-            ) { ref ->
-                ref.whereEqualTo("circularId", circularId)
-            }
-            Result.success(receipts)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
      * Observe circulars AND notices in real time for the current school,
      * merged into a single stream ordered by most recent first. Reacts to
      * school code changes via [flatMapLatest]. If the notices composite
@@ -196,12 +223,20 @@ class CommunicationFirestoreRepository @Inject constructor(
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observeCirculars(): Flow<List<CircularDoc>> {
-        return tokenManager.schoolCode
-            .map { it?.takeIf { code -> code.isNotBlank() } }
-            .flatMapLatest { schoolCode ->
+        // Key on schoolId (the value queries actually filter on — see getSchoolCode)
+        // AND userId, so the stream re-subscribes on account switch and the audience
+        // keys include the teacher's own "user:<id>" key for individually-targeted
+        // staff notices.
+        return combine(
+            tokenManager.schoolId.map { it?.takeIf { code -> code.isNotBlank() } },
+            tokenManager.userId
+        ) { schoolCode, userId -> schoolCode to userId }
+            .flatMapLatest { (schoolCode, userId) ->
                 if (schoolCode == null) {
                     flowOf(emptyList())
                 } else {
+                    val myKeys = teacherAudienceKeys(userId)
+
                     val circulars = firestoreService.observeQuery(
                         Constants.Firestore.CIRCULARS
                     ) { ref ->
@@ -219,10 +254,16 @@ class CommunicationFirestoreRepository @Inject constructor(
                             .orderBy("sentAt", Query.Direction.DESCENDING)
                             .limit(50)
                     }.map { it.toObjects(CircularDoc::class.java) }
-                        .catch { emit(emptyList()) } // index missing → degrade gracefully
+                        .catch { e ->
+                            // index missing → degrade to circulars-only, but LOG so the
+                            // silent-vanish failure is observable.
+                            Log.e(TAG, "notices listener failed (check composite index schoolId+status+sentAt)", e)
+                            emit(emptyList())
+                        }
 
                     combine(circulars, notices) { c, n ->
-                        (c + n).sortedByDescending { it.sentAt?.toString().orEmpty() }.take(50)
+                        (c + n).filter { matchesTeacherAudience(it, myKeys) && notExpired(it) }
+                            .sortedByDescending { it.sentAt.toEpochMillisOrNull() ?: 0L }.take(50)
                     }
                 }
             }
@@ -340,9 +381,5 @@ class CommunicationFirestoreRepository @Inject constructor(
 
     private suspend fun getUserName(): String {
         return tokenManager.userName.firstOrNull() ?: ""
-    }
-
-    private suspend fun getSession(): String? {
-        return tokenManager.session.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 }

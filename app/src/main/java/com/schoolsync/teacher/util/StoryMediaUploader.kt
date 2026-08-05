@@ -1,14 +1,21 @@
 package com.schoolsync.teacher.util
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
+import com.schoolsync.teacher.data.model.firestore.StorySharedConfig
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 /**
  * Uploads story media (image or video) to Firebase Cloud Storage and
@@ -45,8 +52,29 @@ object StoryMediaUploader {
         data class Failed(val reason: String) : UploadProgress()
     }
 
-    private const val MAX_IMAGE_BYTES = 10L * 1024 * 1024
-    private const val MAX_VIDEO_BYTES = 50L * 1024 * 1024
+    // Raw-pick caps (PRE-compression). Images are downscaled/re-encoded
+    // client-side before upload (see [compressImage]) the way Instagram/
+    // WhatsApp do, so this cap is generous — it only rejects absurd inputs
+    // at pick time; anything reasonable is shrunk before it leaves the
+    // device. The AUTHORITATIVE post-compression cap is
+    // StorySharedConfig.MAX_IMAGE_BYTES (10 MB) — enforced in [upload].
+    private const val RAW_MAX_IMAGE_BYTES = 40L * 1024 * 1024
+    // Generous raw cap: videos are transcoded to ~720p/2Mbps client-side
+    // (see StoryVideoCompressor) before upload, so this only rejects absurd
+    // inputs at pick time. The AUTHORITATIVE post-compression cap is
+    // StorySharedConfig.MAX_VIDEO_BYTES (50 MB) — enforced in [upload].
+    private const val RAW_MAX_VIDEO_BYTES = 300L * 1024 * 1024
+
+    /** Longest-edge cap for uploaded images (Instagram-story-ish 9:16 @1080
+     *  fits comfortably; 1920 keeps landscape/quality without bloating). */
+    private const val MAX_IMAGE_DIMEN = 1920
+    private const val JPEG_QUALITY = 82
+
+    /** Best-effort byte size of a content/file Uri; -1 when unknown. */
+    private fun fileSizeBytes(context: Context, uri: Uri): Long = try {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")
+            ?.use { it.length.takeIf { len -> len > 0 } } ?: -1L
+    } catch (_: Exception) { -1L }
 
     /**
      * Cheap server-free pre-checks. Returns null when OK, otherwise an
@@ -67,7 +95,7 @@ object StoryMediaUploader {
             cr.openAssetFileDescriptor(uri, "r")?.use { it.length.takeIf { len -> len > 0 } }
         } catch (_: Exception) { null }
         if (size != null) {
-            val cap = if (declaredType == "image") MAX_IMAGE_BYTES else MAX_VIDEO_BYTES
+            val cap = if (declaredType == "image") RAW_MAX_IMAGE_BYTES else RAW_MAX_VIDEO_BYTES
             if (size > cap) {
                 val capMb = cap / (1024 * 1024)
                 return "${declaredType.replaceFirstChar { it.uppercase() }} too large (max $capMb MB)."
@@ -101,10 +129,46 @@ object StoryMediaUploader {
                 else -> if (declaredType == "image") "jpg" else "mp4"
             }
 
-            val path = "stories/${schoolId}/${teacherId}/${System.currentTimeMillis()}.${ext}"
+            // Shrink images on-device before upload (Instagram/WhatsApp do
+            // the same). Falls back to the original Uri on any failure.
+            val uploadUri = if (declaredType == "image") compressImage(context, uri) else uri
+            // Re-derive extension: a compressed image is always JPEG.
+            val finalExt = if (declaredType == "image") "jpg" else ext
+
+            // Post-compression size guard (M8). The AUTHORITATIVE cap is the
+            // storage-rule limit mirrored in StorySharedConfig (10 MB image /
+            // 50 MB video). Compression usually lands well under it, but a
+            // long clip — or a compressor/image fallback to the original —
+            // can still exceed it. Reject here with a clear message instead
+            // of letting the Storage rule reject the PUT with a generic
+            // "you don't have permission" error. Unknown size (-1) fails open;
+            // the Storage rule remains the server-side backstop.
+            val finalBytes = fileSizeBytes(context, uploadUri)
+            val postCap = if (declaredType == "image")
+                StorySharedConfig.MAX_IMAGE_BYTES else StorySharedConfig.MAX_VIDEO_BYTES
+            if (finalBytes in 1..Long.MAX_VALUE && finalBytes > postCap) {
+                val capMb = postCap / (1024 * 1024)
+                val noun = if (declaredType == "image") "Image" else "Video"
+                trySend(UploadProgress.Failed("$noun too large after compression, max $capMb MB."))
+                close()
+                return@callbackFlow
+            }
+
+            val path = "stories/${schoolId}/${teacherId}/${System.currentTimeMillis()}.${finalExt}"
             val ref = FirebaseStorage.getInstance().reference.child(path)
 
-            val task = ref.putFile(uri)
+            // Set an EXPLICIT contentType so the Storage rule can gate on MIME
+            // (image/* | video/*) — previously putFile relied on Uri inference
+            // with no metadata, so the rule couldn't reject a mislabelled blob.
+            // Compressed images are always JPEG; videos keep their source MIME
+            // (falling back to video/mp4).
+            val contentType = if (declaredType == "image") "image/jpeg"
+                else mime.takeIf { it.startsWith("video/") } ?: "video/mp4"
+            val metadata = com.google.firebase.storage.StorageMetadata.Builder()
+                .setContentType(contentType)
+                .build()
+
+            val task = ref.putFile(uploadUri, metadata)
             task.addOnProgressListener { snap ->
                 val pct = if (snap.totalByteCount > 0) {
                     ((snap.bytesTransferred * 100) / snap.totalByteCount).toInt().coerceIn(0, 99)
@@ -136,6 +200,68 @@ object StoryMediaUploader {
     }.flowOn(Dispatchers.IO)
 
     /**
+     * Downscale + re-encode an image to a JPEG no larger than
+     * [MAX_IMAGE_DIMEN] on its longest edge, honouring EXIF rotation, and
+     * write it to the cache dir. Returns a file:// Uri for the compressed
+     * copy, or the original [uri] unchanged on any failure (so upload still
+     * proceeds). This mirrors what Instagram/WhatsApp do client-side so a
+     * 12 MP phone photo (~5–10 MB) uploads as a ~200–500 KB JPEG.
+     */
+    private fun compressImage(context: Context, uri: Uri): Uri {
+        return try {
+            val cr = context.contentResolver
+
+            // 1. Read bounds only (no full decode) to compute a sane sample.
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            val srcW = bounds.outWidth
+            val srcH = bounds.outHeight
+            if (srcW <= 0 || srcH <= 0) return uri
+
+            // 2. Power-of-two downsample to get within ~2× of target cheaply.
+            var sample = 1
+            val longest = maxOf(srcW, srcH)
+            while (longest / sample > MAX_IMAGE_DIMEN * 2) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            var bmp = cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+                ?: return uri
+
+            // 3. Precise scale to the longest-edge cap.
+            val scale = MAX_IMAGE_DIMEN.toFloat() / maxOf(bmp.width, bmp.height)
+            if (scale < 1f) {
+                bmp = Bitmap.createScaledBitmap(
+                    bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true
+                )
+            }
+
+            // 4. Honour EXIF orientation so portrait photos don't upload sideways.
+            val orientation = cr.openInputStream(uri)?.use {
+                android.media.ExifInterface(it).getAttributeInt(
+                    android.media.ExifInterface.TAG_ORIENTATION,
+                    android.media.ExifInterface.ORIENTATION_NORMAL
+                )
+            } ?: android.media.ExifInterface.ORIENTATION_NORMAL
+            val rotation = when (orientation) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+            if (rotation != 0f) {
+                val m = Matrix().apply { postRotate(rotation) }
+                bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            }
+
+            // 5. Encode JPEG to cache and hand back a file:// Uri.
+            val out = File(context.cacheDir, "story_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(out).use { bmp.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+            Uri.fromFile(out)
+        } catch (_: Exception) {
+            uri
+        }
+    }
+
+    /**
      * Best-effort rollback — delete a previously-uploaded Storage
      * object. Returns true on success; swallows failures (the orphan
      * cleanup Cloud Function will sweep it eventually).
@@ -152,29 +278,45 @@ object StoryMediaUploader {
     }
 
     /**
-     * Convenience: suspend wrapper that uploads and returns the URL,
-     * throwing on failure. Use when you don't need progress events.
+     * Extract a poster frame from a VIDEO and upload it as a JPEG thumbnail.
+     * Grabs a frame ~1s in (skips the black opening frame most videos start on)
+     * so panels/apps show a real image instead of a blank/black tile. Best-effort:
+     * returns null on any failure and the caller falls back to first-frame render.
      */
-    suspend fun uploadSuspending(
-        context: Context,
-        uri: Uri,
-        schoolId: String,
-        teacherId: String,
-        declaredType: String
-    ): String {
-        val mime = context.contentResolver.getType(uri).orEmpty()
-        val ext = when {
-            mime.endsWith("/jpeg") || mime.endsWith("/jpg") -> "jpg"
-            mime.endsWith("/png")                          -> "png"
-            mime.endsWith("/webp")                         -> "webp"
-            mime.endsWith("/mp4")                          -> "mp4"
-            mime.endsWith("/quicktime")                    -> "mov"
-            mime.endsWith("/3gpp")                         -> "3gp"
-            else -> if (declaredType == "image") "jpg" else "mp4"
+    suspend fun uploadThumbnail(
+        context: Context, videoUri: Uri, schoolCode: String, teacherId: String
+    ): String? = withContext(Dispatchers.IO) {
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, videoUri)
+            val durationMs = retriever
+                .extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            val frameUs = (if (durationMs > 1200) 1_000_000L else (durationMs * 1000) / 2)
+                .coerceAtLeast(0L)
+            val bmp = retriever.getFrameAtTime(frameUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.frameAtTime
+                ?: return@withContext null
+            val maxW = 720
+            val scaled = if (bmp.width > maxW) {
+                val h = (bmp.height.toFloat() * maxW / bmp.width).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(bmp, maxW, h, true)
+            } else bmp
+            val baos = java.io.ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+            val path = "stories/$schoolCode/$teacherId/thumb_${System.currentTimeMillis()}.jpg"
+            val ref = FirebaseStorage.getInstance().reference.child(path)
+            // Explicit contentType so the MIME-gated Storage rule accepts it.
+            val meta = com.google.firebase.storage.StorageMetadata.Builder()
+                .setContentType("image/jpeg")
+                .build()
+            ref.putBytes(baos.toByteArray(), meta).await()
+            ref.downloadUrl.await().toString()
+        } catch (e: Exception) {
+            android.util.Log.w("StoryMediaUploader", "thumbnail gen failed (non-fatal): ${e.message}")
+            null
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
         }
-        val path = "stories/${schoolId}/${teacherId}/${System.currentTimeMillis()}.${ext}"
-        val ref = FirebaseStorage.getInstance().reference.child(path)
-        ref.putFile(uri).await()
-        return ref.downloadUrl.await().toString()
     }
 }

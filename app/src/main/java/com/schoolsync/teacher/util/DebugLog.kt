@@ -2,6 +2,7 @@ package com.schoolsync.teacher.util
 
 import android.content.Context
 import android.util.Log
+import com.schoolsync.teacher.BuildConfig
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -25,6 +26,10 @@ fun initDebugLog(ctx: Context) {
 }
 
 fun debugLog(message: String) {
+    // PII gate (LOG-1): story upload/pick logs carry user/school ids, media
+    // URLs, captions — never write ANY of it (logcat or debug.log) in a
+    // release build. Whole body is a no-op unless this is a debuggable build.
+    if (!BuildConfig.DEBUG) return
     Log.d("SchoolSyncDebug", message)
     val ctx = appContext ?: return
     try {

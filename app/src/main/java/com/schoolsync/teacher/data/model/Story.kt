@@ -4,35 +4,24 @@ data class Story(
     val storyId: String = "",
     val mediaUrl: String = "",
     val type: String = "image", // image, video
+    /**
+     * Poster frame for video stories ("" for images). StoryFirestoreRepository
+     * has always written this to Firestore and StoryDoc has always carried it,
+     * but it stopped there — no UI model mapped it, so every generated poster
+     * was dead weight and video tiles had nothing to show but the raw .mp4
+     * (which Coil's image decoder cannot render → permanently blank tile).
+     */
+    val thumbnailUrl: String = "",
     val caption: String = "",
     val createdAt: Long = 0L,
     val expiresAt: Long = 0L,
     val teacherName: String = "",
     val teacherPic: String = "",
-    val viewCount: Int = 0
+    val viewCount: Int = 0,
+    /** Canonical class-section tokens this story targets; empty = school-wide. */
+    val audienceClassKeys: List<String> = emptyList(),
+    /** Aggregate emoji → count (read-only analytics in the teacher app). */
+    val reactionCounts: Map<String, Int> = emptyMap()
 ) {
-    fun toMap(): Map<String, Any?> = mapOf(
-        "mediaUrl" to mediaUrl,
-        "type" to type,
-        "caption" to caption,
-        "createdAt" to createdAt,
-        "expiresAt" to expiresAt,
-        "teacherName" to teacherName,
-        "teacherPic" to teacherPic
-    )
-
     val isExpired: Boolean get() = System.currentTimeMillis() > expiresAt
-
-    companion object {
-        fun fromMap(storyId: String, data: Map<String, Any?>): Story = Story(
-            storyId = storyId,
-            mediaUrl = data["mediaUrl"]?.toString() ?: "",
-            type = data["type"]?.toString() ?: "image",
-            caption = data["caption"]?.toString() ?: "",
-            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
-            expiresAt = (data["expiresAt"] as? Number)?.toLong() ?: 0L,
-            teacherName = data["teacherName"]?.toString() ?: "",
-            teacherPic = data["teacherPic"]?.toString() ?: ""
-        )
-    }
 }

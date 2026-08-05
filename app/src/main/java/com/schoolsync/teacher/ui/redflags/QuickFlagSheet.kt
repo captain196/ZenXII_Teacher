@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -177,6 +181,7 @@ fun rememberQuickFlagSheetState(): QuickFlagSheetState = remember { QuickFlagShe
 @Composable
 fun QuickFlagSheet(
     state: QuickFlagSheetState,
+    isSaving: Boolean = false,
     onSubmit: (StudentFlag) -> Unit
 ) {
     if (!state.visible) return
@@ -196,7 +201,10 @@ fun QuickFlagSheet(
     var type             by remember(student.studentId) { mutableStateOf("") }
     var message          by remember(student.studentId) { mutableStateOf("") }
     var moreOptionsOpen  by remember(student.studentId) { mutableStateOf(false) }
-    var submitting       by remember(student.studentId) { mutableStateOf(false) }
+    // Submit-in-flight state is HOISTED to the VM (isSaving) so the spinner
+    // actually renders — the old local `submitting` var never showed because
+    // the button dismissed the sheet on the same frame it was set.
+    val submitting = isSaving
 
     // Picking a template seeds type / severity / message. User can
     // still flip those via the "More options" expander.
@@ -229,6 +237,14 @@ fun QuickFlagSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Scroll the sheet body so "More options" (severity/type/message)
+                // and the action buttons stay reachable when the expanded form
+                // is taller than the sheet — especially in landscape or with the
+                // keyboard open. imePadding keeps the message field + Submit
+                // above the keyboard; navigationBarsPadding clears the gesture bar.
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 20.dp)
         ) {
@@ -325,7 +341,6 @@ fun QuickFlagSheet(
                 Button(
                     onClick = {
                         if (!canSubmit) return@Button
-                        submitting = true
                         val flag = StudentFlag(
                             studentId   = student.studentId,
                             studentName = student.displayName,
@@ -344,14 +359,25 @@ fun QuickFlagSheet(
                             createdAtMs = System.currentTimeMillis(),
                             status      = "active"
                         )
+                        // Do NOT dismiss here — the VM drives `isSaving` and the
+                        // screen dismisses the sheet on success. This keeps the
+                        // sheet open with a spinner during the write, and leaves
+                        // it open on failure so the teacher can retry.
                         onSubmit(flag)
-                        state.dismiss()
                     },
                     enabled = canSubmit,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
+                    if (submitting) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onError
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(if (submitting) "Submitting…" else "Submit Flag")
                 }
             }

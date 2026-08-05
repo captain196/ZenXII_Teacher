@@ -21,3 +21,8 @@ replay_pid*.log
 
 # Local build / validation / trace logs (temporary, never committed)
 /_*.log
+
+# Release signing secrets — never commit
+keystore.properties
+*.jks
+*.keystore

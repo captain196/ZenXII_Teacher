@@ -50,6 +50,8 @@ import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Grade
+import androidx.compose.material.icons.filled.Leaderboard
+import androidx.compose.material.icons.outlined.Leaderboard
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.filled.MyLocation
@@ -109,6 +111,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.schoolsync.teacher.ui.attendance.AttendanceScreen
+import com.schoolsync.teacher.ui.auth.ForceChangePasswordScreen
 import com.schoolsync.teacher.ui.auth.LoginScreen
 import com.schoolsync.teacher.ui.splash.SplashScreen
 import com.schoolsync.teacher.ui.splash.SplashViewModel
@@ -116,6 +119,7 @@ import com.schoolsync.teacher.ui.splash.WalkthroughScreen
 import com.schoolsync.teacher.ui.dashboard.DashboardScreen
 import com.schoolsync.teacher.ui.leave.LeaveScreen
 import com.schoolsync.teacher.ui.marks.MarksScreen
+import com.schoolsync.teacher.ui.results.ResultsScreen
 import com.schoolsync.teacher.ui.myattendance.MyAttendanceScreen
 import com.schoolsync.teacher.ui.messages.MessagesScreen
 import com.schoolsync.teacher.ui.events.EventsTeacherScreen
@@ -153,6 +157,7 @@ sealed class Route(val route: String) {
     data object Splash : Route("splash")
     data object Walkthrough : Route("walkthrough")
     data object Login : Route("login")
+    data object ForceChangePassword : Route("force_change_password")
     data object Main : Route("main")
 
     // Main tabs
@@ -160,6 +165,7 @@ sealed class Route(val route: String) {
     data object Attendance : Route("attendance")
     data object MyAttendance : Route("my_attendance")
     data object Marks : Route("marks")
+    data object Results : Route("results")
     data object Timetable : Route("timetable")
     data object Students : Route("students")
     data object Messages : Route("messages")
@@ -168,6 +174,9 @@ sealed class Route(val route: String) {
     data object Homework : Route("homework")
     data object RedFlags : Route("redflags")
     data object Stories : Route("stories")
+    data object StoryViewer : Route("story_viewer/{authorId}") {
+        fun create(authorId: String) = "story_viewer/$authorId"
+    }
     data object Fees : Route("fees")
     data object Gallery : Route("gallery")
     data object Library : Route("library")
@@ -190,6 +199,7 @@ sealed class Route(val route: String) {
     }
     data object TransportFuelLog : Route("transport_fuel_log")
     data object TransportSos : Route("transport_sos")
+    data object Search : Route("search")
 }
 
 data class NavRailItem(
@@ -211,6 +221,7 @@ val mainNavItems = listOf(
 /** Sub-items revealed when "More" is expanded. */
 val moreSubItems = listOf(
     NavRailItem(Route.MyAttendance, "My Att.", Icons.Filled.MyLocation, Icons.Outlined.MyLocation),
+    NavRailItem(Route.Results, "Results", Icons.Filled.Leaderboard, Icons.Outlined.Leaderboard),
     NavRailItem(Route.Homework, "HW", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
     NavRailItem(Route.Fees, "Fees", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet),
     NavRailItem(Route.RedFlags, "Flags", Icons.Filled.Flag, Icons.Outlined.Flag),
@@ -265,8 +276,14 @@ fun AppNavGraph(
                             popUpTo(Route.Splash.route) { inclusive = true }
                         }
                     },
+                    onNavigateToForceChange = {
+                        navController.navigate(Route.ForceChangePassword.route) {
+                            popUpTo(Route.Splash.route) { inclusive = true }
+                        }
+                    },
                     isLoggedIn = state.isLoggedIn,
-                    hasSeenOnboarding = state.hasSeenOnboarding
+                    hasSeenOnboarding = state.hasSeenOnboarding,
+                    mustChangePassword = state.mustChangePassword,
                 )
             }
         }
@@ -290,7 +307,27 @@ fun AppNavGraph(
                     navController.navigate(Route.Main.route) {
                         popUpTo(Route.Login.route) { inclusive = true }
                     }
-                }
+                },
+                onRequiresPasswordChange = {
+                    navController.navigate(Route.ForceChangePassword.route) {
+                        popUpTo(Route.Login.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Route.ForceChangePassword.route) {
+            ForceChangePasswordScreen(
+                onDone = {
+                    navController.navigate(Route.Main.route) {
+                        popUpTo(Route.ForceChangePassword.route) { inclusive = true }
+                    }
+                },
+                onLogout = {
+                    navController.navigate(Route.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
             )
         }
 
@@ -303,6 +340,13 @@ fun AppNavGraph(
 @Composable
 fun MainScaffold(navController: NavHostController) {
     val mainViewModel: MainViewModel = hiltViewModel()
+
+    // ONE shared StoryViewerViewModel for the whole Main scaffold (M2). It is
+    // scoped to the Main NavBackStackEntry (this composable's ViewModelStoreOwner),
+    // so the dashboard ring, the Stories-screen ring, AND the full-screen viewer
+    // overlay all reuse the SAME warm VM — a single set of collection-group
+    // observeActiveStories + observeSeenStoryIds listeners instead of up to three.
+    val storyViewerViewModel: com.schoolsync.teacher.ui.stories.StoryViewerViewModel = hiltViewModel()
 
     // Listen for logout event → navigate back to Login
     LaunchedEffect(Unit) {
@@ -322,6 +366,21 @@ fun MainScaffold(navController: NavHostController) {
     val schoolName by mainViewModel.schoolName.collectAsStateWithLifecycle()
     val position by mainViewModel.position.collectAsStateWithLifecycle()
 
+    // Live staff capabilities → nav gating. UNKNOWN (pre-rollout) shows all.
+    val caps by mainViewModel.capabilities.collectAsStateWithLifecycle()
+
+    // Capability-guarded navigation chokepoint. Every arbitrary-route jump
+    // (dashboard tiles, search) routes through here; a disallowed module is a
+    // no-op (its tile is also hidden). Fail-open while caps are UNKNOWN.
+    val guardedNav: (String) -> Unit = guardedNav@{ route ->
+        if (!com.schoolsync.teacher.util.ModuleGate.canAccess(route, caps)) return@guardedNav
+        innerNavController.navigate(route) {
+            popUpTo(Route.Dashboard.route) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     var moreExpanded by remember { mutableStateOf(false) }
     // Auto-expand More section if a sub-route is active
     LaunchedEffect(currentRoute) {
@@ -336,6 +395,9 @@ fun MainScaffold(navController: NavHostController) {
     // Use the SAME navigate options as the NavRail click handlers below —
     // popUpTo(Dashboard) keeps the back stack clean so tapping Home later
     // actually returns to Dashboard instead of getting stuck.
+    // Deep-link notice id (from a tapped notice push) to auto-open on arrival.
+    var pendingNoticeId by remember { mutableStateOf<String?>(null) }
+
     val pendingDeepLink by com.schoolsync.teacher.util.DeepLinkBridge.pending.collectAsState()
     LaunchedEffect(pendingDeepLink) {
         val target = pendingDeepLink ?: return@LaunchedEffect
@@ -343,18 +405,33 @@ fun MainScaffold(navController: NavHostController) {
             Route.Dashboard.route, Route.Events.route, Route.Notices.route,
             Route.Messages.route,  Route.Attendance.route, Route.Leave.route
         )
-        if (target in known) {
-            innerNavController.navigate(target) {
+        if (target.route in known && com.schoolsync.teacher.util.ModuleGate.canAccess(target.route, caps)) {
+            // Stash a notice id (if any) so NoticesScreen auto-selects it.
+            if (target.route == Route.Notices.route) {
+                target.arg?.let { pendingNoticeId = it }
+            }
+            innerNavController.navigate(target.route) {
                 popUpTo(Route.Dashboard.route) { saveState = true }
                 launchSingleTop = true
                 restoreState = true
             }
             // If this is a "more" sub-item, expand the More group so it's visible
-            if (target in moreRoutes) moreExpanded = true
+            if (target.route in moreRoutes) moreExpanded = true
         }
         com.schoolsync.teacher.util.DeepLinkBridge.consume()
     }
 
+    // Story viewer is rendered as a FULL-SCREEN OVERLAY above the nav
+    // content (not a separate route) so the screen it was opened from
+    // stays composed behind it — when the viewer fades on swipe-down /
+    // pinch-out, that screen shows through (Instagram/WhatsApp-style).
+    var storyViewerAuthorId by remember { mutableStateOf<String?>(null) }
+
+    // Pending gallery album to preselect when arriving from the Events
+    // "View Photos" jump. Set by Events, consumed by the Gallery screen.
+    var pendingGalleryAlbumId by remember { mutableStateOf<String?>(null) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Row(modifier = Modifier.fillMaxSize()) {
         // ── Side Navigation Rail (scrollable) ──
         Column(
@@ -390,11 +467,15 @@ fun MainScaffold(navController: NavHostController) {
             )
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Primary items
-            mainNavItems.forEach { item ->
+            // App-wide unread/pending counts (e.g. Notices) → per-route badge.
+            val badgeCounts by hiltViewModel<BadgeViewModel>().counts.collectAsState()
+
+            // Primary items (capability-gated; UNKNOWN caps → all shown)
+            mainNavItems.filter { com.schoolsync.teacher.util.ModuleGate.canAccess(it.route.route, caps) }.forEach { item ->
                 NavRailEntry(
                     item = item,
                     isSelected = currentRoute == item.route.route,
+                    badgeCount = badgeCounts[item.route.route] ?: 0,
                     onClick = {
                         if (currentRoute != item.route.route) {
                             innerNavController.navigate(item.route.route) {
@@ -458,10 +539,11 @@ fun MainScaffold(navController: NavHostController) {
                 exit = shrinkVertically() + fadeOut()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    moreSubItems.forEach { item ->
+                    moreSubItems.filter { com.schoolsync.teacher.util.ModuleGate.canAccess(it.route.route, caps) }.forEach { item ->
                         NavRailEntry(
                             item = item,
                             isSelected = currentRoute == item.route.route,
+                            badgeCount = badgeCounts[item.route.route] ?: 0,
                             onClick = {
                                 if (currentRoute != item.route.route) {
                                     innerNavController.navigate(item.route.route) {
@@ -476,39 +558,8 @@ fun MainScaffold(navController: NavHostController) {
                 }
             }
 
+            // Logout moved to My Profile page (bottom) — see MyProfileScreen.
             Spacer(modifier = Modifier.weight(1f))
-
-            Divider(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                color = DividerColor
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // ── Logout ──
-            Column(
-                modifier = Modifier
-                    .padding(vertical = 4.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = rememberRipple(bounded = false, radius = 24.dp)
-                    ) { mainViewModel.logout() }
-                    .padding(horizontal = 4.dp, vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Logout,
-                    contentDescription = "Logout",
-                    tint = ErrorRed,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Logout",
-                    fontSize = 10.sp,
-                    color = ErrorRed,
-                    maxLines = 1
-                )
-            }
         }
 
         // Thin divider
@@ -537,32 +588,80 @@ fun MainScaffold(navController: NavHostController) {
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }
+                    },
+                    onNavigate = guardedNav,
+                    canAccess = { route -> com.schoolsync.teacher.util.ModuleGate.canAccess(route, caps) },
+                    onOpenStory = { authorId -> storyViewerAuthorId = authorId },
+                    storyViewerViewModel = storyViewerViewModel
                 )
             }
-            composable(Route.Attendance.route) { AttendanceScreen() }
+            composable(Route.Attendance.route) {
+                AttendanceScreen(canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Attendance.route, caps))
+            }
             composable(Route.MyAttendance.route) { MyAttendanceScreen() }
-            composable(Route.Marks.route) { MarksScreen() }
+            composable(Route.Marks.route) {
+                MarksScreen(canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Marks.route, caps))
+            }
+            composable(Route.Results.route) { ResultsScreen() }
             composable(Route.Timetable.route) { TimetableScreen() }
             composable(Route.LessonPlan.route) { TodayLessonsScreen() }
             composable(Route.Students.route) { StudentsScreen() }
             composable(Route.Messages.route) { MessagesScreen() }
-            composable(Route.Notices.route) { NoticesScreen() }
-            composable(Route.Events.route) { EventsTeacherScreen() }
+            composable(Route.Notices.route) {
+                NoticesScreen(
+                    deepLinkNoticeId = pendingNoticeId,
+                    onDeepLinkConsumed = { pendingNoticeId = null }
+                )
+            }
+            composable(Route.Events.route) {
+                EventsTeacherScreen(
+                    onOpenAlbum = { albumId ->
+                        pendingGalleryAlbumId = albumId
+                        innerNavController.navigate(Route.Gallery.route) {
+                            popUpTo(Route.Dashboard.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
             composable(Route.Ptm.route) {
                 com.schoolsync.teacher.ui.ptm.MyPtmScreen()
             }
             composable(Route.Leave.route) { LeaveScreen() }
-            composable(Route.Homework.route) { HomeworkTeacherScreen() }
-            composable(Route.RedFlags.route) { RedFlagTeacherScreen() }
-            composable(Route.Stories.route) { StoriesTeacherScreen() }
+            composable(Route.Homework.route) {
+                HomeworkTeacherScreen(canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Homework.route, caps))
+            }
+            composable(Route.RedFlags.route) {
+                RedFlagTeacherScreen(canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.RedFlags.route, caps))
+            }
+            composable(Route.Stories.route) {
+                StoriesTeacherScreen(
+                    onOpenViewer = { authorId -> storyViewerAuthorId = authorId },
+                    canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Stories.route, caps),
+                    viewerViewModel = storyViewerViewModel
+                )
+            }
             composable(Route.Fees.route) { FeesTeacherScreen() }
-            composable(Route.Gallery.route) { GalleryTeacherScreen() }
+            composable(Route.Gallery.route) {
+                GalleryTeacherScreen(
+                    initialAlbumId = pendingGalleryAlbumId,
+                    onInitialAlbumConsumed = { pendingGalleryAlbumId = null }
+                )
+            }
             composable(Route.Library.route) { LibraryTeacherScreen() }
             composable(Route.Payslips.route) { PayslipsScreen() }
             composable(Route.Appraisals.route) { AppraisalsScreen() }
             composable(Route.Recruitment.route) { RecruitmentScreen() }
-            composable(Route.Profile.route) { MyProfileScreen() }
+            composable(Route.Profile.route) {
+                MyProfileScreen(
+                    onLogout = {
+                        navController.navigate(Route.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
+            }
             // F9 (2026-07-07) — Transport section:
             //   Bus rail → DriverHomeScreen → {TripDetail | FuelLog | Sos}
             // The driver never needs a developer-only route or deep link;
@@ -596,8 +695,36 @@ fun MainScaffold(navController: NavHostController) {
                     onBack = { innerNavController.popBackStack() }
                 )
             }
+            composable(Route.Search.route) {
+                com.schoolsync.teacher.ui.search.SearchScreen(
+                    onBack = { innerNavController.popBackStack() },
+                    onNavigateRoute = { route ->
+                        // Capability-gated: a disallowed module is a no-op.
+                        if (com.schoolsync.teacher.util.ModuleGate.canAccess(route, caps)) {
+                            // Drop Search from the back stack so Back from the
+                            // target lands on the dashboard, not on search.
+                            innerNavController.navigate(route) {
+                                popUpTo(Route.Search.route) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                )
+            }
         }
-    }
+        } // end Row (nav rail + content)
+
+        // Full-screen story overlay — the screen it was opened from stays
+        // composed behind, so it shows through as the viewer fades on a
+        // swipe-down / pinch-out dismiss.
+        storyViewerAuthorId?.let { authorId ->
+            com.schoolsync.teacher.ui.stories.StoryViewerScreen(
+                initialAuthorId = authorId,
+                onClose = { storyViewerAuthorId = null },
+                viewModel = storyViewerViewModel
+            )
+        }
+    } // end overlay Box
 }
 
 /** Reusable nav rail entry (icon + label) with ripple feedback. */

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 data class ExamInfo(
@@ -42,7 +43,8 @@ data class StudentMark(
     val total: String = "",
     val isAbsent: Boolean = false,
     val theoryError: String? = null,
-    val practicalError: String? = null
+    val practicalError: String? = null,
+    val totalError: String? = null
 )
 
 data class MarksUiState(
@@ -75,6 +77,9 @@ class MarksViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "MarksVM"
+        // How long to wait for the server to ACK a marks batch before assuming
+        // we're offline and surfacing "saved offline, will sync" (MED-5).
+        private const val SAVE_ACK_TIMEOUT_MS = 4000L
     }
 
     private val _uiState = MutableStateFlow(MarksUiState())
@@ -82,6 +87,13 @@ class MarksViewModel @Inject constructor(
 
     private val _events = MutableSharedFlow<MarksEvent>()
     val events = _events.asSharedFlow()
+
+    // Synchronous re-entry guard for saveMarks() so a fast double-tap on the Save
+    // FAB cannot enqueue two batch writes (isSaving alone flips inside the
+    // coroutine, one frame too late). Set at the top of saveMarks, cleared in a
+    // finally. @Volatile: written/read from the main thread but be explicit.
+    @Volatile
+    private var saveInProgress = false
 
     init {
         // Reload when the school's active session changes (propagated into
@@ -170,6 +182,7 @@ class MarksViewModel @Inject constructor(
         if (state.selectedClassName.isEmpty()) return
 
         viewModelScope.launch {
+            _uiState.update { it.copy(error = null) }
             try {
                 // Primary: Firestore exams
                 examFirestoreRepo.getExams().fold(
@@ -203,6 +216,7 @@ class MarksViewModel @Inject constructor(
         val exam = state.selectedExam ?: return
 
         viewModelScope.launch {
+            _uiState.update { it.copy(error = null) }
             try {
                 // Primary: Firestore exam schedule for subject details
                 examFirestoreRepo.getExamSchedule(
@@ -288,16 +302,19 @@ class MarksViewModel @Inject constructor(
                     .mapIndexed { idx, stu ->
                         val sid = stu.studentId.ifBlank { stu.userId }
                         val m = existing[sid]
+                        // Preserve fractional marks on load — the admin schema is
+                        // Double and a 7.5 must NOT be truncated to 7 on re-save
+                        // (silent corruption). formatMark drops a trailing ".0".
                         StudentMark(
                             studentId = sid,
                             rollNo = stu.rollNo.toIntOrNull() ?: (idx + 1),
                             name = stu.name,
-                            theory = if (m != null && !m.absent) m.theory.toInt().toString() else "",
-                            practical = if (m != null && !m.absent) m.practical.toInt().toString() else "",
+                            theory = if (m != null && !m.absent) formatMark(m.theory) else "",
+                            practical = if (m != null && !m.absent) formatMark(m.practical) else "",
                             total = when {
                                 m == null -> ""
                                 m.absent -> "AB"
-                                else -> m.total.toInt().toString()
+                                else -> formatMark(m.total)
                             },
                             isAbsent = m?.absent ?: false
                         )
@@ -316,7 +333,9 @@ class MarksViewModel @Inject constructor(
     fun updateTheory(studentId: String, value: String) {
         updateMark(studentId) { mark ->
             val subject = _uiState.value.selectedSubject
-            val numVal = value.toIntOrNull()
+            // Accept fractional input (marks are Double); toDoubleOrNull rejects a
+            // stray second '.' or non-numeric text as "Invalid".
+            val numVal = value.toDoubleOrNull()
             val error = when {
                 value.isNotEmpty() && numVal == null -> "Invalid"
                 numVal != null && subject != null && numVal > subject.maxTheory -> "Max ${subject.maxTheory}"
@@ -325,13 +344,14 @@ class MarksViewModel @Inject constructor(
             }
             val newTotal = calculateTotal(value, mark.practical)
             mark.copy(theory = value, total = newTotal, theoryError = error, isAbsent = false)
+                .withTotalError(subject)
         }
     }
 
     fun updatePractical(studentId: String, value: String) {
         updateMark(studentId) { mark ->
             val subject = _uiState.value.selectedSubject
-            val numVal = value.toIntOrNull()
+            val numVal = value.toDoubleOrNull()
             val error = when {
                 value.isNotEmpty() && numVal == null -> "Invalid"
                 numVal != null && subject != null && numVal > subject.maxPractical -> "Max ${subject.maxPractical}"
@@ -340,6 +360,7 @@ class MarksViewModel @Inject constructor(
             }
             val newTotal = calculateTotal(mark.theory, value)
             mark.copy(practical = value, total = newTotal, practicalError = error, isAbsent = false)
+                .withTotalError(subject)
         }
     }
 
@@ -351,7 +372,8 @@ class MarksViewModel @Inject constructor(
                 // and the teacher can enter fresh marks.
                 mark.copy(
                     isAbsent = false,
-                    total = calculateTotal(mark.theory, mark.practical)
+                    total = calculateTotal(mark.theory, mark.practical),
+                    totalError = null
                 )
             } else {
                 mark.copy(
@@ -360,10 +382,22 @@ class MarksViewModel @Inject constructor(
                     practical = "",
                     total = "AB",
                     theoryError = null,
-                    practicalError = null
+                    practicalError = null,
+                    totalError = null
                 )
             }
         }
+    }
+
+    /**
+     * MED-6: flag when the combined total exceeds the subject's maxTotal — the
+     * per-component checks alone can't catch a theory+practical sum over the cap.
+     */
+    private fun StudentMark.withTotalError(subject: SubjectInfo?): StudentMark {
+        val t = total.toDoubleOrNull()
+        val err = if (subject != null && exceedsMaxTotal(t, subject.maxTotal, isAbsent))
+            "Max ${subject.maxTotal}" else null
+        return copy(totalError = err)
     }
 
     private fun updateMark(studentId: String, transform: (StudentMark) -> StudentMark) {
@@ -376,9 +410,9 @@ class MarksViewModel @Inject constructor(
     }
 
     private fun calculateTotal(theory: String, practical: String): String {
-        val t = theory.toIntOrNull() ?: return ""
-        val p = practical.toIntOrNull() ?: return t.toString()
-        return (t + p).toString()
+        val t = theory.toDoubleOrNull() ?: return ""
+        val p = practical.toDoubleOrNull() ?: return formatMark(t)
+        return formatMark(t + p)
     }
 
     fun saveMarks() {
@@ -386,8 +420,14 @@ class MarksViewModel @Inject constructor(
         val exam = state.selectedExam ?: return
         val subject = state.selectedSubject ?: return
 
-        // Validate
-        val hasErrors = state.studentMarks.any { it.theoryError != null || it.practicalError != null }
+        // MED-4: synchronous re-entry guard — a fast double-tap must not enqueue
+        // two batch writes. Set BEFORE anything async; cleared in finally below.
+        if (saveInProgress) return
+
+        // Validate — per-component errors AND the combined total-vs-maxTotal cap.
+        val hasErrors = state.studentMarks.any {
+            it.theoryError != null || it.practicalError != null || it.totalError != null
+        }
         if (hasErrors) {
             viewModelScope.launch {
                 _events.emit(MarksEvent.SaveError("Please fix validation errors before saving"))
@@ -395,52 +435,98 @@ class MarksViewModel @Inject constructor(
             return
         }
 
+        saveInProgress = true
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
                 val sectionKey = "${Constants.classKey(state.selectedClassName)}/${Constants.sectionKey(state.selectedSection)}"
+                val hasPractical = subject.maxPractical > 0
 
-                // Primary: Firestore batch marks save
+                // Primary: Firestore batch marks save. componentMarks is the
+                // CANONICAL shape the admin report cards read component columns
+                // from — names "Theory"/"Practical" are detected by the admin's
+                // buildMarksDoc (strpos on the lower-cased name). Omit Practical
+                // when the subject has none (maxPractical == 0).
                 val marksList = state.studentMarks.map { mark ->
+                    val theoryVal = if (mark.isAbsent) 0.0 else (mark.theory.toDoubleOrNull() ?: 0.0)
+                    val practicalVal = if (mark.isAbsent) 0.0 else (mark.practical.toDoubleOrNull() ?: 0.0)
+                    val totalVal = if (mark.isAbsent) 0.0 else (mark.total.toDoubleOrNull() ?: 0.0)
+                    val components = buildComponentMarks(theoryVal, practicalVal, hasPractical)
                     MarksDoc(
                         studentId = mark.studentId,
                         studentName = mark.name,
-                        theory = if (mark.isAbsent) 0.0 else (mark.theory.toDoubleOrNull() ?: 0.0),
-                        practical = if (mark.isAbsent) 0.0 else (mark.practical.toDoubleOrNull() ?: 0.0),
-                        total = if (mark.isAbsent) 0.0 else (mark.total.toDoubleOrNull() ?: 0.0),
+                        componentMarks = components,
+                        theory = theoryVal,
+                        practical = practicalVal,
+                        total = totalVal,
+                        maxMarks = subject.maxTotal.toDouble(),
                         absent = mark.isAbsent
                     )
                 }
 
-                examFirestoreRepo.saveBatchMarks(
-                    examId = exam.examId,
-                    sectionKey = sectionKey,
-                    className = state.selectedClassName,
-                    section = state.selectedSection,
-                    subject = subject.subjectId,
-                    marksList = marksList
-                ).fold(
-                    onSuccess = { count ->
-                        Log.d(TAG, "Firestore: saved marks for $count students")
+                // MED-5: setDocumentsBatch's commit success only fires on SERVER
+                // ack, so offline the coroutine would suspend forever and the Save
+                // spinner would hang with no feedback. The write is already
+                // durably queued in Firestore's local cache the moment commit() is
+                // called, so if the server hasn't acked within the window we tell
+                // the teacher it's saved offline (and will sync) instead of hanging.
+                val result = withTimeoutOrNull(SAVE_ACK_TIMEOUT_MS) {
+                    examFirestoreRepo.saveBatchMarks(
+                        examId = exam.examId,
+                        sectionKey = sectionKey,
+                        className = state.selectedClassName,
+                        section = state.selectedSection,
+                        subject = subject.subjectId,
+                        marksList = marksList
+                    )
+                }
 
-                        _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false) }
-                        _events.emit(MarksEvent.SaveSuccess("Marks saved for $count students"))
-                    },
-                    onFailure = { e ->
-                        _uiState.update { it.copy(isSaving = false) }
-                        _events.emit(MarksEvent.SaveError(e.message ?: "Failed to save marks"))
-                    }
-                )
+                if (result == null) {
+                    // No server ack in time — offline / very slow link. The batch
+                    // is queued locally and will sync automatically.
+                    Log.d(TAG, "Save not acked within ${SAVE_ACK_TIMEOUT_MS}ms — treating as offline-queued")
+                    _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false) }
+                    _events.emit(MarksEvent.SaveSuccess("Saved offline — will sync when online"))
+                } else {
+                    result.fold(
+                        onSuccess = { count ->
+                            Log.d(TAG, "Firestore: saved marks for $count students")
+                            _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false) }
+                            _events.emit(MarksEvent.SaveSuccess("Marks saved for $count students"))
+                        },
+                        onFailure = { e ->
+                            _uiState.update { it.copy(isSaving = false) }
+                            _events.emit(MarksEvent.SaveError(e.message ?: "Failed to save marks"))
+                        }
+                    )
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to save marks", e)
                 _uiState.update { it.copy(isSaving = false) }
                 _events.emit(MarksEvent.SaveError(e.message ?: "Failed to save marks"))
+            } finally {
+                saveInProgress = false
             }
         }
     }
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    /**
+     * MED-7: retry the load that most recently failed, based on how far the
+     * selection has progressed (marks → subjects → exams → initial).
+     */
+    fun retry() {
+        _uiState.update { it.copy(error = null) }
+        val state = _uiState.value
+        when {
+            state.selectedExam != null && state.selectedSubject != null -> loadStudentMarks()
+            state.selectedExam != null -> loadSubjects()
+            state.selectedClassName.isNotEmpty() -> loadExams()
+            else -> loadInitialData()
+        }
     }
 
     fun refresh() {

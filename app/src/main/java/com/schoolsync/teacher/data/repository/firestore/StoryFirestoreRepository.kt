@@ -1,14 +1,21 @@
 package com.schoolsync.teacher.data.repository.firestore
 
-import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.FirebaseFirestore
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.firestore.StoryDoc
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
@@ -30,6 +37,24 @@ import javax.inject.Singleton
  * Validation lives in [uploadStory] only: caption ≤ 500 chars, type
  * ∈ {image, video}, mediaUrl present, identity fields present.
  */
+/** One person who saw a story, with their reaction (if any). */
+data class StoryViewerEntry(
+    val userId: String,
+    val name: String,
+    /** Their emoji reaction, or null if they viewed but didn't react. */
+    val emoji: String?,
+    val viewedAtMillis: Long
+)
+
+/** Everything the teacher's "insights" sheet needs for one story. */
+data class StoryInsights(
+    val viewCount: Int,
+    /** emoji → count (denormalised on the story doc). */
+    val reactionCounts: Map<String, Int>,
+    /** Individual viewers, newest first. */
+    val viewers: List<StoryViewerEntry>
+)
+
 @Singleton
 class StoryFirestoreRepository @Inject constructor(
     private val firestoreService: FirestoreService,
@@ -47,6 +72,24 @@ class StoryFirestoreRepository @Inject constructor(
         const val TEACHER_DAILY_LIMIT = com.schoolsync.teacher.data.model.firestore.StorySharedConfig.TEACHER_DAILY_LIMIT
     }
 
+    /**
+     * The school identifier used for ALL story queries. Prefer
+     * KEY_SCHOOL_ID (the JWT `school_id` claim value, always set at
+     * login) and fall back to KEY_SCHOOL_CODE only if it's blank.
+     *
+     * Why: KEY_SCHOOL_CODE is written only CONDITIONALLY in saveProfile
+     * and can be blank/stale on some accounts. When it was blank, the
+     * story queries below returned an empty list — so a teacher whose
+     * schoolCode hadn't been populated saw NO stories at all (e.g. a
+     * whole-school post from another teacher was invisible). schoolId
+     * holds the same SCH_… value and is reliably present, so it's the
+     * correct key to filter the `schoolId` doc field on.
+     */
+    private val schoolKey: Flow<String?> =
+        combine(tokenManager.schoolId, tokenManager.schoolCode) { id, code ->
+            id?.takeIf { it.isNotBlank() } ?: code
+        }
+
     // ─── REAL-TIME LISTENERS ───────────────────────────────────────
 
     /**
@@ -59,27 +102,37 @@ class StoryFirestoreRepository @Inject constructor(
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observeActiveStories(): Flow<List<StoryDoc>> {
-        return tokenManager.schoolCode
-            .flatMapLatest { schoolCode ->
-                if (schoolCode.isNullOrBlank()) flowOf(emptyList())
-                else {
-                    val nowTs = com.google.firebase.Timestamp.now()
-                    firestoreService.observeQuery(COLLECTION) { ref ->
-                        ref.whereEqualTo("schoolId", schoolCode)
-                            .whereGreaterThan("expiresAtTs", nowTs)
-                            .orderBy("expiresAtTs", Query.Direction.DESCENDING)
-                    }.map { snap ->
-                        val nowMs = System.currentTimeMillis()
-                        snap.documents
-                            .mapNotNull { it.toObject(StoryDoc::class.java) }
-                            // Status + defense-in-depth millis filter
-                            // (covers the window where a legacy doc
-                            // has only the Long expiresAt and the
-                            // Firestore query couldn't compare it
-                            // against a Timestamp).
-                            .filter { it.status == "active" && it.expiresAtMillis > nowMs }
-                    }.onStart { emit(emptyList()) }
-                     .catch { emit(emptyList()) }
+        return schoolKey
+            .distinctUntilChanged()
+            .flatMapLatest { storedSchool ->
+                flow {
+                    // The Firestore rule authorises a story read only when
+                    // story.schoolId == the caller's `school_id` claim, and a
+                    // listener whose query filters a DIFFERENT value is denied
+                    // wholesale (→ zero stories). Resolve the filter value from
+                    // the LIVE ID token claim; fall back to the stored school
+                    // only when the token can't be read (offline).
+                    val claimSchool = runCatching {
+                        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                            ?.getIdToken(false)?.await()?.claims?.get("school_id")?.toString()
+                    }.getOrNull()?.takeIf { it.isNotBlank() }
+                    val schoolForQuery = claimSchool ?: storedSchool
+                    if (schoolForQuery.isNullOrBlank()) {
+                        emit(emptyList())
+                    } else {
+                        emitAll(
+                            firestoreService.observeQuery(COLLECTION) { ref ->
+                                ref.whereEqualTo("schoolId", schoolForQuery)
+                            }.map { snap ->
+                                val nowMs = System.currentTimeMillis()
+                                snap.documents
+                                    .mapNotNull { it.toObject(StoryDoc::class.java) }
+                                    .filter { it.status == "active" && it.expiresAtMillis > nowMs }
+                                    .sortedByDescending { it.expiresAtMillis }
+                            }.onStart { emit(emptyList()) }
+                             .catch { emit(emptyList()) }
+                        )
+                    }
                 }
             }
     }
@@ -94,7 +147,7 @@ class StoryFirestoreRepository @Inject constructor(
         return tokenManager.userId
             .flatMapLatest { teacherId ->
                 if (teacherId.isNullOrBlank()) flowOf(emptyList())
-                else tokenManager.schoolCode
+                else schoolKey
                     .flatMapLatest { schoolCode ->
                         if (schoolCode.isNullOrBlank()) flowOf(emptyList())
                         else firestoreService.observeQuery(COLLECTION) { ref ->
@@ -119,7 +172,7 @@ class StoryFirestoreRepository @Inject constructor(
     suspend fun getMyStories(): Result<List<StoryDoc>> {
         val teacherId = tokenManager.userId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("User ID not available"))
-        val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        val schoolCode = schoolKey.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
         return try {
             // Query by teacherId (not authorId) for now — legacy docs
@@ -130,6 +183,191 @@ class StoryFirestoreRepository @Inject constructor(
                     .whereEqualTo("teacherId", teacherId)
             }
             Result.success(stories.sortedByDescending { it.expiresAtMillis })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Read who saw a story and what they reacted. Joins the
+     * `viewers` + `reactions` subcollections by userId. Viewer/reactor
+     * names are read from the denormalised `userName` field the client
+     * writes; older docs without it fall back to a neutral "Viewer"
+     * (NOT "Parent" — staff can view stories too, and mislabelling a
+     * staff viewer as a parent is wrong).
+     */
+    suspend fun getStoryInsights(storyId: String): Result<StoryInsights> {
+        return try {
+            val fs = FirebaseFirestore.getInstance()
+            val storyRef = fs.collection(COLLECTION).document(storyId)
+
+            val storySnap = storyRef.get().await()
+            val story = storySnap.toObject(StoryDoc::class.java)
+
+            // The viewers/reactions read rule requires resource.data.schoolId ==
+            // the caller's `school_id` claim, so an UNFILTERED subcollection query
+            // is denied wholesale → empty list ("can't see who viewed"). Filter by
+            // the story's own schoolId (== this same-school teacher's claim) to
+            // authorise the query.
+            val schoolFilter = storySnap.getString("schoolId")?.takeIf { it.isNotBlank() }
+            val viewersSnap = storyRef.collection(VIEWERS_SUBCOLLECTION)
+                .let { if (schoolFilter != null) it.whereEqualTo("schoolId", schoolFilter) else it }
+                .get().await()
+            val reactionsSnap = storyRef.collection(
+                com.schoolsync.teacher.data.model.firestore.StorySharedConfig.REACTIONS_SUBCOLLECTION
+            ).let { if (schoolFilter != null) it.whereEqualTo("schoolId", schoolFilter) else it }
+                .get().await()
+
+            // reactions keyed by userId → (emoji, name)
+            val reactionByUser = reactionsSnap.documents.associate { d ->
+                (d.getString("userId") ?: d.id) to
+                    Pair(d.getString("emoji").orEmpty(), d.getString("userName").orEmpty())
+            }
+
+            // Merge viewers with their reaction (LinkedHashMap keeps order).
+            val entries = LinkedHashMap<String, StoryViewerEntry>()
+            viewersSnap.documents.forEach { d ->
+                val uid = d.getString("userId") ?: d.id
+                val nm = d.getString("userName").orEmpty()
+                    .ifBlank { reactionByUser[uid]?.second.orEmpty() }
+                val viewedAt = d.getTimestamp("viewedAt")?.toDate()?.time ?: 0L
+                val emoji = reactionByUser[uid]?.first?.takeIf { it.isNotBlank() }
+                entries[uid] = StoryViewerEntry(uid, nm.ifBlank { "Viewer" }, emoji, viewedAt)
+            }
+            // Reactors who somehow aren't in viewers (defensive union).
+            reactionByUser.forEach { (uid, pair) ->
+                if (!entries.containsKey(uid)) {
+                    entries[uid] = StoryViewerEntry(
+                        uid, pair.second.ifBlank { "Viewer" },
+                        pair.first.takeIf { it.isNotBlank() }, 0L
+                    )
+                }
+            }
+
+            Result.success(
+                StoryInsights(
+                    viewCount = story?.viewCount ?: viewersSnap.size(),
+                    reactionCounts = (story?.reactionCounts ?: emptyMap())
+                        .filterValues { it > 0 },
+                    viewers = entries.values.sortedByDescending { it.viewedAtMillis }
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * LIVE set of story ids this staff member has viewed — real-time
+     * `viewers` collection-group listener keyed by userId. Drives the ring's
+     * grey/colored state AND keeps SEPARATE VM instances in sync: when the
+     * full-screen viewer writes a viewer doc, the Dashboard ring's VM (also
+     * observing this) greys the ring within ~100ms — no shared VM needed.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeSeenStoryIds(): Flow<Set<String>> =
+        combine(tokenManager.userId, schoolKey) { uid, school -> uid.orEmpty() to school.orEmpty() }
+            .distinctUntilChanged()
+            .flatMapLatest { (userId, school) ->
+                // SEC-3: the viewers collection-group READ rule is now tenant-
+                // bound, so the query MUST carry the schoolId filter or it is
+                // denied wholesale. Composite CG index schoolId+userId backs it.
+                if (userId.isBlank() || school.isBlank()) flowOf(emptySet())
+                else callbackFlow {
+                    val reg = FirebaseFirestore.getInstance()
+                        .collectionGroup(VIEWERS_SUBCOLLECTION)
+                        .whereEqualTo("schoolId", school)
+                        .whereEqualTo("userId", userId)
+                        .addSnapshotListener { snap, err ->
+                            if (err != null || snap == null) { trySend(emptySet()); return@addSnapshotListener }
+                            trySend(snap.documents.mapNotNull { it.reference.parent.parent?.id }.toSet())
+                        }
+                    awaitClose { reg.remove() }
+                }
+            }
+
+    /**
+     * Story ids this staff member has already viewed — read once from the
+     * `viewers` collection-group (docs keyed by userId) so the ring's
+     * seen/unseen state survives app restarts (Instagram-style), not just
+     * the current session. Mirrors the parent app's hydration.
+     */
+    suspend fun getSeenStoryIds(): Set<String> {
+        return try {
+            val userId = tokenManager.userId.firstOrNull()?.takeIf { it.isNotBlank() }
+                ?: return emptySet()
+            val school = schoolKey.firstOrNull()?.takeIf { it.isNotBlank() }
+                ?: return emptySet()
+            val snap = FirebaseFirestore.getInstance()
+                .collectionGroup(VIEWERS_SUBCOLLECTION)
+                .whereEqualTo("schoolId", school)   // SEC-3 tenant scope
+                .whereEqualTo("userId", userId)
+                .get().await()
+            snap.documents.mapNotNull { it.reference.parent.parent?.id }.toSet()
+        } catch (e: Exception) {
+            emptySet()   // non-fatal: fall back to session-only seen
+        }
+    }
+
+    /**
+     * schoolId to stamp on engagement writes — the LIVE `school_id` claim
+     * (the exact value the tenant-bound engagement rule compares against),
+     * falling back to the stored school if the token can't be read.
+     */
+    private suspend fun resolveWriteSchoolId(): String {
+        val claim = runCatching {
+            com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                ?.getIdToken(false)?.await()?.claims?.get("school_id")?.toString()
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+        return claim
+            ?: tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: tokenManager.schoolCode.firstOrNull().orEmpty()
+    }
+
+    /**
+     * Record that THIS staff member (teacher/admin) viewed a story. Writes
+     * the per-user viewer marker (keyed by staff userId, carrying userName);
+     * the aggregate viewCount is bumped exactly once SERVER-SIDE by the CF
+     * onStoryViewerCreated (SEC-4). The viewer doc also drives persistent
+     * ring seen-state and the author's "who viewed" list. Caller must NOT
+     * invoke this for the author viewing their OWN story (no self-counting).
+     */
+    suspend fun markAsViewed(storyId: String): Result<Unit> {
+        val userId = tokenManager.userId.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(Exception("User ID not available"))
+        val userName = tokenManager.userName.firstOrNull().orEmpty()
+        // C2: stamp the caller's own schoolId so the engagement rule can
+        // tenant-bind the write (must equal the token's school_id claim).
+        val schoolId = resolveWriteSchoolId()
+        if (schoolId.isBlank()) return Result.failure(Exception("School not available"))
+        return try {
+            val fs = FirebaseFirestore.getInstance()
+            val storyRef  = fs.collection(COLLECTION).document(storyId)
+            val viewerRef = storyRef.collection(VIEWERS_SUBCOLLECTION).document(userId)
+            fs.runTransaction { tx ->
+                val existing = tx.get(viewerRef)
+                if (existing.exists()) {
+                    // Already counted — never inflate on re-view. Backfill a
+                    // blank name if an earlier doc lacked it (also stamp
+                    // schoolId so the update satisfies the tenant-bound rule).
+                    if (existing.getString("userName").isNullOrBlank() && userName.isNotBlank()) {
+                        tx.update(viewerRef, mapOf("userName" to userName, "schoolId" to schoolId))
+                    }
+                    return@runTransaction null
+                }
+                // SEC-4: write ONLY the viewer marker. viewCount is
+                // incremented server-side by the CF onStoryViewerCreated
+                // (once per unique viewer doc create) — the client never
+                // writes the forgeable aggregate.
+                tx.set(viewerRef, hashMapOf<String, Any?>(
+                    "viewedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "userId"   to userId,
+                    "userName" to userName,
+                    "schoolId" to schoolId
+                ))
+                null
+            }.await()
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -159,7 +397,13 @@ class StoryFirestoreRepository @Inject constructor(
         type: String = "image",
         caption: String = "",
         teacherName: String,
-        teacherPic: String = ""
+        teacherPic: String = "",
+        /** Video poster URL (empty for images). */
+        thumbnailUrl: String = "",
+        /** Canonical class-section tokens (StorySharedConfig.audienceKey).
+         *  EMPTY = school-wide. Teacher posts default to their own
+         *  class-teacher section(s); "Whole school" clears it. */
+        audienceClassKeys: List<String> = emptyList()
     ): Result<String> {
         // Validation
         val cleanUrl     = mediaUrl.trim()
@@ -169,7 +413,7 @@ class StoryFirestoreRepository @Inject constructor(
         if (cleanType !in ALLOWED_TYPES)             return Result.failure(IllegalArgumentException("Type must be image or video"))
         if (cleanCaption.length > MAX_CAPTION_LENGTH) return Result.failure(IllegalArgumentException("Caption exceeds $MAX_CAPTION_LENGTH chars"))
 
-        val schoolCode = tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
+        val schoolCode = schoolKey.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("School code not available"))
         val teacherId = tokenManager.userId.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: return Result.failure(Exception("User ID not available"))
@@ -178,7 +422,12 @@ class StoryFirestoreRepository @Inject constructor(
         // per rolling 24h window). Query counts only active, non-
         // expired docs for this teacher since the client whereGreaterThan
         // on expiresAtTs already bounds to "today's window" for us.
-        val activeTodayCount = try {
+        // C1 fix: FAIL-CLOSED. The 3-field composite index
+        // (schoolId+teacherId+expiresAtTs) now exists, so this query should
+        // never FAILED_PRECONDITION; if the count errors anyway (transient),
+        // we reject rather than silently allowing unlimited uploads — the
+        // rate limit is a real control, not best-effort.
+        val activeTodayCount: Int = try {
             val nowTs = com.google.firebase.Timestamp.now()
             firestoreService.queryDocumentsAs<StoryDoc>(COLLECTION) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
@@ -186,7 +435,10 @@ class StoryFirestoreRepository @Inject constructor(
                     .whereGreaterThan("expiresAtTs", nowTs)
             }.count { it.status == "active" }
         } catch (e: Exception) {
-            0   // fail-open: if count fails, allow the upload
+            return Result.failure(IllegalStateException(
+                "Couldn't verify your daily story limit right now. " +
+                "Please check your connection and try again."
+            ))
         }
         if (activeTodayCount >= TEACHER_DAILY_LIMIT) {
             return Result.failure(IllegalStateException(
@@ -198,6 +450,14 @@ class StoryFirestoreRepository @Inject constructor(
         // authorPic: prefer caller value, else pull from cached profile.
         val resolvedPic = teacherPic.ifBlank {
             tokenManager.profilePic.firstOrNull().orEmpty()
+        }
+
+        // SEC-1: a whole-school post carries the '*' sentinel INSIDE
+        // audienceClassKeys (not an empty list) so the parent's server-side
+        // array-contains-any query can match it. Class-targeted posts keep
+        // their canonical keys unchanged.
+        val audience = audienceClassKeys.ifEmpty {
+            listOf(com.schoolsync.teacher.data.model.firestore.StorySharedConfig.AUDIENCE_ALL)
         }
 
         val storyId = "${schoolCode}_${teacherId}_${System.currentTimeMillis()}"
@@ -220,9 +480,14 @@ class StoryFirestoreRepository @Inject constructor(
             "teacherPic"      to resolvedPic,
             // Content
             "mediaUrl"        to cleanUrl,
+            "thumbnailUrl"    to (if (cleanType == "video") thumbnailUrl.trim() else ""),
             "type"            to cleanType,
             "caption"         to cleanCaption,
             "priority"        to "normal",
+            // Audience scoping (v1) — ['*'] = school-wide, else class keys.
+            "audienceClassKeys" to audience,
+            // Reactions (v1) — starts empty; parent app increments.
+            "reactionCounts"  to emptyMap<String, Int>(),
             // Lifecycle — expiresAtTs (Timestamp) is the canonical
             // expiry field used by both clients AND Firestore TTL.
             // expiresAt (Long) is written for one more release so
@@ -252,6 +517,24 @@ class StoryFirestoreRepository @Inject constructor(
 
     suspend fun deleteStory(storyId: String): Result<Unit> {
         return try {
+            // Best-effort: purge the Storage media so a manual delete doesn't
+            // orphan the image/video/poster in the bucket. The onStoryDeleted
+            // Cloud Function is the server-side backstop, but deleting here
+            // means cleanup is immediate and still happens even if that CF
+            // isn't deployed. Each delete is swallowed on failure — the doc
+            // delete below is what actually removes the story; the CF sweeps
+            // anything we couldn't reach.
+            runCatching {
+                val fs = FirebaseFirestore.getInstance()
+                val snap = fs.collection(COLLECTION).document(storyId).get().await()
+                val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
+                listOfNotNull(
+                    snap.getString("mediaUrl")?.takeIf { it.isNotBlank() },
+                    snap.getString("thumbnailUrl")?.takeIf { it.isNotBlank() }
+                ).forEach { url ->
+                    runCatching { storage.getReferenceFromUrl(url).delete().await() }
+                }
+            }
             firestoreService.deleteDocument(COLLECTION, storyId)
             Result.success(Unit)
         } catch (e: Exception) {

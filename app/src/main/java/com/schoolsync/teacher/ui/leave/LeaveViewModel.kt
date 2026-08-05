@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.ClassAssignment
 import com.schoolsync.teacher.data.model.LeaveBalance as ModelLeaveBalance
-import com.schoolsync.teacher.data.model.LeaveRequest as ModelLeaveRequest
 import com.schoolsync.teacher.data.model.LeaveStatus as ModelLeaveStatus
 import com.schoolsync.teacher.data.model.firestore.LeaveApplicationDoc
 import com.schoolsync.teacher.data.repository.TeacherRepository
@@ -25,9 +24,13 @@ import javax.inject.Inject
 
 data class LeaveBalance(
     val type: String,
-    val used: Int,
-    val total: Int,
-    val remaining: Int = total - used
+    val used: Double,
+    val total: Double,
+    // Live allocation from the school leave type (days_per_year) and any
+    // carried-forward days from the BAL doc. `total` = allocated + carried.
+    val allocated: Double = total,
+    val carried: Double = 0.0,
+    val remaining: Double = total - used
 )
 
 data class LeaveRequest(
@@ -38,7 +41,7 @@ data class LeaveRequest(
     val reason: String,
     val status: LeaveStatus,
     val appliedDate: String = "",
-    val days: Int = 1,
+    val days: Double = 1.0,          // MEDIUM #5: Double so half-day = 0.5
     val remarks: String = ""
 )
 
@@ -69,7 +72,9 @@ data class LeaveUiState(
     val balances: List<LeaveBalance> = emptyList(),
     val leaveHistory: List<LeaveRequest> = emptyList(),
     val isLoading: Boolean = true,
-    val error: String? = null,
+    val error: String? = null,            // H11: history/general load error
+    val balancesError: String? = null,    // H11: balance / leave-type load error
+    val studentLeavesError: String? = null, // H11: student-leave load error
     val showApplyDialog: Boolean = false,
     val applyLeaveType: String = "",
     val applyStartDate: String = "",
@@ -115,6 +120,11 @@ class LeaveViewModel @Inject constructor(
     // submitLeaveRequest can snapshot the paid flag on the leave doc.
     private val leaveTypeNameToPaidCache = mutableMapOf<String, Boolean>()
 
+    // MEDIUM #9: throttle the ON_RESUME full-reload. Seeded to "now" at
+    // construction so the first resume right after init doesn't re-run the
+    // multi-read load that init already kicked off.
+    private var lastResumeRefresh: Long = System.currentTimeMillis()
+
     init {
         loadLeaveData()
         checkClassTeacherStatus()
@@ -122,7 +132,11 @@ class LeaveViewModel @Inject constructor(
 
     fun loadLeaveData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, balancesError = null) }
+            // H11: capture the previously-swallowed leave-type / balance load
+            // failures so the UI can show an error+retry instead of a blank
+            // "not configured" panel.
+            var panelError: String? = null
             try {
                 // Resolve staff gender once up-front so we can use it
                 // for BOTH the Apply Leave type dropdown and the balances
@@ -153,6 +167,10 @@ class LeaveViewModel @Inject constructor(
                 //      and the staff member's gender.
                 var leaveTypeNames = emptyList<String>()
                 var leaveTypeIdToName = mutableMapOf<String, String>()
+                // Raw school leaveTypes map, held so the balance panel can
+                // derive `allocated` LIVE from each type's days_per_year
+                // instead of trusting the stored BAL doc's allocation.
+                var schoolLeaveTypesRaw: Map<String, Any>? = null
                 // CR-3 cross-system: re-populate class-level cache from fresh
                 // school config every loadLeaveData; submit reads it later.
                 leaveTypeNameToPaidCache.clear()
@@ -160,6 +178,7 @@ class LeaveViewModel @Inject constructor(
                 try {
                     if (schoolCodeForLookup.isNotBlank()) {
                         val schoolDoc = leaveFirestoreRepo.getSchoolLeaveTypes(schoolCodeForLookup)
+                        schoolLeaveTypesRaw = schoolDoc
                         if (schoolDoc != null) {
                             // Pass 1: build the FULL id → name map (no
                             // status / gender filter) for balance lookup.
@@ -193,7 +212,9 @@ class LeaveViewModel @Inject constructor(
                             }
                         }
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    panelError = e.message ?: "Failed to load leave types"
+                }
                 if (leaveTypeNames.isNotEmpty()) {
                     _uiState.update { it.copy(
                         leaveTypes = leaveTypeNames,
@@ -201,7 +222,12 @@ class LeaveViewModel @Inject constructor(
                     ) }
                 }
 
-                // Load balance — Firestore-first via leaveApplications BAL docs
+                // Load balance — one card per APPLICABLE leave type, with
+                // allocation derived LIVE from the school's leaveTypes config
+                // (days_per_year). The BAL doc only supplies used/carried; it
+                // is no longer the source of the type list or the allocation.
+                // Effect: a teacher with no BAL doc still sees every type, and
+                // an admin editing days_per_year is reflected immediately.
                 var balances = emptyList<LeaveBalance>()
                 try {
                     // schoolCode stores the schoolId path (SCH_xxx), schoolId may store legacy name
@@ -209,53 +235,62 @@ class LeaveViewModel @Inject constructor(
                         ?: tokenManager.schoolId.firstOrNull() ?: ""
                     val teacherId = tokenManager.userId.firstOrNull() ?: ""
                     val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR).toString()
+
+                    // Overlay doc for used/carried (may be absent → all zero).
+                    var balDoc: Map<String, Any>? = null
                     if (schoolCode.isNotBlank() && teacherId.isNotBlank()) {
-                        val balDocId = "${schoolCode}_BAL_${teacherId}_$year"
-                        var balDoc = leaveFirestoreRepo.getBalanceDoc(balDocId)
-                        // Try alternate school ID if first attempt failed
+                        balDoc = leaveFirestoreRepo.getBalanceDoc("${schoolCode}_BAL_${teacherId}_$year")
                         if (balDoc == null) {
                             val altSchool = tokenManager.schoolId.firstOrNull() ?: ""
                             if (altSchool.isNotBlank() && altSchool != schoolCode) {
                                 balDoc = leaveFirestoreRepo.getBalanceDoc("${altSchool}_BAL_${teacherId}_$year")
                             }
                         }
-                        if (balDoc != null) {
-                            // Filter gender-specific leaves
-                            val staffDocId = "${schoolCode}_${teacherId}"
-                            val staffGender = try {
-                                val staffDoc = leaveFirestoreRepo.getStaffGender(staffDocId)
-                                staffDoc?.lowercase() ?: ""
-                            } catch (_: Exception) { "" }
+                    }
 
-                            val priorityOrder = listOf("Casual", "Sick", "Earned", "Academic", "Comp", "Paternity", "Maternity")
-                            balances = balDoc.entries.mapNotNull { (typeId, data) ->
-                                if (data is Map<*, *>) {
-                                    val alloc = (data["allocated"] as? Number)?.toInt() ?: 0
-                                    if (alloc <= 0) return@mapNotNull null
-                                    // Skip entries whose typeId no longer
-                                    // resolves to a name — surface "LT0004"
-                                    // raw to the user is worse than hiding
-                                    // a stale BAL row entirely. The pass-1
-                                    // map above includes inactive types,
-                                    // so we only land here when the type
-                                    // was outright deleted from the school.
-                                    val typeName = leaveTypeIdToName[typeId] ?: return@mapNotNull null
-                                    // Hide gender-specific leaves
-                                    if (staffGender == "male" && typeName.contains("Maternity", true)) return@mapNotNull null
-                                    if (staffGender == "female" && typeName.contains("Paternity", true)) return@mapNotNull null
-                                    LeaveBalance(
-                                        type = typeName,
-                                        used = (data["used"] as? Number)?.toInt() ?: 0,
-                                        total = alloc
-                                    )
-                                } else null
-                            }.sortedBy { bal ->
-                                val idx = priorityOrder.indexOfFirst { bal.type.contains(it, ignoreCase = true) }
-                                if (idx >= 0) idx else 99
-                            }
+                    fun asDouble(v: Any?): Double = when (v) {
+                        is Number -> v.toDouble()
+                        is String -> v.toDoubleOrNull() ?: 0.0
+                        else -> 0.0
+                    }
+
+                    val priorityOrder = listOf("Casual", "Sick", "Earned", "Academic", "Comp", "Paternity", "Maternity")
+                    val schoolTypes = schoolLeaveTypesRaw
+                    if (schoolTypes != null) {
+                        balances = schoolTypes.mapNotNull { (typeId, v) ->
+                            if (v !is Map<*, *>) return@mapNotNull null
+                            val name = v["name"]?.toString() ?: v["code"]?.toString()
+                            if (name.isNullOrBlank()) return@mapNotNull null
+                            // Status filter — same as the Apply dropdown.
+                            val status = v["status"]?.toString() ?: "Active"
+                            if (!status.equals("Active", ignoreCase = true)) return@mapNotNull null
+                            // Gender filter — identical name-based rule the VM
+                            // already applies for the dropdown.
+                            if (staffGenderShared == "male" && name.contains("Maternity", true)) return@mapNotNull null
+                            if (staffGenderShared == "female" && name.contains("Paternity", true)) return@mapNotNull null
+
+                            // LIVE allocation from the type; used/carried from BAL.
+                            val allocated = asDouble(v["days_per_year"])
+                            val entry = balDoc?.get(typeId) as? Map<*, *>
+                            val carried = asDouble(entry?.get("carried"))
+                            val used = asDouble(entry?.get("used"))
+                            val total = allocated + carried
+                            LeaveBalance(
+                                type = name,
+                                used = used,
+                                total = total,
+                                allocated = allocated,
+                                carried = carried,
+                                remaining = total - used
+                            )
+                        }.sortedBy { bal ->
+                            val idx = priorityOrder.indexOfFirst { bal.type.contains(it, ignoreCase = true) }
+                            if (idx >= 0) idx else 99
                         }
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    panelError = e.message ?: "Failed to load leave balances"
+                }
 
                 // Firestore-only contract: empty result == no balances. The
                 // legacy RTDB fallback (`leaveRepository.getLeaveBalance()`)
@@ -281,6 +316,10 @@ class LeaveViewModel @Inject constructor(
                 _uiState.update { st ->
                     st.copy(
                         balances = balances,
+                        // H11: only surface a balance-panel error when we truly
+                        // have nothing to show; a partial failure that still
+                        // produced balances shouldn't nag the user.
+                        balancesError = if (balances.isEmpty()) panelError else null,
                         leaveTypes = dropdownTypes,
                         applyLeaveType = if (st.applyLeaveType in dropdownTypes) st.applyLeaveType
                             else (dropdownTypes.firstOrNull() ?: "")
@@ -400,8 +439,14 @@ class LeaveViewModel @Inject constructor(
             viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("End date is required")) }
             return
         }
-        if (state.applyReason.isBlank()) {
+        // MEDIUM #6: reason must be non-empty once trimmed, capped at 1000 chars.
+        val trimmedReason = state.applyReason.trim()
+        if (trimmedReason.isEmpty()) {
             viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Reason is required")) }
+            return
+        }
+        if (trimmedReason.length > 1000) {
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Reason is too long (max 1000 characters)")) }
             return
         }
         // Phase 4 cross-system: half-day leave must be a single date. Backend
@@ -432,6 +477,27 @@ class LeaveViewModel @Inject constructor(
                 viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("End date must be on or after start date")) }
                 return
             }
+            // MEDIUM #6: bound the span. Contract: staff <= 366 days inclusive.
+            val spanDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1
+            if (spanDays > 366) {
+                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Leave span cannot exceed 366 days")) }
+                return
+            }
+            // MEDIUM #6: overlap/duplicate guard — reject if the new range
+            // overlaps an existing pending/approved leave already in history.
+            val overlap = state.leaveHistory.any { existing ->
+                if (existing.status != LeaveStatus.PENDING && existing.status != LeaveStatus.APPROVED) {
+                    return@any false
+                }
+                val es = try { java.time.LocalDate.parse(existing.startDate) } catch (_: Exception) { return@any false }
+                val ee = try { java.time.LocalDate.parse(existing.endDate) } catch (_: Exception) { return@any false }
+                // ranges overlap when start <= ee && es <= end
+                !start.isAfter(ee) && !es.isAfter(end)
+            }
+            if (overlap) {
+                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("This range overlaps an existing pending or approved leave")) }
+                return
+            }
         } catch (_: Exception) {
             viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Invalid date format")) }
             return
@@ -440,9 +506,6 @@ class LeaveViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true) }
             try {
-                val teacherId = tokenManager.userId.firstOrNull() ?: ""
-                val teacherName = tokenManager.userName.firstOrNull() ?: ""
-
                 // Phase 9a: calculate actual number of days from date range
                 val days = try {
                     val start = java.time.LocalDate.parse(state.applyStartDate)
@@ -450,27 +513,17 @@ class LeaveViewModel @Inject constructor(
                     (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1).toInt().coerceAtLeast(1)
                 } catch (_: Exception) { 1 }
 
-                val request = ModelLeaveRequest(
-                    teacherId = teacherId,
-                    teacherName = teacherName,
-                    leaveType = state.applyLeaveType,
-                    startDate = state.applyStartDate,
-                    endDate = state.applyEndDate,
-                    reason = state.applyReason,
-                    status = ModelLeaveStatus.PENDING,
-                    numberOfDays = days
-                )
-
                 // CR-3 cross-system: snapshot paid status from current school
                 // config so payroll classification survives type deletion.
                 val typePaidSnapshot = leaveTypeNameToPaidCache[state.applyLeaveType]
-                // Firestore-first: use LeaveFirestoreRepository
+                // Firestore-first: use LeaveFirestoreRepository.
+                // MEDIUM #5: half-day stores 0.5, otherwise the whole-day span.
                 leaveFirestoreRepo.submitLeave(
                     leaveType = state.applyLeaveType,
                     startDate = state.applyStartDate,
                     endDate = state.applyEndDate,
-                    numberOfDays = if (state.applyHalfDay) 1 else days,
-                    reason = state.applyReason,
+                    numberOfDays = if (state.applyHalfDay) 0.5 else days.toDouble(),
+                    reason = trimmedReason,
                     typePaid = typePaidSnapshot,
                     // Phase 4: half-day support now live in teacher UI.
                     halfDay = state.applyHalfDay,
@@ -502,6 +555,37 @@ class LeaveViewModel @Inject constructor(
         if (_uiState.value.isClassTeacher) loadStudentLeaves()
     }
 
+    /**
+     * MEDIUM #9: called on ON_RESUME. Throttled to at most one full reload
+     * per 30s so returning from a brief background trip (e.g. a permission
+     * dialog) doesn't fire the whole multi-read load again.
+     */
+    fun onScreenResumed() {
+        val now = System.currentTimeMillis()
+        if (now - lastResumeRefresh < 30_000L) return
+        lastResumeRefresh = now
+        refresh()
+    }
+
+    /**
+     * MEDIUM #7: cancel the teacher's OWN pending leave. Rules allow the owner
+     * to move their own pending/approved leave to cancelled. No client-side
+     * balance write is attempted (service-account-only under the new rules).
+     */
+    fun cancelLeave(requestId: String) {
+        viewModelScope.launch {
+            leaveFirestoreRepo.cancelLeave(requestId).fold(
+                onSuccess = {
+                    _events.emit(LeaveEvent.SubmitSuccess("Leave cancelled"))
+                    loadLeaveData()
+                },
+                onFailure = { e ->
+                    _events.emit(LeaveEvent.SubmitError(e.message ?: "Failed to cancel leave"))
+                }
+            )
+        }
+    }
+
     // ── Phase 10e: Student Leave tab ──────────────────────────────
 
     fun selectTab(tab: Int) {
@@ -531,31 +615,69 @@ class LeaveViewModel @Inject constructor(
 
     fun loadStudentLeaves() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingStudentLeaves = true) }
+            _uiState.update { it.copy(isLoadingStudentLeaves = true, studentLeavesError = null) }
             try {
-                leaveFirestoreRepo.getStudentLeaveRequests().fold(
-                    onSuccess = { leaves ->
-                        // Filter to only show leaves for classes where this teacher IS the class teacher
-                        val filtered = leaves.filter { leave ->
-                            cachedAssignments.any { a ->
-                                a.classTeacher &&
-                                (leave.className.isNotBlank() && leave.className == a.className &&
-                                 leave.section.isNotBlank() && leave.section == a.section)
-                            }
-                        }
-                        _uiState.update { it.copy(
-                            studentLeaves = filtered,
-                            isLoadingStudentLeaves = false
-                        )}
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Failed to load student leaves", e)
-                        _uiState.update { it.copy(isLoadingStudentLeaves = false) }
+                // H9: push class/section scoping into the query — run one
+                // bounded query per distinct class-teacher section instead of a
+                // whole-school scan. Merge + dedup by doc id.
+                val sections = cachedAssignments
+                    .filter { it.classTeacher && it.className.isNotBlank() && it.section.isNotBlank() }
+                    .map { it.className to it.section }
+                    .distinct()
+
+                val merged = LinkedHashMap<String, LeaveApplicationDoc>()
+                var lastError: Throwable? = null
+                var anySuccess = false
+
+                if (sections.isEmpty()) {
+                    // Fallback: no resolved sections — bounded unscoped query,
+                    // filtered client-side (defense in depth).
+                    leaveFirestoreRepo.getStudentLeaveRequests().fold(
+                        onSuccess = { leaves ->
+                            anySuccess = true
+                            leaves.filter { leave ->
+                                cachedAssignments.any { a ->
+                                    a.classTeacher &&
+                                    leave.className.isNotBlank() && leave.className == a.className &&
+                                    leave.section.isNotBlank() && leave.section == a.section
+                                }
+                            }.forEach { merged[it.id] = it }
+                        },
+                        onFailure = { lastError = it }
+                    )
+                } else {
+                    for ((cls, sec) in sections) {
+                        leaveFirestoreRepo.getStudentLeaveRequests(cls, sec).fold(
+                            onSuccess = { leaves ->
+                                anySuccess = true
+                                // Client-side scoping kept as defense.
+                                leaves.filter {
+                                    it.className == cls && it.section == sec
+                                }.forEach { merged[it.id] = it }
+                            },
+                            onFailure = { lastError = it }
+                        )
                     }
-                )
+                }
+
+                val result = merged.values.sortedByDescending { it.startDate }
+                // H11: only surface an error when every query failed (nothing
+                // to show). A partial success still renders what we got.
+                val errorMsg = if (!anySuccess && lastError != null) {
+                    Log.e(TAG, "Failed to load student leaves", lastError)
+                    lastError?.message ?: "Failed to load student leave requests"
+                } else null
+                _uiState.update { it.copy(
+                    studentLeaves = result,
+                    isLoadingStudentLeaves = false,
+                    studentLeavesError = errorMsg
+                )}
             } catch (e: Exception) {
                 Log.e(TAG, "Student leaves exception", e)
-                _uiState.update { it.copy(isLoadingStudentLeaves = false) }
+                _uiState.update { it.copy(
+                    isLoadingStudentLeaves = false,
+                    studentLeavesError = e.message ?: "Failed to load student leave requests"
+                )}
             }
         }
     }

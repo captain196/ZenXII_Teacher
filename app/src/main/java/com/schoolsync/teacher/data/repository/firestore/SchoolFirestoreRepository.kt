@@ -7,6 +7,7 @@ import com.schoolsync.teacher.data.model.firestore.SchoolDoc
 import com.schoolsync.teacher.util.Constants
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
@@ -119,6 +120,13 @@ class SchoolFirestoreRepository @Inject constructor(
                         Log.e(TAG, "ACC_SESSION_PROPAGATE_FAILED err=${e.message}")
                     }
                 }
+            }
+            // Listener error now propagates (close(error)); emit null so the
+            // school flow stays alive and the UI shows an empty/pre-login state
+            // instead of crashing.
+            .catch { e ->
+                Log.e(TAG, "OBSERVE_SCHOOL_ERROR err=${e.message}")
+                emit(null)
             }
     }
 

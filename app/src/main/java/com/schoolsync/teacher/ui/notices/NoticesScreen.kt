@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,10 +21,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +41,7 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.WorkOutline
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Notifications
@@ -56,6 +60,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,20 +79,52 @@ import com.schoolsync.teacher.ui.theme.LocalAppColors
 import com.schoolsync.teacher.ui.theme.LocalSpacing
 import com.schoolsync.teacher.ui.theme.glassCard
 
+/**
+ * Push deep-links carry the RAW notice id ("NOT0001") while a loaded notice's id
+ * is the full Firestore doc key ("{schoolId}_NOT0001"). Match tolerantly so the
+ * tapped notice can be located to scroll to it.
+ */
+private fun matchesDeepLinkNoticeId(noticeId: String, pushId: String): Boolean =
+    noticeId == pushId || noticeId.endsWith("_$pushId") || pushId.endsWith("_$noticeId")
+
 @Composable
 fun NoticesScreen(
-    viewModel: NoticesViewModel = hiltViewModel()
+    viewModel: NoticesViewModel = hiltViewModel(),
+    deepLinkNoticeId: String? = null,
+    onDeepLinkConsumed: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val c = LocalAppColors.current
     val sp = LocalSpacing.current
 
+    val listState = rememberLazyListState()
+
+    // Auto-open AND scroll to a notice arriving from a tapped push. Keyed on the
+    // list too: the tapped notice may not have streamed in yet, so we retry on
+    // each emission and only consume the deep link once we've located + scrolled
+    // to it (openNoticeById is idempotent).
+    androidx.compose.runtime.LaunchedEffect(deepLinkNoticeId, state.filteredNotices) {
+        val id = deepLinkNoticeId
+        if (id.isNullOrBlank()) return@LaunchedEffect
+        viewModel.openNoticeById(id)
+        val idx = state.filteredNotices.indexOfFirst { matchesDeepLinkNoticeId(it.noticeId, id) }
+        if (idx >= 0) {
+            listState.animateScrollToItem(idx)
+            onDeepLinkConsumed()
+        }
+    }
+
     GradientBackground {
-        Row(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            // Below ~600dp (phone portrait) the master-detail 50/50 split is too
+            // cramped, so the detail opens as a full-screen overlay instead of
+            // squeezing both panes side by side.
+            val wideLayout = maxWidth >= 600.dp
+            Row(modifier = Modifier.fillMaxSize()) {
             // Notices list
             Column(
                 modifier = Modifier
-                    .weight(if (state.selectedNotice != null) 0.5f else 1f)
+                    .weight(if (state.selectedNotice != null && wideLayout) 0.5f else 1f)
                     .fillMaxHeight()
                     .padding(start = sp.lg, top = sp.sm, bottom = sp.sm, end = sp.sm)
             ) {
@@ -160,6 +200,37 @@ fun NoticesScreen(
 
                 Spacer(modifier = Modifier.height(sp.sm))
 
+                // Non-blocking refresh-error banner: a stale list is still shown,
+                // but the latest listener/refresh failed — never a silent false
+                // "all clear". The empty-list failure is handled below in the
+                // Crossfade's full-screen error state.
+                if (state.error != null && state.filteredNotices.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(c.error.copy(alpha = 0.12f))
+                            .clickable { viewModel.refresh() }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = null,
+                            tint = c.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Couldn't refresh — showing saved notices. Tap to retry.",
+                            color = c.error,
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(sp.sm))
+                }
+
                 // Notices list
                 Crossfade(
                     targetState = state.isLoading,
@@ -172,6 +243,47 @@ fun NoticesScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(color = c.accent)
+                    }
+                } else if (state.error != null && state.filteredNotices.isEmpty()) {
+                    // A load failure must NOT render as an empty inbox (C1) —
+                    // for a comms channel that false "all clear" is dangerous.
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Filled.Notifications,
+                                contentDescription = null,
+                                tint = c.error,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(sp.sm))
+                            Text(
+                                text = "Couldn't load notices",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = c.error,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Check your connection and try again.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.textSecondary
+                            )
+                            Spacer(modifier = Modifier.height(sp.md))
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(c.accent.copy(alpha = 0.15f))
+                                    .clickable { viewModel.refresh() }
+                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null, tint = c.accent, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(sp.xs))
+                                Text("Retry", color = c.accent, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
                 } else if (state.filteredNotices.isEmpty()) {
                     Box(
@@ -195,6 +307,7 @@ fun NoticesScreen(
                     }
                 } else {
                     LazyColumn(
+                        state = listState,
                         verticalArrangement = Arrangement.spacedBy(sp.sm),
                         contentPadding = PaddingValues(vertical = sp.xs)
                     ) {
@@ -215,21 +328,42 @@ fun NoticesScreen(
                 }
             }
 
-            // Detail panel
-            AnimatedVisibility(
-                visible = state.selectedNotice != null,
-                enter = fadeIn() + slideInHorizontally { it / 2 },
-                exit = fadeOut() + slideOutHorizontally { it / 2 }
-            ) {
+            // Detail panel — side-by-side only on a wide screen.
+            if (wideLayout) {
+                AnimatedVisibility(
+                    visible = state.selectedNotice != null,
+                    enter = fadeIn() + slideInHorizontally { it / 2 },
+                    exit = fadeOut() + slideOutHorizontally { it / 2 }
+                ) {
+                    state.selectedNotice?.let { notice ->
+                        NoticeDetailPanel(
+                            notice = notice,
+                            onClose = { viewModel.selectNotice(null) },
+                            modifier = Modifier
+                                .weight(0.5f)
+                                .fillMaxHeight()
+                                .padding(start = sp.sm, top = sp.sm, bottom = sp.sm, end = sp.lg)
+                        )
+                    }
+                }
+            }
+            }
+
+            // Narrow screens: detail as a full-screen overlay over the list.
+            // GradientBackground gives it an opaque backdrop; onClose returns
+            // to the list. System back is not intercepted — the close button
+            // (and deep-link re-open) drive it.
+            if (!wideLayout) {
                 state.selectedNotice?.let { notice ->
-                    NoticeDetailPanel(
-                        notice = notice,
-                        onClose = { viewModel.selectNotice(null) },
-                        modifier = Modifier
-                            .weight(0.5f)
-                            .fillMaxHeight()
-                            .padding(start = sp.sm, top = sp.sm, bottom = sp.sm, end = sp.lg)
-                    )
+                    GradientBackground {
+                        NoticeDetailPanel(
+                            notice = notice,
+                            onClose = { viewModel.selectNotice(null) },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(sp.sm)
+                        )
+                    }
                 }
             }
         }
@@ -267,6 +401,7 @@ private fun NoticeCard(
     }
 
     // Outer card with left color-strip accent
+    val readState = if (notice.isRead) "read" else "unread"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -276,6 +411,11 @@ private fun NoticeCard(
                 backgroundColor = if (isSelected) c.accentSurface else c.glass
             )
             .bouncyClickable(onClick = onClick)
+            // Merge into a single TalkBack node announcing title + read state.
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = "Notice: ${notice.title}, $readState"
+            }
     ) {
         // 4dp left color strip — subtle ERP-style priority/category cue
         Box(
@@ -439,7 +579,7 @@ private fun NoticeDetailPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
                     Icon(
                         Icons.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.action_close),
@@ -508,19 +648,33 @@ private fun NoticeDetailPanel(
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(c.accentSurface)
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = "Open attachment"
+                        }
                         .clickable {
-                            runCatching {
-                                ctx.startActivity(
-                                    android.content.Intent(
-                                        android.content.Intent.ACTION_VIEW,
-                                        android.net.Uri.parse(notice.attachmentUrl)
+                            // Only hand http(s) URLs to ACTION_VIEW — never
+                            // intent:/file:/custom schemes from server content.
+                            val url = notice.attachmentUrl.trim()
+                            if (url.startsWith("http://", true) || url.startsWith("https://", true)) {
+                                runCatching {
+                                    ctx.startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(url)
+                                        )
                                     )
-                                )
+                                }.onFailure {
+                                    android.widget.Toast.makeText(ctx, "No app can open this attachment", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                android.widget.Toast.makeText(ctx, "Attachment link is invalid", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -544,13 +698,29 @@ private fun NoticeDetailPanel(
             Spacer(modifier = Modifier.height(14.dp))
 
             if (notice.bodyHtml.isNotBlank()) {
-                // Rich HTML render via WebView (HR-styled posters etc.)
+                // Rich HTML render via WebView (HR-styled posters etc.).
+                // Theme-aware text color so the body is legible in dark mode.
+                val htmlTextColor = String.format(
+                    "#%06X", 0xFFFFFF and c.textPrimary.toArgb()
+                )
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { context ->
                         android.webkit.WebView(context).apply {
+                            // WRAP_CONTENT so the WebView measures to its content
+                            // height instead of collapsing to 0 inside the parent
+                            // verticalScroll (which passes an unbounded height).
+                            layoutParams = android.view.ViewGroup.LayoutParams(
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                            )
                             settings.javaScriptEnabled = false
                             settings.loadWithOverviewMode = true
                             settings.useWideViewPort = false
+                            // The outer Column owns scrolling — disable the
+                            // WebView's own so long notices don't double-scroll.
+                            isVerticalScrollBarEnabled = false
+                            isHorizontalScrollBarEnabled = false
+                            settings.setSupportZoom(false)
                             setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         }
                     },
@@ -560,14 +730,19 @@ private fun NoticeDetailPanel(
                             <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
                             <style>
                               body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:0;
-                                   font-size:14px;line-height:1.5;color:#1e293b;}
+                                   font-size:14px;line-height:1.5;color:$htmlTextColor;}
                               img{max-width:100%;height:auto;}
                             </style></head>
                             <body>${notice.bodyHtml}</body></html>
                         """.trimIndent()
                         webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    // Floor prevents a zero-height collapse before content measures;
+                    // generous ceiling guards against a pathologically tall render
+                    // while the outer Column scrolls real long notices in full.
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp, max = 4000.dp)
                 )
             } else {
                 Text(

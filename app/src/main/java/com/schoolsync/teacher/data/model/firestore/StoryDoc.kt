@@ -66,6 +66,10 @@ data class StoryDoc(
 
     // ── Content ────────────────────────────────────────────────────
     val mediaUrl: String = "",
+    /** Poster image for VIDEO stories — a frame extracted + uploaded at post
+     *  time so panels/apps show a real thumbnail instead of a black/blank first
+     *  frame. Empty for images (use mediaUrl) and for legacy videos. */
+    val thumbnailUrl: String = "",
     /** "image" | "video". */
     val type: String = "image",
     /** ≤ 500 chars. */
@@ -87,6 +91,20 @@ data class StoryDoc(
     @Deprecated("Use expiresAtTs. Remove in v2.0.", ReplaceWith("expiresAtTs"))
     val expiresAt: Long = 0,
     val viewCount: Int = 0,
+
+    // ── Audience scoping (v1) ──────────────────────────────────────
+    /** Canonical class-section tokens this story targets (see
+     *  StorySharedConfig.audienceKey), e.g. ["8-a","8-b"]. EMPTY =
+     *  school-wide (every pre-v1 doc → empty → visible to all). Admin
+     *  posts are school-wide. Teacher posts default to their own
+     *  class-teacher section(s). Parent app filters client-side. */
+    val audienceClassKeys: List<String> = emptyList(),
+
+    // ── Reactions (v1) ─────────────────────────────────────────────
+    /** Denormalised emoji → count, kept in sync transactionally with
+     *  the reactions/{userId} subcollection (mirrors viewCount). Read
+     *  by teacher/admin for analytics; written by the parent app. */
+    val reactionCounts: Map<String, Int> = emptyMap(),
 
     // ── Moderation (admin-only writes) ─────────────────────────────
     val status: String = "active",

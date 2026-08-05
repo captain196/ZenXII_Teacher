@@ -8,6 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.schoolsync.teacher.data.firebase.FirebaseAuthManager
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
+import com.schoolsync.teacher.data.remote.AuthApi
 import com.schoolsync.teacher.data.remote.AuthInterceptor
 import com.schoolsync.teacher.data.remote.ApiService
 import com.schoolsync.teacher.data.repository.AuthRepository
@@ -144,11 +145,17 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideAuthApi(retrofit: Retrofit): AuthApi =
+        retrofit.create(AuthApi::class.java)
+
+    @Provides
+    @Singleton
     fun provideAuthRepository(
         tokenManager: TokenManager,
         firebaseAuthManager: FirebaseAuthManager,
-        firestoreService: FirestoreService
-    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firestoreService)
+        firestoreService: FirestoreService,
+        authApi: AuthApi
+    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firestoreService, authApi)
 
     @Provides
     @Singleton
@@ -167,6 +174,9 @@ object AppModule {
     // MessagesRepository binding removed — Direct Messaging retired (Package 2A).
     // The Messages screen now renders a Coming Soon Composable that does not
     // instantiate any ViewModel or repository.
+
+    // LeaveRepository (legacy RTDB) DI provision removed — the leave feature is
+    // Firestore-only via LeaveFirestoreRepository; the RTDB repo was dead.
 
     @Provides
     @Singleton

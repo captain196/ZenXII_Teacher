@@ -20,13 +20,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.schoolsync.teacher.ui.components.bouncyClickable
 import com.schoolsync.teacher.ui.components.staggerIn
 import androidx.compose.foundation.rememberScrollState
@@ -45,13 +51,18 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Pending
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import com.schoolsync.teacher.util.AttachmentUrlValidator
 import com.schoolsync.teacher.util.HomeworkAttachmentUploader
@@ -62,6 +73,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -79,12 +92,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -128,6 +146,7 @@ import kotlinx.coroutines.flow.collectLatest
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeworkTeacherScreen(
+    canEdit: Boolean = true,
     viewModel: HomeworkTeacherViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -156,20 +175,47 @@ fun HomeworkTeacherScreen(
                 }
             },
             floatingActionButton = {
-                if (!state.showDetailSheet) {
+                // Level-gated: a view-only grantee can read homework but not create it.
+                if (canEdit && !state.showDetailSheet) {
                     ExtendedFloatingActionButton(
                         onClick = viewModel::showCreateDialog,
                         containerColor = Teal,
                         contentColor = BgStart,
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Icon(Icons.Filled.Add, contentDescription = "Create new homework")
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("New Homework", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         ) { paddingValues ->
+            // Homework-list section expand/collapse state, HOISTED here so it
+            // is shared by BOTH the full-width list and the split-pane list.
+            // Previously each layout owned its own rememberSaveable, so opening
+            // a homework (which swaps full-width → split-pane) re-created the
+            // list with default state and the "Closed" section snapped shut.
+            var activeExpanded by rememberSaveable { mutableStateOf(true) }
+            var pastDueExpanded by rememberSaveable { mutableStateOf(true) }
+            var closedExpanded by rememberSaveable { mutableStateOf(false) }
+            val onToggleSection: (String) -> Unit = { title ->
+                when (title) {
+                    "Active" -> activeExpanded = !activeExpanded
+                    "Past due" -> pastDueExpanded = !pastDueExpanded
+                    "Closed" -> closedExpanded = !closedExpanded
+                }
+            }
+            // Whenever a homework is opened, make sure its section is expanded so
+            // the left list can actually reveal (and scroll to) the selection.
+            LaunchedEffect(state.selectedHomework?.hwId) {
+                val hw = state.selectedHomework ?: return@LaunchedEffect
+                when {
+                    hw.status.equals("closed", ignoreCase = true) -> closedExpanded = true
+                    isDuePassed(hw.dueDate) -> pastDueExpanded = true
+                    else -> activeExpanded = true
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -200,6 +246,10 @@ fun HomeworkTeacherScreen(
                         HomeworkListContent(
                             state = state,
                             onHomeworkClick = viewModel::selectHomework,
+                            activeExpanded = activeExpanded,
+                            pastDueExpanded = pastDueExpanded,
+                            closedExpanded = closedExpanded,
+                            onToggleSection = onToggleSection,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -219,8 +269,15 @@ fun HomeworkTeacherScreen(
                         submissions = state.submissions,
                         teacherMarks = state.teacherMarks,
                         isLoading = state.isLoadingSubmissions,
+                        savingStatusIds = state.savingStatusIds,
+                        // Client-side ownership guard: Edit · Close · Delete are
+                        // only offered on homework this teacher created.
+                        canModify = state.currentUserId.isNotBlank() &&
+                            state.selectedHomework!!.teacherId == state.currentUserId,
                         onMarkStatus = viewModel::markStudentStatus,
                         onDelete = { viewModel.confirmDelete(it) },
+                        onEdit = viewModel::showEditDialog,
+                        onCloseHomework = viewModel::closeHomework,
                         onClose = viewModel::hideDetailSheet,
                         modifier = Modifier
                             .weight(0.62f)
@@ -238,6 +295,10 @@ fun HomeworkTeacherScreen(
                         HomeworkListContent(
                             state = state,
                             onHomeworkClick = viewModel::selectHomework,
+                            activeExpanded = activeExpanded,
+                            pastDueExpanded = pastDueExpanded,
+                            closedExpanded = closedExpanded,
+                            onToggleSection = onToggleSection,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -255,7 +316,11 @@ fun HomeworkTeacherScreen(
                 onDescriptionChange = viewModel::updateFormDescription,
                 onSubjectChange = viewModel::updateFormSubject,
                 onDueDateChange = viewModel::updateFormDueDate,
-                onCreate = { viewModel.createHomework(context) },
+                onCreate = {
+                    // Same dialog serves create + edit; route by editingHwId.
+                    if (state.formState.editingHwId != null) viewModel.updateHomework(context)
+                    else viewModel.createHomework(context)
+                },
                 onDismiss = viewModel::hideCreateDialog,
                 onAttachmentsPicked = { uris -> viewModel.onAttachmentsPicked(context, uris) },
                 onRemoveAttachment = viewModel::removeSelectedAttachment,
@@ -466,7 +531,7 @@ private fun HomeworkTopBar(
             }
 
             // Refresh
-            IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onRefresh, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
             }
         }
@@ -539,7 +604,8 @@ private fun CompactHomeworkTopBar(
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
+            // ≥48dp touch target (icon stays visually small at 16dp).
+            IconButton(onClick = onRefresh, modifier = Modifier.size(48.dp)) {
                 Icon(
                     Icons.Filled.Refresh,
                     contentDescription = "Refresh",
@@ -685,6 +751,10 @@ private fun CompactHomeworkTopBar(
 private fun HomeworkListContent(
     state: HomeworkUiState,
     onHomeworkClick: (HomeworkTeacher) -> Unit,
+    activeExpanded: Boolean,
+    pastDueExpanded: Boolean,
+    closedExpanded: Boolean,
+    onToggleSection: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (state.isLoading) {
@@ -718,24 +788,204 @@ private fun HomeworkListContent(
             }
         }
     } else {
+        // Segregate the flat list into three buckets so the teacher's live,
+        // action-needed work isn't buried under finished/expired items:
+        //   • Active   — open (not closed) and the due date hasn't passed
+        //   • Past due — open but the deadline has passed (still gradeable)
+        //   • Closed   — teacher explicitly closed it (no more submissions)
+        // Recomputed only when the list changes; time drift within a session
+        // is immaterial for day-granularity due dates.
+        val active = remember(state.homeworkList) {
+            state.homeworkList.filter {
+                !it.status.equals("closed", ignoreCase = true) && !isDuePassed(it.dueDate)
+            }
+        }
+        val pastDue = remember(state.homeworkList) {
+            state.homeworkList.filter {
+                !it.status.equals("closed", ignoreCase = true) && isDuePassed(it.dueDate)
+            }
+        }
+        val closed = remember(state.homeworkList) {
+            state.homeworkList.filter { it.status.equals("closed", ignoreCase = true) }
+        }
+
+        // Section expand/collapse state is HOISTED to the screen so it survives
+        // the full-width ↔ split-pane swap when a homework is opened.
+
+        // Theme colours are @Composable getters — read them here (composable
+        // scope) and pass into the LazyColumn's non-composable builder block.
+        val activeAccent = SuccessGreen
+        val pastDueAccent = WarningAmber
+        val closedAccent = TextTertiary
+        val selectedId = state.selectedHomework?.hwId
+
+        // Auto-scroll the list to the opened homework so it's visible in the
+        // (left) pane — matters most when the item lives far down the Past-due
+        // or Closed section. We replicate the section layout to find the item's
+        // flat LazyColumn index (header rows + only-when-expanded cards).
+        val listState = rememberLazyListState()
+        LaunchedEffect(
+            selectedId, active, pastDue, closed,
+            activeExpanded, pastDueExpanded, closedExpanded
+        ) {
+            if (selectedId == null) return@LaunchedEffect
+            var idx = 0
+            var target = -1
+            if (active.isNotEmpty()) {
+                idx++ // header row
+                if (activeExpanded) {
+                    val pos = active.indexOfFirst { it.hwId == selectedId }
+                    if (pos >= 0) target = idx + pos else idx += active.size
+                }
+            }
+            if (target < 0 && pastDue.isNotEmpty()) {
+                idx++
+                if (pastDueExpanded) {
+                    val pos = pastDue.indexOfFirst { it.hwId == selectedId }
+                    if (pos >= 0) target = idx + pos else idx += pastDue.size
+                }
+            }
+            if (target < 0 && closed.isNotEmpty()) {
+                idx++
+                if (closedExpanded) {
+                    val pos = closed.indexOfFirst { it.hwId == selectedId }
+                    if (pos >= 0) target = idx + pos
+                }
+            }
+            if (target >= 0) listState.animateScrollToItem(target)
+        }
+
         LazyColumn(
+            state = listState,
             modifier = modifier.padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(vertical = 4.dp)
         ) {
-            itemsIndexed(
-                items = state.homeworkList,
-                key = { _, it -> it.hwId }
-            ) { index, hw ->
-                Box(modifier = Modifier.staggerIn(index)) {
-                    HomeworkCard(
-                        homework = hw,
-                        isSelected = hw.hwId == state.selectedHomework?.hwId,
-                        onClick = { onHomeworkClick(hw) }
-                    )
-                }
+            homeworkSection(
+                title = "Active",
+                homeworks = active,
+                expanded = activeExpanded,
+                accent = activeAccent,
+                icon = Icons.Filled.Assignment,
+                selectedId = selectedId,
+                onToggle = { onToggleSection("Active") },
+                onClick = onHomeworkClick
+            )
+            homeworkSection(
+                title = "Past due",
+                homeworks = pastDue,
+                expanded = pastDueExpanded,
+                accent = pastDueAccent,
+                icon = Icons.Filled.HourglassEmpty,
+                selectedId = selectedId,
+                markOverdue = true,
+                onToggle = { onToggleSection("Past due") },
+                onClick = onHomeworkClick
+            )
+            homeworkSection(
+                title = "Closed",
+                homeworks = closed,
+                expanded = closedExpanded,
+                accent = closedAccent,
+                icon = Icons.Filled.Lock,
+                selectedId = selectedId,
+                dimmed = true,
+                onToggle = { onToggleSection("Closed") },
+                onClick = onHomeworkClick
+            )
+        }
+    }
+}
+
+/**
+ * Emit one collapsible homework section (header row + its cards) into a
+ * LazyColumn. No-ops when [homeworks] is empty so empty buckets vanish.
+ * [markOverdue] tints each card's due date red; [dimmed] fades closed cards.
+ */
+private fun LazyListScope.homeworkSection(
+    title: String,
+    homeworks: List<HomeworkTeacher>,
+    expanded: Boolean,
+    accent: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selectedId: String?,
+    onToggle: () -> Unit,
+    onClick: (HomeworkTeacher) -> Unit,
+    markOverdue: Boolean = false,
+    dimmed: Boolean = false
+) {
+    if (homeworks.isEmpty()) return
+    item(key = "hw_header_$title") {
+        HomeworkSectionHeader(
+            title = title,
+            count = homeworks.size,
+            accent = accent,
+            icon = icon,
+            expanded = expanded,
+            onToggle = onToggle
+        )
+    }
+    if (expanded) {
+        itemsIndexed(
+            items = homeworks,
+            key = { _, hw -> hw.hwId }
+        ) { index, hw ->
+            Box(modifier = Modifier.staggerIn(index)) {
+                HomeworkCard(
+                    homework = hw,
+                    isSelected = hw.hwId == selectedId,
+                    isOverdue = markOverdue,
+                    dimmed = dimmed,
+                    onClick = { onClick(hw) }
+                )
             }
         }
+    }
+}
+
+/** Sticky-feeling group header: coloured icon + title + count pill + chevron. */
+@Composable
+private fun HomeworkSectionHeader(
+    title: String,
+    count: Int,
+    accent: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onToggle)
+            .padding(vertical = 6.dp, horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            title.uppercase(),
+            color = accent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.6.sp
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(accent.copy(alpha = 0.15f))
+                .padding(horizontal = 7.dp, vertical = 1.dp)
+        ) {
+            Text("$count", color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        Icon(
+            if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+            tint = TextTertiary,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
@@ -743,7 +993,9 @@ private fun HomeworkListContent(
 private fun HomeworkCard(
     homework: HomeworkTeacher,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isOverdue: Boolean = false,
+    dimmed: Boolean = false
 ) {
     val subjectColor = getSubjectColor(homework.subject)
 
@@ -756,6 +1008,7 @@ private fun HomeworkCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (dimmed) 0.6f else 1f)
             .clip(RoundedCornerShape(14.dp))
             .background(if (isSelected) subjectColor.copy(alpha = 0.10f) else Glass)
             .border(
@@ -859,16 +1112,18 @@ private fun HomeworkCard(
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Icon(
-                        Icons.Filled.CalendarToday,
+                        if (isOverdue) Icons.Filled.HourglassEmpty else Icons.Filled.CalendarToday,
                         contentDescription = null,
-                        tint = TextTertiary,
+                        tint = if (isOverdue) ErrorRed else TextTertiary,
                         modifier = Modifier.size(11.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = formatDueDateIST(homework.dueDate),
+                        text = if (isOverdue) "Past due · ${formatDueDateIST(homework.dueDate)}"
+                               else formatDueDateIST(homework.dueDate),
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
+                        color = if (isOverdue) ErrorRed else TextSecondary,
+                        fontWeight = if (isOverdue) FontWeight.SemiBold else FontWeight.Normal,
                         fontSize = 10.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -900,8 +1155,12 @@ private fun HomeworkDetailPanel(
     submissions: List<HomeworkStatusEntry>,
     teacherMarks: Map<String, com.schoolsync.teacher.data.repository.firestore.TeacherMarkEntry>,
     isLoading: Boolean,
+    savingStatusIds: Set<String>,
+    canModify: Boolean,
     onMarkStatus: (studentId: String, studentName: String, status: String, remark: String, score: Int) -> Unit,
     onDelete: (HomeworkTeacher) -> Unit,
+    onEdit: (HomeworkTeacher) -> Unit,
+    onCloseHomework: (HomeworkTeacher) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -999,11 +1258,23 @@ private fun HomeworkDetailPanel(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(onClick = { onDelete(homework) }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = ErrorRed, modifier = Modifier.size(18.dp))
+                    // Edit · Close-homework · Delete are owner-only (client-side
+                    // guard via canModify); ≥48dp touch targets (icons stay 18dp).
+                    if (canModify) {
+                        IconButton(onClick = { onEdit(homework) }, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Filled.Edit, contentDescription = "Edit homework", tint = Teal, modifier = Modifier.size(18.dp))
+                        }
+                        if (!homework.status.equals("closed", ignoreCase = true)) {
+                            IconButton(onClick = { onCloseHomework(homework) }, modifier = Modifier.size(48.dp)) {
+                                Icon(Icons.Filled.Lock, contentDescription = "Close homework (stop submissions)", tint = WarningAmber, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        IconButton(onClick = { onDelete(homework) }, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = ErrorRed, modifier = Modifier.size(18.dp))
+                        }
                     }
-                    IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close panel", tint = TextSecondary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -1065,7 +1336,14 @@ private fun HomeworkDetailPanel(
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isImage) {
+                            // Only let Coil fetch the raw URL when it passes the
+                            // same allowlist (https + firebasestorage host) the
+                            // click-open path enforces — otherwise fall through to
+                            // the type-icon so a hostile/unknown URL is never hit
+                            // by the image loader (SSRF surface).
+                            val thumbAllowed = isImage &&
+                                AttachmentUrlValidator.validate(attachment) is AttachmentUrlValidator.Result.Valid
+                            if (thumbAllowed) {
                                 AsyncImage(
                                     model = attachment,
                                     contentDescription = fileName,
@@ -1143,6 +1421,7 @@ private fun HomeworkDetailPanel(
                     student = student,
                     entry = entry,
                     teacherMark = mark,
+                    isSaving = student.studentId in savingStatusIds,
                     onStatusChange = { newStatus, remark, score ->
                         onMarkStatus(student.studentId, student.displayName, newStatus, remark, score)
                     }
@@ -1188,6 +1467,7 @@ private fun StudentSubmissionRow(
     student: StudentInfo,
     entry: HomeworkStatusEntry?,
     teacherMark: com.schoolsync.teacher.data.repository.firestore.TeacherMarkEntry? = null,
+    isSaving: Boolean = false,
     onStatusChange: (status: String, remark: String, score: Int) -> Unit
 ) {
     // Effective status priority: submission → teacherMark → pending. The
@@ -1289,24 +1569,44 @@ private fun StudentSubmissionRow(
             }
         }
 
-        // Status button
+        // Status button — while a status write is in flight the button is
+        // disabled and its content is swapped for a spinner so the teacher
+        // gets immediate "saving…" feedback instead of a dead tap.
         Box {
             OutlinedButton(
                 onClick = { showStatusMenu = true },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = statusColor),
+                enabled = !isSaving,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = statusColor,
+                    disabledContentColor = statusColor.copy(alpha = 0.6f)
+                ),
                 border = ButtonDefaults.outlinedButtonBorder.copy(
                     brush = SolidColor(statusColor.copy(alpha = 0.4f))
                 ),
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
             ) {
-                Icon(statusIcon, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = currentStatus.replaceFirstChar { it.uppercase() },
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        color = statusColor,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Saving…",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                } else {
+                    Icon(statusIcon, contentDescription = "Current status: ${currentStatus.replaceFirstChar { it.uppercase() }}, tap to change", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = currentStatus.replaceFirstChar { it.uppercase() },
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
 
             DropdownMenu(
@@ -1327,7 +1627,17 @@ private fun StudentSubmissionRow(
                             if (status == "reviewed") {
                                 showReviewDialog = true
                             } else {
-                                onStatusChange(status, "", -1)
+                                // Data-loss fix: a pure STATUS change must NOT
+                                // wipe an existing grade. Preserve the current
+                                // score/remark from whichever record backs this
+                                // row (submission takes precedence over
+                                // teacherMark, mirroring the currentStatus
+                                // resolution above) instead of writing -1/"".
+                                // Entering a real grade still flows through the
+                                // Review dialog below, which passes actual values.
+                                val existingRemark = entry?.remark ?: teacherMark?.remark ?: ""
+                                val existingScore = entry?.score ?: teacherMark?.score ?: -1
+                                onStatusChange(status, existingRemark, existingScore)
                             }
                         }
                     )
@@ -1444,7 +1754,7 @@ private fun StudentSubmissionRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun CreateHomeworkDialog(
     formState: HomeworkFormState,
@@ -1465,327 +1775,407 @@ private fun CreateHomeworkDialog(
     onRemoveAttachment: (android.net.Uri) -> Unit,
     onClearAttachmentError: () -> Unit
 ) {
-    var subjectDropdownExpanded by remember { mutableStateOf(false) }
-    // Hoisted out of the AlertDialog text slot — nesting a Dialog inside
-    // another Dialog clips the inner dialog's buttons on smaller screens
-    // (was causing the "DatePicker auto-closes with no OK option" bug).
+    // Hoisted out of the form body — nesting a Dialog inside another Dialog
+    // clips the inner dialog's buttons on smaller screens (was causing the
+    // "DatePicker auto-closes with no OK option" bug).
     var showDatePicker by remember { mutableStateOf(false) }
+
+    val isEditing = formState.editingHwId != null
+
+    // The whole card + primary action adopt the chosen subject's colour, so
+    // creating "Maths" homework literally looks different from "English" —
+    // faster recognition, and the form feels alive as the teacher picks.
+    val accent = if (formState.subject.isNotBlank()) getSubjectColor(formState.subject) else Teal
 
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
         unfocusedTextColor = TextPrimary,
-        cursorColor = Teal,
-        focusedBorderColor = Teal,
+        cursorColor = accent,
+        focusedBorderColor = accent,
         unfocusedBorderColor = GlassBorder,
-        focusedLabelColor = Teal,
-        unfocusedLabelColor = TextSecondary
+        focusedLabelColor = accent,
+        unfocusedLabelColor = TextSecondary,
+        focusedPlaceholderColor = TextTertiary,
+        unfocusedPlaceholderColor = TextTertiary
     )
 
-    AlertDialog(
+    // Quick due-date presets — the dominant picks as one-tap chips so the
+    // calendar is only needed for a rare custom date.
+    val quickToday = remember { quickDueDate(0) }
+    val quickTomorrow = remember { quickDueDate(1) }
+    val quick3 = remember { quickDueDate(3) }
+    val quickWeek = remember { quickDueDate(7) }
+
+    val canSubmit = !formState.isSubmitting && formState.title.isNotBlank() &&
+        formState.subject.isNotBlank() && formState.dueDate.isNotBlank()
+
+    // Cap the card to a fraction of the ACTUAL screen height so it never spans
+    // edge-to-edge — critical in landscape, where a fixed 680dp cap would
+    // exceed the short screen and stretch the card full-height. Also width-cap
+    // it so the card stays a centred panel on wide/landscape screens instead
+    // of a very wide sheet.
+    val config = LocalConfiguration.current
+    val maxDialogHeight = minOf(680.dp, (config.screenHeightDp * 0.9f).dp)
+
+    Dialog(
         // Outside-tap must NOT dismiss — teacher may tap the form's edge while
-        // typing and lose entered data. Only the X button or Cancel closes.
+        // typing and lose entered data. Only the X or Cancel closes.
         onDismissRequest = { },
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = Teal, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Create Homework",
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(
-                    onClick = { if (!formState.isSubmitting) onDismiss() },
-                    enabled = !formState.isSubmitting
-                ) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = "Close",
-                        tint = TextSecondary
-                    )
-                }
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = formState.title,
-                    onValueChange = onTitleChange,
-                    label = { Text("Title *") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = textFieldColors
-                )
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            dismissOnBackPress = true
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 24.dp, horizontal = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .widthIn(max = 560.dp)
+                .heightIn(max = maxDialogHeight),
+            shape = RoundedCornerShape(28.dp),
+            color = SurfaceDark,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
 
-                OutlinedTextField(
-                    value = formState.description,
-                    onValueChange = onDescriptionChange,
-                    label = { Text("Description") },
-                    minLines = 2,
-                    maxLines = 4,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = textFieldColors
-                )
-
-                // Subject selector
-                Box {
-                    OutlinedTextField(
-                        value = formState.subject,
-                        onValueChange = {},
-                        label = { Text("Subject *") },
-                        readOnly = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { subjectDropdownExpanded = true },
-                        trailingIcon = {
-                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = TextSecondary)
-                        },
-                        colors = textFieldColors
-                    )
-                    DropdownMenu(
-                        expanded = subjectDropdownExpanded,
-                        onDismissRequest = { subjectDropdownExpanded = false },
-                        modifier = Modifier.background(SurfaceDark)
-                    ) {
-                        subjects.forEach { subject ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        subject,
-                                        color = if (subject == formState.subject) Teal else TextPrimary
-                                    )
-                                },
-                                onClick = {
-                                    onSubjectChange(subject)
-                                    subjectDropdownExpanded = false
-                                }
+                // ── Header (subject-tinted) ────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(accent.copy(alpha = 0.20f), Color.Transparent)
                             )
+                        )
+                        .padding(start = 20.dp, end = 8.dp, top = 18.dp, bottom = 14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(accent.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (isEditing) Icons.Filled.Edit else Icons.Filled.Assignment,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (isEditing) "Edit assignment" else "New assignment",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 19.sp
+                            )
+                            Text(
+                                if (isEditing) "Update the details below"
+                                else "Set work for your class",
+                                color = TextSecondary,
+                                fontSize = 13.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = { if (!formState.isSubmitting) onDismiss() },
+                            enabled = !formState.isSubmitting
+                        ) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary)
                         }
                     }
                 }
 
-                // Due date — tapping opens DatePickerDialog rendered as a
-                // sibling of this AlertDialog (see end of function). The
-                // dialog itself is NOT nested here, otherwise its OK/Cancel
-                // buttons get clipped on smaller screens.
-                OutlinedTextField(
-                    value = formState.dueDate.ifBlank { "Tap to select date" },
-                    onValueChange = {},
-                    label = { Text("Due Date") },
-                    readOnly = true,
-                    singleLine = true,
+                HorizontalDivider(color = GlassBorder.copy(alpha = 0.5f))
+
+                // ── Scrollable form body ───────────────────────────────
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showDatePicker = true },
-                    enabled = false, // makes entire field clickable
-                    colors = textFieldColors
-                )
-
-                // ─── Step 4 (2026-05-15) Attachments section ──────────
-                // Layout: header row with count + Add Files button →
-                // optional error banner → chip-style list of selected
-                // files (each with file-type icon, name, size, and a
-                // remove [X] button). The Add Files button is disabled
-                // when the count cap is reached or while uploads are in
-                // flight. Each chip's [X] is disabled during submit so a
-                // teacher can't yank a file out from under the uploader.
-                //
-                // File picker uses ActivityResultContracts.OpenMultipleDocuments
-                // with the homework MIME allowlist as the type filter.
-                // The system picker enforces type filtering at the OS
-                // level, so a teacher physically cannot select a .zip
-                // or .docx — but the ViewModel re-validates MIME + size
-                // server-side (well, app-side) as defense in depth.
-                val attachmentPickerLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.OpenMultipleDocuments(),
-                    onResult = onAttachmentsPicked
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Attachments (${formState.selectedAttachments.size}/" +
-                                "${HomeworkAttachmentUploader.MAX_FILES_PER_HOMEWORK})",
-                            color = TextSecondary,
-                            fontSize = 13.sp,
-                            modifier = Modifier.weight(1f)
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    // Title
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FieldSectionHeader("Title", required = true, accent = accent)
+                        OutlinedTextField(
+                            value = formState.title,
+                            onValueChange = onTitleChange,
+                            placeholder = { Text("e.g. Chapter 4 — Exercise 3") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = textFieldColors
                         )
-                        val canAdd = !formState.isSubmitting &&
-                            formState.selectedAttachments.size <
-                                HomeworkAttachmentUploader.MAX_FILES_PER_HOMEWORK
-                        OutlinedButton(
-                            onClick = {
-                                attachmentPickerLauncher.launch(
-                                    HomeworkAttachmentUploader.ALLOWED_MIME_TYPES.toTypedArray()
+                    }
+
+                    // Description
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FieldSectionHeader("Details", accent = accent)
+                        OutlinedTextField(
+                            value = formState.description,
+                            onValueChange = onDescriptionChange,
+                            placeholder = { Text("What should students do?") },
+                            minLines = 3,
+                            maxLines = 5,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = textFieldColors
+                        )
+                    }
+
+                    // Subject — tactile colour chips instead of a dropdown
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FieldSectionHeader("Subject", required = true, accent = accent)
+                        if (subjects.isEmpty()) {
+                            Text(
+                                "No subjects assigned to you for this class.",
+                                color = TextTertiary,
+                                fontSize = 13.sp
+                            )
+                        } else {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                subjects.forEach { subject ->
+                                    SubjectSelectChip(
+                                        name = subject,
+                                        selected = subject == formState.subject,
+                                        color = getSubjectColor(subject),
+                                        onClick = { onSubjectChange(subject) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Due date — quick presets + selected pill + custom picker
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FieldSectionHeader("Due date", required = true, accent = accent)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            DueDateChip("Today", formState.dueDate == quickToday, accent) { onDueDateChange(quickToday) }
+                            DueDateChip("Tomorrow", formState.dueDate == quickTomorrow, accent) { onDueDateChange(quickTomorrow) }
+                            DueDateChip("In 3 days", formState.dueDate == quick3, accent) { onDueDateChange(quick3) }
+                            DueDateChip("Next week", formState.dueDate == quickWeek, accent) { onDueDateChange(quickWeek) }
+                            DueDateChip(
+                                label = "Pick date",
+                                selected = formState.dueDate.isNotBlank() &&
+                                    formState.dueDate !in listOf(quickToday, quickTomorrow, quick3, quickWeek),
+                                accent = accent,
+                                leadingIcon = Icons.Filled.CalendarToday,
+                                onClick = { showDatePicker = true }
+                            )
+                        }
+                        if (formState.dueDate.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.CalendarToday,
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(15.dp)
                                 )
-                            },
-                            enabled = canAdd,
-                            shape = RoundedCornerShape(8.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Due ${prettyDueLabel(formState.dueDate)}",
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    // Attachments — Pinterest-style upload drop-zone + chips
+                    val attachmentPickerLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.OpenMultipleDocuments(),
+                        onResult = onAttachmentsPicked
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FieldSectionHeader(
+                            "Attachments",
+                            accent = accent,
+                            trailing = "${formState.selectedAttachments.size}/${HomeworkAttachmentUploader.MAX_FILES_PER_HOMEWORK}"
+                        )
+
+                        val canAdd = !formState.isSubmitting &&
+                            formState.selectedAttachments.size < HomeworkAttachmentUploader.MAX_FILES_PER_HOMEWORK
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable(enabled = canAdd) {
+                                    attachmentPickerLauncher.launch(
+                                        HomeworkAttachmentUploader.ALLOWED_MIME_TYPES.toTypedArray()
+                                    )
+                                }
+                                .background(accent.copy(alpha = if (canAdd) 0.06f else 0.03f))
+                                .border(
+                                    1.dp,
+                                    (if (canAdd) accent else GlassBorder).copy(alpha = 0.4f),
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .padding(vertical = 16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 Icons.Filled.AttachFile,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = if (canAdd) Teal else TextSecondary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Add files",
-                                fontSize = 13.sp,
-                                color = if (canAdd) Teal else TextSecondary
-                            )
-                        }
-                    }
-
-                    // Inline error banner (per-pick validation or upload
-                    // failure surfacing). Tap dismisses.
-                    formState.attachmentError?.let { err ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = !formState.isSubmitting) { onClearAttachmentError() }
-                                .background(
-                                    Color(0xFF5C1F1F).copy(alpha = 0.35f),
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .border(
-                                    1.dp,
-                                    Color(0xFF7A2C2C),
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = "Dismiss",
-                                tint = Color(0xFFE57373),
-                                modifier = Modifier.size(16.dp)
+                                tint = if (canAdd) accent else TextTertiary,
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = err,
-                                color = Color(0xFFE57373),
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1f)
+                                if (canAdd) "Add photos or PDF" else "Attachment limit reached",
+                                color = if (canAdd) accent else TextTertiary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
-                    }
 
-                    // Chip list — one row per selected attachment.
-                    formState.selectedAttachments.forEachIndexed { idx, attachment ->
-                        val isUploading = formState.uploadingIndex == idx
-                        val isPdf = attachment.mimeType.equals("application/pdf", ignoreCase = true)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    GlassBorder.copy(alpha = 0.15f),
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .border(1.dp, GlassBorder, RoundedCornerShape(8.dp))
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (isPdf) Icons.Filled.PictureAsPdf
-                                              else Icons.Filled.Image,
-                                contentDescription = null,
-                                tint = if (isPdf) Color(0xFFE57373) else Teal,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = attachment.displayName,
-                                    color = TextPrimary,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = formatBytes(attachment.sizeBytes),
-                                    color = TextSecondary,
-                                    fontSize = 11.sp
-                                )
+                        // Inline error banner — tap dismisses.
+                        formState.attachmentError?.let { err ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = !formState.isSubmitting) { onClearAttachmentError() }
+                                    .background(ErrorRedSurface, RoundedCornerShape(10.dp))
+                                    .border(1.dp, ErrorRed.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = ErrorRed, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(err, color = ErrorRed, fontSize = 12.sp, modifier = Modifier.weight(1f))
                             }
-                            if (isUploading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    color = Teal,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                IconButton(
-                                    onClick = { onRemoveAttachment(attachment.uri) },
-                                    enabled = !formState.isSubmitting,
-                                    modifier = Modifier.size(28.dp)
+                        }
+
+                        // One row per selected attachment.
+                        formState.selectedAttachments.forEachIndexed { idx, attachment ->
+                            val isUploading = formState.uploadingIndex == idx
+                            val isPdf = attachment.mimeType.equals("application/pdf", ignoreCase = true)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Glass.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                    .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background((if (isPdf) ErrorRed else accent).copy(alpha = 0.14f)),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = "Remove",
-                                        tint = TextSecondary,
-                                        modifier = Modifier.size(16.dp)
+                                        imageVector = if (isPdf) Icons.Filled.PictureAsPdf else Icons.Filled.Image,
+                                        contentDescription = null,
+                                        tint = if (isPdf) ErrorRed else accent,
+                                        modifier = Modifier.size(18.dp)
                                     )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        attachment.displayName,
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(formatBytes(attachment.sizeBytes), color = TextSecondary, fontSize = 11.sp)
+                                }
+                                if (isUploading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = accent, strokeWidth = 2.dp)
+                                } else {
+                                    IconButton(
+                                        onClick = { onRemoveAttachment(attachment.uri) },
+                                        enabled = !formState.isSubmitting,
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Close, contentDescription = "Remove attachment", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onCreate,
-                enabled = !formState.isSubmitting && formState.title.isNotBlank() && formState.subject.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Teal,
-                    contentColor = BgStart
-                ),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                if (formState.isSubmitting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = BgStart,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text(
-                    if (formState.isSubmitting) "Creating..." else "Create",
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !formState.isSubmitting
-            ) {
-                Text("Cancel", color = TextSecondary)
-            }
-        },
-        containerColor = SurfaceDark,
-        shape = RoundedCornerShape(20.dp)
-    )
 
-    // DatePickerDialog rendered as a sibling of the parent AlertDialog so it
-    // gets its own dialog window. Nesting it inside AlertDialog.text { } caused
-    // the OK/Cancel buttons to be clipped on the iQOO and similar devices —
-    // teacher would tap a date and the picker would auto-close with no
-    // confirm option.
+                HorizontalDivider(color = GlassBorder.copy(alpha = 0.5f))
+
+                // ── Sticky footer actions ──────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !formState.isSubmitting
+                    ) {
+                        Text("Cancel", color = TextSecondary)
+                    }
+                    Button(
+                        onClick = onCreate,
+                        // Due date is required by the VM — gate the button on it
+                        // too so a blank-date form can't be submitted into a late
+                        // error.
+                        enabled = canSubmit,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accent,
+                            contentColor = Color.White,
+                            disabledContainerColor = accent.copy(alpha = 0.35f),
+                            disabledContentColor = Color.White.copy(alpha = 0.7f)
+                        ),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (formState.isSubmitting) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                        }
+                        Text(
+                            when {
+                                formState.isSubmitting && isEditing -> "Saving…"
+                                formState.isSubmitting -> "Creating…"
+                                isEditing -> "Save changes"
+                                else -> "Create assignment"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            }
+        }
+        }
+    }
+
+    // DatePickerDialog rendered as a sibling of the form dialog so it gets its
+    // own window. Nesting it inside the form caused the OK/Cancel buttons to be
+    // clipped on some devices — teacher would tap a date and the picker would
+    // auto-close with no confirm option.
     if (showDatePicker) {
         // 2026-05-15 timezone-correctness pass: Material3 stores
         // selectedDateMillis as UTC midnight of the chosen day. ALL parsing
@@ -1897,10 +2287,136 @@ private fun CreateHomeworkDialog(
                 }
             }
         ) {
-            DatePicker(state = datePickerState)
+            // The default DatePicker is tall (large title + headline + grid) and
+            // overflowed / clipped inside the dialog on short screens and in
+            // landscape. Drop the title/headline/mode-toggle to shrink it, and
+            // cap its height with a scroll fallback so it always fits on-screen
+            // with the OK/Cancel row visible.
+            Column(
+                modifier = Modifier
+                    .heightIn(max = (config.screenHeightDp * 0.68f).dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                DatePicker(
+                    state = datePickerState,
+                    title = null,
+                    headline = null,
+                    showModeToggle = false
+                )
+            }
         }
     }
 }
+
+/** Small uppercase section label used above each field in the create dialog. */
+@Composable
+private fun FieldSectionHeader(
+    text: String,
+    required: Boolean = false,
+    accent: Color = Teal,
+    trailing: String? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text.uppercase(),
+            color = TextSecondary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp
+        )
+        if (required) {
+            Spacer(modifier = Modifier.width(3.dp))
+            Text("*", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        if (trailing != null) {
+            Spacer(modifier = Modifier.weight(1f))
+            Text(trailing, color = TextTertiary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+/** Pill chip for picking a subject; fills with the subject colour when active. */
+@Composable
+private fun SubjectSelectChip(
+    name: String,
+    selected: Boolean,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) color else color.copy(alpha = 0.10f))
+            .border(1.dp, if (selected) color else color.copy(alpha = 0.35f), RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (selected) {
+            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+        } else {
+            Box(modifier = Modifier.size(9.dp).clip(CircleShape).background(color))
+            Spacer(modifier = Modifier.width(7.dp))
+        }
+        Text(
+            name,
+            color = if (selected) Color.White else TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+        )
+    }
+}
+
+/** Pill chip for a quick due-date preset (or the "Pick date" custom entry). */
+@Composable
+private fun DueDateChip(
+    label: String,
+    selected: Boolean,
+    accent: Color,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) accent else accent.copy(alpha = 0.10f))
+            .border(1.dp, if (selected) accent else accent.copy(alpha = 0.30f), RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (leadingIcon != null) {
+            Icon(leadingIcon, contentDescription = null, tint = if (selected) Color.White else accent, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        Text(
+            label,
+            color = if (selected) Color.White else TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+        )
+    }
+}
+
+/**
+ * Compute a "yyyy-MM-dd" due date [daysFromNow] days from today in the
+ * teacher's local calendar — matches the string format the DatePicker writes.
+ */
+private fun quickDueDate(daysFromNow: Int): String {
+    val cal = java.util.Calendar.getInstance()
+    cal.add(java.util.Calendar.DAY_OF_YEAR, daysFromNow)
+    return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(cal.time)
+}
+
+/** Render a stored "yyyy-MM-dd" due date as a friendly "EEE, dd MMM" label. */
+private fun prettyDueLabel(ymd: String): String = try {
+    val d = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(ymd)
+    if (d != null) java.text.SimpleDateFormat("EEE, dd MMM", java.util.Locale.US).format(d) else ymd
+} catch (e: Exception) { ymd }
 
 /**
  * Human-readable byte count. Used by the Create Homework dialog's
@@ -1964,6 +2480,63 @@ private fun getSubjectColor(subject: String): Color {
 }
 
 /**
+ * Parse a stored dueDate to an absolute instant. Time-bearing ISO is used as
+ * written; a date-only "yyyy-MM-dd" (or legacy dd-MM-yyyy / dd/MM/yyyy) is
+ * treated as END OF DAY IST — matching the Parent app's parseDueDate contract
+ * so a card isn't flagged "past due" on the morning of its due day. Returns
+ * null for blank/unparseable input (caller treats that as "not past due").
+ */
+// Visibility widened private -> internal for JVM unit tests (HomeworkDateLogicTest).
+// Pure JDK date math (SimpleDateFormat/TimeZone/Calendar) — no Android/Firebase deps.
+internal fun parseDueInstant(raw: String): java.util.Date? {
+    if (raw.isBlank()) return null
+    val istTz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+    if (raw.contains('T')) {
+        for (p in listOf("yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss'Z'")) {
+            try {
+                val sdf = java.text.SimpleDateFormat(p, java.util.Locale.US)
+                // isLenient=false is CRITICAL: with lenient parsing (the JDK
+                // default) a wrong-separator or out-of-range input is silently
+                // rolled over / partially consumed instead of rejected, so the
+                // wrong pattern "wins" before the correct one is tried. Strict
+                // mode makes bad input throw and fall through to the next
+                // pattern (or to null). See the two regression tests.
+                sdf.isLenient = false
+                if (p.endsWith("'Z'")) sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                val d = sdf.parse(raw)
+                if (d != null) return d
+            } catch (_: Exception) {}
+        }
+    }
+    // Date-only patterns. Order matters together with isLenient=false: strict
+    // mode makes "yyyy-MM-dd" REJECT a dash-form legacy date like "06-05-2026"
+    // (day 2026 is out of range) so it correctly falls through to "dd-MM-yyyy".
+    for (p in listOf("yyyy-MM-dd", "dd-MM-yyyy", "dd/MM/yyyy")) {
+        try {
+            val sdf = java.text.SimpleDateFormat(p, java.util.Locale.US).apply {
+                timeZone = istTz
+                isLenient = false
+            }
+            val d = sdf.parse(raw)
+            if (d != null) {
+                return java.util.Calendar.getInstance(istTz).apply {
+                    time = d
+                    set(java.util.Calendar.HOUR_OF_DAY, 23); set(java.util.Calendar.MINUTE, 59)
+                    set(java.util.Calendar.SECOND, 59); set(java.util.Calendar.MILLISECOND, 999)
+                }.time
+            }
+        } catch (_: Exception) {}
+    }
+    return null
+}
+
+/** True when the homework's due instant is in the past. */
+internal fun isDuePassed(raw: String): Boolean {
+    val due = parseDueInstant(raw) ?: return false
+    return due.before(java.util.Date())
+}
+
+/**
  * Format an ISO 8601 (or legacy YYYY-MM-DD) dueDate string into an
  * IST-friendly label:
  *   - same day  → "Due today (h:mm a)"
@@ -1971,26 +2544,16 @@ private fun getSubjectColor(subject: String): Color {
  *   - otherwise → "Due on dd MMM"
  * Returns "No due date" for blank input and the raw string if unparseable.
  */
-private fun formatDueDateIST(raw: String): String {
+internal fun formatDueDateIST(raw: String): String {
     if (raw.isBlank()) return "No due date"
     val tz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
-    val patterns = listOf(
-        "yyyy-MM-dd'T'HH:mm:ssXXX",
-        "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        "yyyy-MM-dd",
-        "dd-MM-yyyy",
-        "dd/MM/yyyy"
-    )
-    var due: java.util.Date? = null
-    for (p in patterns) {
-        try {
-            val sdf = java.text.SimpleDateFormat(p, java.util.Locale.US)
-            if (p.endsWith("'Z'")) sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
-            val d = sdf.parse(raw)
-            if (d != null) { due = d; break }
-        } catch (_: Exception) {}
-    }
-    if (due == null) return raw
+    // Reuse parseDueInstant so parsing is IDENTICAL to the overdue check:
+    // strict (isLenient=false) parsing, and date-only values pinned to
+    // 23:59:59 IST end-of-day (previously this parsed date-only at midnight
+    // in the default TZ, so the rendered time was wrong and TZ-dependent).
+    // Time-bearing ISO inputs resolve to the exact same instant as before,
+    // so their display is unchanged.
+    val due: java.util.Date = parseDueInstant(raw) ?: return raw
     fun istDay(d: java.util.Date): Long {
         val c = java.util.Calendar.getInstance(tz).apply {
             time = d

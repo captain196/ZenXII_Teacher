@@ -61,6 +61,8 @@ data class GalleryMedia(
     val albumId: String = "",
     val url: String = "",
     val type: String = "image",            // "image" | "video"
+    val thumbnail: String = "",            // poster frame for video (cross-system contract)
+    val duration: String = "",             // video length label; "" for images (written as string)
     val caption: String = "",
     val isArchived: Boolean = false,
     val uploadedBy: String = "",
@@ -72,6 +74,8 @@ data class GalleryMedia(
         "albumId"    to albumId,
         "url"        to url,
         "type"       to type,
+        "thumbnail"  to thumbnail,
+        "duration"   to duration,
         "caption"    to caption,
         "isArchived" to isArchived,
         "uploadedBy" to uploadedBy,
@@ -85,6 +89,8 @@ data class GalleryMedia(
             albumId    = data["albumId"]?.toString() ?: "",
             url        = data["url"]?.toString() ?: "",
             type       = data["type"]?.toString() ?: "image",
+            thumbnail  = data["thumbnail"]?.toString() ?: "",
+            duration   = data["duration"]?.toString() ?: "",
             caption    = data["caption"]?.toString() ?: "",
             isArchived = (data["isArchived"] as? Boolean) ?: false,
             uploadedBy = data["uploadedBy"]?.toString() ?: "",
