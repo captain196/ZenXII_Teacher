@@ -78,6 +78,20 @@ class AuthRepository @Inject constructor(
             //     never written by the admin panel — it was always missing.)
             val staffData = readStaffProfile(schoolId, parentDbKey, userId)
 
+            // Fail closed when NO profile exists in Firestore OR RTDB. Previously
+            // an empty map fell through to the `?: "Active"` default below, so a
+            // staff member whose record had been deleted — but whose Firebase Auth
+            // account survived — could still sign in, landing on a session with no
+            // name, no role scoping and no assignments. Absence of a record is not
+            // evidence of an active account.
+            if (staffData.isEmpty()) {
+                Log.w(TAG, "login: no staff profile for $userId in Firestore or RTDB, refusing login")
+                firebaseAuthManager.signOut()
+                return Result.failure(
+                    Exception("Your staff record could not be found. Please contact the school office.")
+                )
+            }
+
             // Belt-and-braces: explicit status gate. Firebase Auth's
             // `disabled=true` covers the normal deactivation path, but if
             // `_disable_firebase_user` failed admin-side (network blip, no
