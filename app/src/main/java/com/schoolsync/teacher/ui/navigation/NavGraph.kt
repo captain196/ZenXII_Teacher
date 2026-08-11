@@ -409,6 +409,14 @@ fun MainScaffold(navController: NavHostController) {
     // stays composed behind it — when the viewer fades on swipe-down /
     // pinch-out, that screen shows through (Instagram/WhatsApp-style).
     var storyViewerAuthorId by remember { mutableStateOf<String?>(null) }
+    // Set when the entry point named a specific story (tapping one of your own
+    // cards) so the viewer opens on THAT story rather than the first unseen.
+    var storyViewerStoryId by remember { mutableStateOf<String?>(null) }
+    // Set when the Dashboard's "Your story" + is tapped: the upload dialog
+    // lives on the Stories screen, so we navigate there AND ask it to open the
+    // dialog straight away. Without this the + only got you to the screen and
+    // you had to find the post action again. Mirrors pendingGalleryAlbumId.
+    var pendingOpenStoryUpload by remember { mutableStateOf(false) }
 
     // Pending gallery album to preselect when arriving from the Events
     // "View Photos" jump. Set by Events, consumed by the Gallery screen.
@@ -574,7 +582,15 @@ fun MainScaffold(navController: NavHostController) {
                     },
                     onNavigate = guardedNav,
                     canAccess = { route -> com.schoolsync.teacher.util.ModuleGate.canAccess(route, caps) },
-                    onOpenStory = { authorId -> storyViewerAuthorId = authorId },
+                    onOpenStory = { authorId ->
+                        storyViewerStoryId = null
+                        storyViewerAuthorId = authorId
+                    },
+                    canPostStory = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Stories.route, caps),
+                    onCreateStory = {
+                        pendingOpenStoryUpload = true
+                        guardedNav(Route.Stories.route)
+                    },
                     storyViewerViewModel = storyViewerViewModel
                 )
             }
@@ -620,8 +636,13 @@ fun MainScaffold(navController: NavHostController) {
             }
             composable(Route.Stories.route) {
                 StoriesTeacherScreen(
-                    onOpenViewer = { authorId -> storyViewerAuthorId = authorId },
+                    onOpenViewer = { authorId, storyId ->
+                        storyViewerStoryId = storyId
+                        storyViewerAuthorId = authorId
+                    },
                     canEdit = com.schoolsync.teacher.util.ModuleGate.canEdit(Route.Stories.route, caps),
+                    openUploadOnEntry = pendingOpenStoryUpload,
+                    onUploadOpenConsumed = { pendingOpenStoryUpload = false },
                     viewerViewModel = storyViewerViewModel
                 )
             }
@@ -670,7 +691,12 @@ fun MainScaffold(navController: NavHostController) {
         storyViewerAuthorId?.let { authorId ->
             com.schoolsync.teacher.ui.stories.StoryViewerScreen(
                 initialAuthorId = authorId,
-                onClose = { storyViewerAuthorId = null },
+                initialStoryId = storyViewerStoryId,
+                // Stories is a BASELINE module everyone holds at view, so
+                // posting is edit-level but DESTROYING is manage-level —
+                // mirroring the delete rule in firestore.rules.
+                canDelete = com.schoolsync.teacher.util.ModuleGate.canManage(Route.Stories.route, caps),
+                onClose = { storyViewerAuthorId = null; storyViewerStoryId = null },
                 viewModel = storyViewerViewModel
             )
         }

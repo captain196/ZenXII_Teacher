@@ -13,8 +13,17 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import com.schoolsync.teacher.ui.theme.SurfaceDark
+import com.schoolsync.teacher.ui.theme.TextPrimary
+import com.schoolsync.teacher.ui.theme.TextSecondary
+import com.schoolsync.teacher.ui.theme.TextTertiary
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -37,6 +46,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
+import com.schoolsync.teacher.ui.theme.ErrorRed
+import com.schoolsync.teacher.ui.theme.Glass
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -122,16 +142,87 @@ private const val MIN_ZOOM_OUT = 0.5f
 @Composable
 fun StoryViewerScreen(
     initialAuthorId: String,
+    /** Open directly on this story rather than the author's first unseen one —
+     *  set when the entry point names a specific story (e.g. tapping one of
+     *  your own cards in the grid). */
+    initialStoryId: String? = null,
+    /** Manage-level Stories rights — gates deleting your own story from the ⋮. */
+    canDelete: Boolean = false,
     onClose: () -> Unit,
     viewModel: StoryViewerViewModel = hiltViewModel()
 ) {
     val groups by viewModel.groups.collectAsStateWithLifecycle()
     val currentUserId by viewModel.currentUserId.collectAsStateWithLifecycle()
+    val seenBySheetStoryId by viewModel.seenBySheetStoryId.collectAsStateWithLifecycle()
+    // Deleting is destructive and irreversible, so the ⋮ action stages the id
+    // here and a confirmation dialog does the actual call.
+    var pendingDeleteStoryId by remember { mutableStateOf<String?>(null) }
 
-    BackHandler(onBack = onClose)
+    // Close the viewer once the story it was showing is gone — otherwise it
+    // would sit on a story that no longer exists.
+    val deletedStoryId by viewModel.storyDeleted.collectAsStateWithLifecycle()
+    LaunchedEffect(deletedStoryId) {
+        if (deletedStoryId != null) {
+            viewModel.consumeStoryDeleted()
+            onClose()
+        }
+    }
 
-    if (groups.isEmpty()) {
-        // Still loading (or genuinely empty). Show black; user can back out.
+    // The viewer is a bare overlay with no Scaffold, so there's no snackbar
+    // host to post to. A Toast is the honest way to report a FAILED delete —
+    // without it the ⋮ action would silently do nothing, which is exactly the
+    // phantom-success pattern this module has been burned by before.
+    val toastContext = LocalContext.current
+    val actionMessage by viewModel.actionMessage.collectAsStateWithLifecycle()
+    LaunchedEffect(actionMessage) {
+        actionMessage?.let {
+            android.widget.Toast.makeText(toastContext, it, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.consumeActionMessage()
+        }
+    }
+
+    // Back closes the seen-by sheet first, then the viewer — otherwise a back
+    // press with the sheet open would drop the whole story.
+    BackHandler(onBack = { if (seenBySheetStoryId != null) viewModel.closeSeenBy() else onClose() })
+
+    // ── Freeze the running order for this viewing session ─────────────
+    //
+    // `groups` is LIVE and sorted with `.thenByDescending { hasUnviewed }`, so
+    // the instant you dwell 500ms on someone their ring flips to seen and they
+    // RE-SORT below everyone still unseen — while you are looking at them. With
+    // an unkeyed pager that silently swapped the slot's author mid-swipe, which
+    // is why tapping one person could land you on another.
+    //
+    // WhatsApp and Instagram both pin the running order when the viewer opens.
+    // We snapshot the ORDER only; content (counts, seen flags, new stories)
+    // stays live because we re-map the frozen ids onto the current groups.
+    //
+    // Freezing waits until the tapped author is actually PRESENT: the audience
+    // filter resolves asynchronously, so an early snapshot could omit them and
+    // `indexOfFirst` would return -1 → page 0 → the wrong person.
+    var frozenOrder by remember(initialAuthorId) { mutableStateOf<List<String>?>(null) }
+    LaunchedEffect(groups, initialAuthorId) {
+        if (frozenOrder == null && groups.any { it.authorId == initialAuthorId }) {
+            frozenOrder = groups.map { it.authorId }
+        }
+    }
+
+    // Decisive breadcrumb: distinguishes "the gate never opened" (freeze stuck
+    // → spinner forever → no page → no dwell → no view) from "the page rendered
+    // but the dwell didn't fire". Empty logs after a viewing session meant the
+    // view path wasn't reached AT ALL, and this says which half is at fault.
+    LaunchedEffect(groups.size, frozenOrder == null) {
+        com.schoolsync.teacher.util.debugLog(
+            "Story.viewer GATE groups=${groups.size} target=$initialAuthorId " +
+            "present=${groups.any { it.authorId == initialAuthorId }} frozen=${frozenOrder != null}"
+        )
+    }
+
+    val order = frozenOrder
+    if (order == null) {
+        // Not ready: either nothing loaded yet, or the tapped author hasn't
+        // arrived. Showing a spinner is correct — rendering now is what used to
+        // open the wrong person.
         Box(
             modifier = Modifier.fillMaxSize().background(Color.Black),
             contentAlignment = Alignment.Center
@@ -141,13 +232,208 @@ fun StoryViewerScreen(
         return
     }
 
-    StoryViewerPager(
-        groups = groups,
-        initialAuthorId = initialAuthorId,
-        currentUserId = currentUserId,
-        onClose = onClose,
-        onSeen = viewModel::markSeen
-    )
+    // Frozen ids re-mapped onto live groups; authors who appear mid-session are
+    // appended rather than injected, so nothing shifts under the current page.
+    val orderedGroups = remember(groups, order) {
+        val byId = groups.associateBy { it.authorId }
+        order.mapNotNull { byId[it] } + groups.filter { it.authorId !in order }
+    }
+    if (orderedGroups.isEmpty()) { onClose(); return }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        StoryViewerPager(
+            groups = orderedGroups,
+            initialAuthorId = initialAuthorId,
+            initialStoryId = initialStoryId,
+            currentUserId = currentUserId,
+            onClose = onClose,
+            onSeen = viewModel::markSeen,
+            onCompleted = viewModel::markCompleted,
+            onOpenSeenBy = viewModel::openSeenBy,
+            canDelete = canDelete,
+            onDeleteStory = { storyId -> pendingDeleteStoryId = storyId },
+            // The sheet takes over input while it's up, so the story's tap
+            // zones and swipe gestures don't fire behind it.
+            interactionEnabled = seenBySheetStoryId == null
+        )
+
+        pendingDeleteStoryId?.let { storyId ->
+            AlertDialog(
+                onDismissRequest = { pendingDeleteStoryId = null },
+                title = { Text("Delete this story?", color = TextPrimary) },
+                text = {
+                    // Capped + scrollable per the app's dialog rule, so the
+                    // body can't clip in landscape on a short viewport. No
+                    // input field here, so imePadding isn't applicable.
+                    Text(
+                        "It disappears for everyone immediately, and its views and " +
+                        "reactions go with it. This can't be undone.",
+                        color = TextSecondary,
+                        modifier = Modifier
+                            .heightIn(max = 220.dp)
+                            .verticalScroll(rememberScrollState())
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingDeleteStoryId = null
+                        viewModel.deleteStory(storyId)
+                    }) { Text("Delete", color = ErrorRed, fontWeight = FontWeight.SemiBold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDeleteStoryId = null }) {
+                        Text("Cancel", color = TextSecondary)
+                    }
+                },
+                containerColor = SurfaceDark,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        if (seenBySheetStoryId != null) {
+            val seenByState by viewModel.seenByState.collectAsStateWithLifecycle()
+            val insights by viewModel.seenByInsights.collectAsStateWithLifecycle()
+            val seenByQuery by viewModel.seenByQuery.collectAsStateWithLifecycle()
+            val seenByVisible by viewModel.seenByVisible.collectAsStateWithLifecycle()
+            StoryViewerSeenBySheet(
+                insights = insights,
+                state = seenByState,
+                query = seenByQuery,
+                visibleCount = seenByVisible,
+                onQueryChange = viewModel::setSeenByQuery,
+                onLoadMore = viewModel::loadMoreSeenBy,
+                onRetry = viewModel::retrySeenBy,
+                onDismiss = viewModel::closeSeenBy
+            )
+        }
+    }
+}
+
+/**
+ * The author's live "Seen by" sheet, opened from the viewer chrome — where
+ * Instagram and WhatsApp both put it.
+ *
+ * An in-composition overlay rather than a Dialog so it shares the viewer's
+ * edge-to-edge window and behaves in landscape and around a camera cutout;
+ * height is capped and the body is the list's own LazyColumn, so a long
+ * viewer list scrolls inside the sheet instead of running off the top.
+ */
+@Composable
+private fun StoryViewerSeenBySheet(
+    insights: com.schoolsync.teacher.data.repository.firestore.StoryInsights?,
+    state: ViewersUiState,
+    query: String,
+    visibleCount: Int,
+    onQueryChange: (String) -> Unit,
+    onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxSheetHeight = maxHeight * 0.72f
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .pointerInput(Unit) { detectTapGestures { onDismiss() } },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                    .background(SurfaceDark)
+                    // Swallow taps so tapping the sheet doesn't dismiss it.
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .displayCutoutPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(TextTertiary.copy(alpha = 0.4f))
+                )
+                Spacer(Modifier.height(14.dp))
+                val count = insights?.displayViewCount ?: 0
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (count == 1) "1 view" else "$count views",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary)
+                    }
+                }
+                // Stats live in the SAME sheet as the list, so the ⋮ → Insights
+                // action and the "N views" pill land on one surface rather than
+                // two near-identical ones.
+                if (insights != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SeenByStat("Views", insights.displayViewCount.toString(), Modifier.weight(1f))
+                        SeenByStat("Watched", insights.completedCount.toString(), Modifier.weight(1f))
+                        SeenByStat(
+                            "Reactions",
+                            insights.reactionCounts.values.sum().toString(),
+                            Modifier.weight(1f)
+                        )
+                    }
+                    // Says the quiet part out loud. Zero here is the normal
+                    // result of testing on your own account, and without this
+                    // line it reads as a number that failed to update.
+                    if (insights.displayViewCount == 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Your own views aren't counted — this shows people who opened it.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    storyViewersSection(
+                        state = state,
+                        query = query,
+                        onQueryChange = onQueryChange,
+                        visibleCount = visibleCount,
+                        onLoadMore = onLoadMore,
+                        onRetry = onRetry
+                    )
+                    item(key = "tail") { Spacer(Modifier.height(8.dp)) }
+                }
+            }
+        }
+    }
+}
+
+/** One stat in the seen-by sheet header. */
+@Composable
+private fun SeenByStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Glass)
+            .padding(vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(value, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -155,11 +441,26 @@ fun StoryViewerScreen(
 private fun StoryViewerPager(
     groups: List<StoryGroup>,
     initialAuthorId: String,
+    initialStoryId: String?,
     currentUserId: String,
     onClose: () -> Unit,
-    onSeen: (String, String) -> Unit
+    onSeen: (String, String) -> Unit,
+    /** Called when a story is watched to the end (not tapped past). */
+    onCompleted: (String, String) -> Unit,
+    onOpenSeenBy: (String) -> Unit,
+    /** Manage-level rights: gates the ⋮ delete action. */
+    canDelete: Boolean,
+    onDeleteStory: (String) -> Unit,
+    /** False while the seen-by sheet is up, so gestures don't fire behind it. */
+    interactionEnabled: Boolean
 ) {
+    // Resolved against the FROZEN list, and the caller guarantees the author is
+    // present before we get here — so this can no longer silently fall back to
+    // page 0 (which is what opened the wrong person).
     val initialPage = groups.indexOfFirst { it.authorId == initialAuthorId }.coerceAtLeast(0)
+    // Keyed on the resolved author so the state is rebuilt if the viewer is
+    // re-opened on someone else; rememberPagerState otherwise honours
+    // initialPage only on its very first composition.
     val pagerState = rememberPagerState(initialPage = initialPage) { groups.size }
     val scope = rememberCoroutineScope()
 
@@ -167,13 +468,47 @@ private fun StoryViewerPager(
     // whose alpha fades during a swipe-down / pinch-out dismiss, so the
     // story appears to fall away and reveal what's behind it.
     Box(modifier = Modifier.fillMaxSize()) {
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { pageIndex ->
+        HorizontalPager(
+            state = pagerState,
+            // WITHOUT a key, Compose reuses page slots POSITIONALLY — so any
+            // change to the list made slot N render a different author, and the
+            // page's `remember(group.authorId)` then reset the story index too.
+            // Keying by author makes a slot's identity explicit.
+            key = { index -> groups[index].authorId },
+            userScrollEnabled = interactionEnabled,
+            modifier = Modifier.fillMaxSize()
+        ) { pageIndex ->
             AuthorStoryPage(
+                // WhatsApp/Instagram-style cube: each person's page rotates
+                // around the edge you're dragging toward, so a swipe reads as
+                // turning to the next PERSON rather than sliding a flat panel.
+                // Applied at the page root so it composes over the page's own
+                // dismiss transform without fighting it.
+                modifier = Modifier.graphicsLayer {
+                    val offset =
+                        (pagerState.currentPage - pageIndex) + pagerState.currentPageOffsetFraction
+                    val clamped = offset.coerceIn(-1f, 1f)
+                    cameraDistance = 18f * density
+                    rotationY = clamped * -60f
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
+                        pivotFractionX = if (clamped < 0f) 0f else 1f,
+                        pivotFractionY = 0.5f
+                    )
+                    // Darken the outgoing face so the turn reads as depth.
+                    val dim = 1f - (kotlin.math.abs(clamped) * 0.35f)
+                    alpha = dim
+                },
                 group = groups[pageIndex],
+                initialStoryId = initialStoryId,
                 isCurrentPage = pagerState.currentPage == pageIndex,
                 currentUserId = currentUserId,
                 onClose = onClose,
                 onSeen = onSeen,
+                onCompleted = onCompleted,
+                onOpenSeenBy = onOpenSeenBy,
+                canDelete = canDelete,
+                onDeleteStory = onDeleteStory,
+                interactionEnabled = interactionEnabled,
                 onGroupFinished = {
                     scope.launch {
                         val next = pageIndex + 1
@@ -188,11 +523,20 @@ private fun StoryViewerPager(
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun AuthorStoryPage(
+    modifier: Modifier = Modifier,
     group: StoryGroup,
+    initialStoryId: String?,
     isCurrentPage: Boolean,
     currentUserId: String,
     onClose: () -> Unit,
     onSeen: (String, String) -> Unit,
+    /** Called when a story is watched to the end (not tapped past). */
+    onCompleted: (String, String) -> Unit,
+    onOpenSeenBy: (String) -> Unit,
+    /** Manage-level rights: gates the ⋮ delete action. */
+    canDelete: Boolean,
+    onDeleteStory: (String) -> Unit,
+    interactionEnabled: Boolean,
     onGroupFinished: () -> Unit
 ) {
     val stories = group.stories
@@ -204,13 +548,29 @@ private fun AuthorStoryPage(
 
     // Open on first unseen story (WhatsApp/Instagram behaviour).
     var index by remember(group.authorId) {
+        // An explicitly-named story wins: the caller pointed at THAT one, so
+        // opening on "first unseen" instead would show something else. Falls
+        // back to first-unseen (Instagram/WhatsApp behaviour) when the id
+        // isn't in this author's group — which is the case for every page
+        // except the one the caller actually meant.
+        val named = initialStoryId?.let { id -> stories.indexOfFirst { it.storyId == id } } ?: -1
         val firstUnseen = stories.indexOfFirst { !it.isViewed }
-        mutableIntStateOf(if (firstUnseen >= 0) firstUnseen else 0)
+        mutableIntStateOf(
+            when {
+                named >= 0 -> named
+                firstUnseen >= 0 -> firstUnseen
+                else -> 0
+            }
+        )
     }
     val story = stories.getOrNull(index) ?: return
     val isVideo = story.type.equals("video", ignoreCase = true)
 
-    var isPaused by remember { mutableStateOf(false) }
+    var isPausedByUser by remember { mutableStateOf(false) }
+    // The seen-by sheet holds the story: playback, the progress timer and the
+    // auto-advance all freeze while the author is reading their viewer list —
+    // otherwise the story would run on and swap out underneath the sheet.
+    val isPaused = isPausedByUser || !interactionEnabled
     var isMuted by remember { mutableStateOf(true) }
     val dragOffset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -220,8 +580,12 @@ private fun AuthorStoryPage(
     // brief dwell so merely swiping PAST a story doesn't count as a view; if
     // the page changes before the delay elapses the effect is cancelled.
     LaunchedEffect(story.storyId, isCurrentPage) {
+        com.schoolsync.teacher.util.debugLog(
+            "Story.viewer PAGE author=${group.authorId} story=${story.storyId} isCurrent=$isCurrentPage"
+        )
         if (isCurrentPage) {
             kotlinx.coroutines.delay(500)
+            com.schoolsync.teacher.util.debugLog("Story.viewer DWELL fired story=${story.storyId}")
             onSeen(story.storyId, group.authorId)
         }
     }
@@ -295,13 +659,18 @@ private fun AuthorStoryPage(
             last = now
             imageElapsed += delta.coerceIn(0L, 64L)
         }
+        // The timer ran out with the image on screen — genuinely watched, not
+        // skipped past. Recorded BEFORE advancing so the story id is still the
+        // one that finished. Note the imageFailed path above deliberately does
+        // NOT call this: auto-advancing off an error is not a completion.
+        onCompleted(story.storyId, group.authorId)
         if (index < stories.size - 1) index++ else onGroupFinished()
     }
 
     val currentProgress = if (isVideo) videoProgress
     else (imageElapsed.toFloat() / IMAGE_DURATION_MS).coerceIn(0f, 1f)
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         // Backdrop — fades out as the story is dismissed, revealing behind.
         Box(
             modifier = Modifier
@@ -336,6 +705,20 @@ private fun AuthorStoryPage(
                     }
             ) {
                 if (isVideo) {
+                    // Poster UNDER the player: a story video opens on a real
+                    // frame instead of a black rectangle while the first bytes
+                    // arrive. The player draws over it as soon as it renders,
+                    // so there is nothing to hide or time — the same instant
+                    // feel Instagram and WhatsApp get. Absent poster ⇒ nothing
+                    // painted ⇒ identical to the old behaviour.
+                    if (story.thumbnailUrl.isNotBlank()) {
+                        coil.compose.AsyncImage(
+                            model = story.thumbnailUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                     VideoStoryPlayer(
                         url = story.mediaUrl,
                         isCurrentPage = isCurrentPage,
@@ -344,7 +727,12 @@ private fun AuthorStoryPage(
                         isPaused = isPaused || mediaZoomed || isDismissing,
                         isMuted = isMuted,
                         onProgress = { videoProgress = it },
-                        onEnded = { if (index < stories.size - 1) index++ else onGroupFinished() }
+                        onEnded = {
+                            // Reached the last frame — a real completion, unlike
+                            // a tap-forward. Recorded before the index moves.
+                            onCompleted(story.storyId, group.authorId)
+                            if (index < stories.size - 1) index++ else onGroupFinished()
+                        }
                     )
                 } else {
                     coil.compose.AsyncImage(
@@ -377,7 +765,8 @@ private fun AuthorStoryPage(
                     // Pinch-zoom FIRST so it claims multi-touch before the
                     // single-finger drag/tap detectors below. Only acts on 2+
                     // pointers, leaving 1-finger gestures intact.
-                    .pointerInput(index, group.authorId) {
+                    .pointerInput(index, group.authorId, interactionEnabled) {
+                        if (!interactionEnabled) return@pointerInput
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
                             var didZoom = false
@@ -416,7 +805,8 @@ private fun AuthorStoryPage(
                             }
                         }
                     }
-                    .pointerInput(Unit) {
+                    .pointerInput(interactionEnabled) {
+                        if (!interactionEnabled) return@pointerInput
                         detectVerticalDragGestures(
                             onVerticalDrag = { _, dy ->
                                 scope.launch { dragOffset.snapTo((dragOffset.value + dy).coerceAtLeast(0f)) }
@@ -434,15 +824,16 @@ private fun AuthorStoryPage(
                     // began during/after a hold. This await-based version never
                     // consumes, so the vertical-drag detector above still drives
                     // the dismiss, and horizontal swipes still reach the pager.
-                    .pointerInput(index, stories.size) {
+                    .pointerInput(index, stories.size, interactionEnabled) {
+                        if (!interactionEnabled) return@pointerInput
                         val longPressMs = viewConfiguration.longPressTimeoutMillis
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
-                            isPaused = true
+                            isPausedByUser = true
                             // Quick release with no drag → a tap → navigate.
                             val up = withTimeoutOrNull(longPressMs) { waitForUpOrCancellation() }
                             if (up != null) {
-                                isPaused = false
+                                isPausedByUser = false
                                 if (down.position.x < widthPx / 3f) {
                                     if (index > 0) index--
                                 } else {
@@ -456,7 +847,7 @@ private fun AuthorStoryPage(
                                 // swipe-down/horizontal-swipe is free to run. No
                                 // navigation on a plain hold-release.
                                 waitForUpOrCancellation()
-                                isPaused = false
+                                isPausedByUser = false
                             }
                         }
                     }
@@ -484,9 +875,35 @@ private fun AuthorStoryPage(
                 viewCount = story.viewCount,
                 showViewCount = isAuthor,
                 reactionCounts = story.reactionCounts,
+                canDelete = canDelete,
+                onOpenInsights = { onOpenSeenBy(story.storyId) },
+                onDeleteStory = { onDeleteStory(story.storyId) },
                 onToggleMute = { isMuted = !isMuted },
                 onClose = onClose
             )
+        }
+
+        // ── Author-only "N views" pill, bottom-left — the affordance that
+        //    opens the live seen-by list. The chrome previously showed the
+        //    author a bare number with nothing to tap, so the only route to
+        //    the viewer list was the separate My Stories screen; Instagram
+        //    and WhatsApp both surface it right here.
+        if (isAuthor) {
+            AnimatedVisibility(
+                visible = chromeVisible && !isDismissing,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(400)),
+                modifier = Modifier.align(Alignment.BottomStart)
+            ) {
+                SeenByPill(
+                    count = story.viewCount,
+                    onClick = { onOpenSeenBy(story.storyId) },
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .displayCutoutPadding()
+                        .padding(start = 16.dp, bottom = 18.dp)
+                )
+            }
         }
 
         if (story.caption.isNotBlank()) {
@@ -539,9 +956,13 @@ private fun TopChrome(
     isVideo: Boolean,
     isMuted: Boolean,
     viewCount: Int,
-    /** Only the author sees the view count; hidden for everyone else. */
+    /** Only the author sees the view count — and the ⋮ actions. */
     showViewCount: Boolean,
     reactionCounts: Map<String, Int>,
+    /** Stories is baseline-at-view, so DELETE is gated at manage level. */
+    canDelete: Boolean,
+    onOpenInsights: () -> Unit,
+    onDeleteStory: () -> Unit,
     onToggleMute: () -> Unit,
     onClose: () -> Unit
 ) {
@@ -629,6 +1050,43 @@ private fun TopChrome(
                                 tint = Color.White,
                                 modifier = Modifier.size(22.dp)
                             )
+                        }
+                    }
+                    // Author-only ⋮ — story-level actions moved here from the
+                    // old My-Stories grid, so one story has one place to act
+                    // on it rather than a card, a sheet and a screen.
+                    if (showViewCount) {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = "Story options",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = menuOpen,
+                                onDismissRequest = { menuOpen = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Insights") },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Visibility, contentDescription = null)
+                                    },
+                                    onClick = { menuOpen = false; onOpenInsights() }
+                                )
+                                if (canDelete) {
+                                    DropdownMenuItem(
+                                        text = { Text("Delete story") },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.Delete, contentDescription = null)
+                                        },
+                                        onClick = { menuOpen = false; onDeleteStory() }
+                                    )
+                                }
+                            }
                         }
                     }
                     IconButton(onClick = onClose) {
