@@ -232,6 +232,38 @@ fun AppNavGraph(
     navController: NavHostController,
     startDestination: String
 ) {
+    // ── Mid-session credential enforcement ──
+    // Staff sign in on BOTH the Teacher app and the admin panel, so a password
+    // reset has to end both sessions. Before this, `mustChangePassword` was only
+    // read at cold start: a running app kept working until the user happened to
+    // relaunch. Re-check whenever the app is foregrounded, and react to Firebase
+    // dropping the user (revoked token / disabled account).
+    val sessionGuard: com.schoolsync.teacher.ui.session.SessionGuardViewModel = hiltViewModel()
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) sessionGuard.recheck()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val guardContext = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        sessionGuard.sessionEnded.collect { message ->
+            android.widget.Toast.makeText(guardContext, message, android.widget.Toast.LENGTH_LONG).show()
+            navController.navigate(Route.Login.route) {
+                // Drop the whole back stack: the session is gone, so nothing
+                // behind us is still authorised to render. launchSingleTop stops
+                // a second trigger (auth-state AND foreground re-check can both
+                // fire) from stacking two Login screens.
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = startDestination,

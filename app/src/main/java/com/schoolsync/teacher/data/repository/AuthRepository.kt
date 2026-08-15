@@ -54,15 +54,14 @@ class AuthRepository @Inject constructor(
                 ?: claims["schoolId"] as? String
                 ?: return Result.failure(Exception("No school_id in claims"))
 
-            // Force-change-password gate — cache the flag so SplashViewModel
-            // and LoginViewModel can route to the force-change screen.
-            val mustChange = when (val v = claims["must_change_password"]) {
+            // Force-change-password gate — the CLAIM half. The staff-doc mirror is
+            // OR-ed in below, once the profile has been read; the flag is cached
+            // there rather than here so both signals are accounted for.
+            val claimMustChange = when (val v = claims["must_change_password"]) {
                 is Boolean -> v
                 is String  -> v.equals("true", ignoreCase = true)
                 else       -> false
             }
-            tokenManager.saveMustChangePassword(mustChange)
-            Log.d(TAG, "login: must_change_password=$mustChange")
 
             // 3. Resolve parent_db_key for Users/Admin & Users/Parents paths.
             //    For new SCH_* schools this is the numeric login code (e.g. "10001").
@@ -91,6 +90,28 @@ class AuthRepository @Inject constructor(
                     Exception("Your staff record could not be found. Please contact the school office.")
                 )
             }
+
+            // Force-change gate = CLAIM **or** staff-doc mirror, matching what the
+            // Parent app has always done and what SessionGuard enforces.
+            //
+            // Claim-only was a real hole: a wholesale claims re-mint can drop a
+            // pending must_change_password while the mirror still says true (seen
+            // in production on STA0078 and STA0094). Such a user used to sail past
+            // the gate — and once SessionGuard began re-checking on every
+            // foreground, they were logged straight back out, giving an endless
+            // login → dashboard → logout loop. OR-ing the two makes the gate agree
+            // with the guard, so the user lands on the force-change screen and
+            // resolves the state instead of bouncing.
+            //
+            // Free: staffData was just read for the status check.
+            val docMustChange = when (val v = staffData["mustChangePassword"]) {
+                is Boolean -> v
+                is String  -> v.equals("true", ignoreCase = true)
+                else       -> false
+            }
+            val mustChange = claimMustChange || docMustChange
+            tokenManager.saveMustChangePassword(mustChange)
+            Log.d(TAG, "login: must_change_password=$mustChange (claim=$claimMustChange doc=$docMustChange)")
 
             // Belt-and-braces: explicit status gate. Firebase Auth's
             // `disabled=true` covers the normal deactivation path, but if
@@ -233,14 +254,20 @@ class AuthRepository @Inject constructor(
      * Logout: sign out Firebase, clear local storage.
      */
     suspend fun logout(): Result<Unit> {
+        // Clear local state BEFORE signing out of Firebase. SessionGuard watches
+        // observeAuthState() and ends the session when Firebase drops currentUser
+        // while we still believe we are signed in — exactly the state this method
+        // passes through if signOut() runs first, which would make an ordinary
+        // user-initiated logout surface "Your session has ended" as if something
+        // had gone wrong.
         return try {
-            firebaseAuthManager.signOut()
             tokenManager.clearAll()
+            firebaseAuthManager.signOut()
             Result.success(Unit)
         } catch (e: Exception) {
             // Even on error, ensure local cleanup
-            firebaseAuthManager.signOut()
             tokenManager.clearAll()
+            firebaseAuthManager.signOut()
             Result.failure(e)
         }
     }
@@ -290,6 +317,28 @@ class AuthRepository @Inject constructor(
             val payload = res.body()
             if (payload?.status != "success") {
                 return Result.failure(Exception(payload?.message ?: "Reset failed."))
+            }
+
+            // Re-authenticate with the password we just set.
+            //
+            // The server changed it through the Admin SDK, which invalidates the
+            // refresh token this client holds — it was minted against the OLD
+            // password. Without this the session survives only until the token is
+            // next refreshed, and SessionGuard now refreshes on every foreground:
+            // a teacher would finish setting their password, switch apps, come
+            // back, and be dumped on the Login screen seconds later.
+            //
+            // We hold the new password right here, so mint a fresh session.
+            // Best-effort — on failure the user simply logs in again, which is
+            // the pre-existing behaviour, never worse.
+            val reauthId = tokenManager.userId.firstOrNull()
+            if (!reauthId.isNullOrBlank()) {
+                try {
+                    firebaseAuthManager.signInWithEmailAndPassword(reauthId, newPassword)
+                    Log.d(TAG, "clearMustChange: re-authenticated after password change")
+                } catch (e: Exception) {
+                    Log.w(TAG, "clearMustChange: re-auth failed; user will be asked to log in again", e)
+                }
             }
 
             // Force-refresh the ID token so subsequent calls see the cleared claim.
