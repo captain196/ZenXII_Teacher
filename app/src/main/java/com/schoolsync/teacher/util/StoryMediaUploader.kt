@@ -277,46 +277,126 @@ object StoryMediaUploader {
         false
     }
 
+    // ─── Video poster (thumbnail) ──────────────────────────────────────
+    //
+    // A video story's tile is drawn from `thumbnailUrl`, NEVER from the .mp4:
+    // Coil's image decoder cannot decode video, and VideoFrameDecoder needs a
+    // local file so it would pull the whole clip down to draw one frame. So the
+    // poster has to exist by the time the story doc is written — an empty
+    // `thumbnailUrl` means a permanently blank tile everywhere (apps + panel).
+    //
+    // Extraction is therefore tried against SEVERAL sources in order, and the
+    // upload is retried once, before we give up. See [uploadThumbnail].
+
+    private const val POSTER_MAX_WIDTH = 720
+    private const val POSTER_JPEG_QUALITY = 80
+    private const val TAG = "StoryMediaUploader"
+
     /**
-     * Extract a poster frame from a VIDEO and upload it as a JPEG thumbnail.
-     * Grabs a frame ~1s in (skips the black opening frame most videos start on)
-     * so panels/apps show a real image instead of a blank/black tile. Best-effort:
-     * returns null on any failure and the caller falls back to first-frame render.
+     * Decode a representative frame from a video and JPEG-encode it.
+     *
+     * Seeks ~1s in to skip the black/fade-in frame most clips open on (a poster
+     * of a black frame is no better than no poster), falling back to the
+     * midpoint for very short clips, then to whatever frame the retriever will
+     * give us. Returns null when the source can't be read at all.
+     *
+     * @param open applies the source to a retriever — lets the same decode path
+     *             serve a local content:// Uri and a remote https:// URL.
      */
-    suspend fun uploadThumbnail(
-        context: Context, videoUri: Uri, schoolCode: String, teacherId: String
-    ): String? = withContext(Dispatchers.IO) {
+    private fun posterBytes(open: (android.media.MediaMetadataRetriever) -> Unit): ByteArray? {
         val retriever = android.media.MediaMetadataRetriever()
-        try {
-            retriever.setDataSource(context, videoUri)
+        return try {
+            open(retriever)
             val durationMs = retriever
                 .extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
             val frameUs = (if (durationMs > 1200) 1_000_000L else (durationMs * 1000) / 2)
                 .coerceAtLeast(0L)
-            val bmp = retriever.getFrameAtTime(frameUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                ?: retriever.frameAtTime
-                ?: return@withContext null
-            val maxW = 720
-            val scaled = if (bmp.width > maxW) {
-                val h = (bmp.height.toFloat() * maxW / bmp.width).toInt().coerceAtLeast(1)
-                Bitmap.createScaledBitmap(bmp, maxW, h, true)
+            val bmp = retriever.getFrameAtTime(
+                frameUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+            ) ?: retriever.getFrameAtTime(0L, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+              ?: retriever.frameAtTime
+              ?: return null
+            val scaled = if (bmp.width > POSTER_MAX_WIDTH) {
+                val h = (bmp.height.toFloat() * POSTER_MAX_WIDTH / bmp.width).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(bmp, POSTER_MAX_WIDTH, h, true)
             } else bmp
-            val baos = java.io.ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
-            val path = "stories/$schoolCode/$teacherId/thumb_${System.currentTimeMillis()}.jpg"
-            val ref = FirebaseStorage.getInstance().reference.child(path)
-            // Explicit contentType so the MIME-gated Storage rule accepts it.
-            val meta = com.google.firebase.storage.StorageMetadata.Builder()
-                .setContentType("image/jpeg")
-                .build()
-            ref.putBytes(baos.toByteArray(), meta).await()
-            ref.downloadUrl.await().toString()
+            java.io.ByteArrayOutputStream().also {
+                scaled.compress(Bitmap.CompressFormat.JPEG, POSTER_JPEG_QUALITY, it)
+            }.toByteArray()
         } catch (e: Exception) {
-            android.util.Log.w("StoryMediaUploader", "thumbnail gen failed (non-fatal): ${e.message}")
+            android.util.Log.w(TAG, "poster decode failed: ${e.message}")
             null
         } finally {
             try { retriever.release() } catch (_: Exception) {}
         }
+    }
+
+    /** Upload poster bytes and return the download URL, or null. Retried once. */
+    private suspend fun putPoster(
+        bytes: ByteArray, schoolId: String, teacherId: String
+    ): String? {
+        val meta = com.google.firebase.storage.StorageMetadata.Builder()
+            // Explicit contentType so the MIME-gated Storage rule accepts it.
+            .setContentType("image/jpeg")
+            .build()
+        repeat(2) { attempt ->
+            try {
+                val path = "stories/$schoolId/$teacherId/thumb_${System.currentTimeMillis()}.jpg"
+                val ref = FirebaseStorage.getInstance().reference.child(path)
+                ref.putBytes(bytes, meta).await()
+                return ref.downloadUrl.await().toString()
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "poster upload attempt ${attempt + 1} failed: ${e.message}")
+            }
+        }
+        return null
+    }
+
+    /**
+     * Extract a poster frame from a VIDEO and upload it as a JPEG.
+     *
+     * Tries every candidate source in order and stops at the first that decodes
+     * — pass the COMPRESSED local file first (a real file the retriever always
+     * reads) and the originally-picked content:// Uri as the fallback. Passing
+     * only the original was fragile: some OEM/photo-picker URIs refuse
+     * `setDataSource` after the transcode step, which produced a null poster,
+     * an empty `thumbnailUrl`, and a permanently blank video tile.
+     *
+     * Returns null only when NO candidate decodes and no upload succeeds; the
+     * caller must treat that as a visible condition, not a silent one.
+     */
+    suspend fun uploadThumbnail(
+        context: Context,
+        candidates: List<Uri>,
+        schoolId: String,
+        teacherId: String
+    ): String? = withContext(Dispatchers.IO) {
+        for (uri in candidates.distinct()) {
+            val bytes = posterBytes { it.setDataSource(context, uri) } ?: continue
+            val url = putPoster(bytes, schoolId, teacherId)
+            if (url != null) return@withContext url
+        }
+        android.util.Log.w(TAG, "poster generation exhausted all ${candidates.size} source(s)")
+        null
+    }
+
+    /**
+     * Poster for a video that is ALREADY uploaded — decodes a frame straight
+     * from its https:// download URL.
+     *
+     * This is the self-healing backfill path for stories that have no poster:
+     * legacy videos posted before posters were wired, admin-panel posts (PHP
+     * has no frame extractor), and any post where on-device generation failed.
+     * MediaMetadataRetriever range-requests only the bytes it needs, so this
+     * does NOT pull the whole clip down.
+     */
+    suspend fun posterFromRemoteVideo(
+        videoUrl: String, schoolId: String, teacherId: String
+    ): String? = withContext(Dispatchers.IO) {
+        if (videoUrl.isBlank()) return@withContext null
+        val bytes = posterBytes { it.setDataSource(videoUrl, HashMap()) }
+            ?: return@withContext null
+        putPoster(bytes, schoolId, teacherId)
     }
 }

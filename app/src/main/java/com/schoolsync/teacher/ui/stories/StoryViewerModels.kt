@@ -13,7 +13,14 @@ data class ViewerStory(
     val createdAt: Long,
     val viewCount: Int,
     val reactionCounts: Map<String, Int>,
-    val isViewed: Boolean
+    val isViewed: Boolean,
+    /**
+     * Video poster ("" for images and for videos posted before posters were
+     * wired). Painted UNDER the player while it buffers so a video opens on a
+     * real frame instead of a black rectangle — the same trick Instagram and
+     * WhatsApp use to make a story feel instant.
+     */
+    val thumbnailUrl: String = ""
 )
 
 /**

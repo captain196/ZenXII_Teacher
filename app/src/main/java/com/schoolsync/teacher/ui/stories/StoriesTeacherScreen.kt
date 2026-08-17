@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -135,14 +136,28 @@ import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun StoriesTeacherScreen(
-    onOpenViewer: (authorId: String) -> Unit = {},
+    /** (authorId, storyId?) — storyId names a specific story to open on. */
+    onOpenViewer: (authorId: String, storyId: String?) -> Unit = { _, _ -> },
     canEdit: Boolean = true,
+    /** True when we arrived here from the Dashboard's "Your story" + — open the
+     *  upload dialog immediately instead of making them find it again. */
+    openUploadOnEntry: Boolean = false,
+    onUploadOpenConsumed: () -> Unit = {},
     viewModel: StoriesTeacherViewModel = hiltViewModel(),
     viewerViewModel: StoryViewerViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val storyGroups by viewerViewModel.groups.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Honour a "+ from the Dashboard" request exactly once. Gated on canEdit so
+    // a stale flag can never open a post dialog for a view-only grantee.
+    LaunchedEffect(openUploadOnEntry, canEdit) {
+        if (openUploadOnEntry) {
+            if (canEdit && !state.showUploadDialog) viewModel.toggleUploadDialog()
+            onUploadOpenConsumed()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
@@ -166,47 +181,46 @@ fun StoriesTeacherScreen(
                     )
                 }
             },
-            floatingActionButton = {
-                // Level-gated: view-only grantees can browse stories but not post.
-                if (canEdit) {
-                    ExtendedFloatingActionButton(
-                        onClick = viewModel::toggleUploadDialog,
-                        containerColor = Teal,
-                        contentColor = BgStart,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("New Story", fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
         ) { paddingValues ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // "Recent stories" — everyone's active stories, grouped
-                // by author. Tap a ring to open the full-screen viewer.
-                // Shows an empty hint here so the feature is discoverable.
+                // The tray — "Your story" first (and it's the post entry), then
+                // everyone else. Own stories are SPLIT OUT of the general list:
+                // they used to render both as a ring here and as a card in the
+                // grid below, ~200px apart, in two visual languages.
+                val myGroup = storyGroups.firstOrNull { it.authorId == state.myUserId }
+                val otherGroups = storyGroups.filter { it.authorId != state.myUserId }
                 StoriesSection(
-                    groups = storyGroups,
-                    onOpenStory = onOpenViewer,
-                    title = "Recent stories",
+                    groups = otherGroups,
+                    myGroup = myGroup,
+                    myName = state.myName,
+                    myPic = state.myPic,
+                    canPost = canEdit,
+                    onOpenStory = { authorId -> onOpenViewer(authorId, null) },
+                    onCreateStory = viewModel::toggleUploadDialog,
+                    title = "Stories",
                     showWhenEmpty = true
                 )
 
-                // Top bar (your own stories) + Archived entry
+                // "Your stories" header + New story + Archived entries.
                 StoriesTopBar(
                     archivedCount = state.archivedStories.size,
+                    canPost = canEdit,
+                    onNewStory = viewModel::toggleUploadDialog,
                     onOpenArchived = viewModel::openArchivedGallery
                 )
 
-                // Active stories — tap a card to see who saw / reacted.
+                // At-a-glance grid of your own posts. Tapping opens the VIEWER
+                // (where the seen-by list and the ⋮ actions live), not a
+                // separate insights sheet — one story, one place to act on it.
                 StoriesGridContent(
                     state = state,
-                    onCardClick = viewModel::openInsights,
+                    // Open on the story that was tapped, not the author's
+                    // first unseen one — the card names a specific story.
+                    onCardClick = { story -> onOpenViewer(state.myUserId, story.storyId) },
                     onDelete = viewModel::deleteStory,
                     modifier = Modifier.weight(1f)
                 )
@@ -223,6 +237,7 @@ fun StoriesTeacherScreen(
                 isUploading = state.isUploading,
                 mediaUploadPercent = state.mediaUploadPercent,
                 isCompressing = state.isCompressing,
+                posterPending = state.posterPending,
                 pickedLocalUri = state.pickedLocalUri,
                 audienceOptions = state.audienceOptions,
                 selectedAudience = state.selectedAudience,
@@ -254,16 +269,6 @@ fun StoriesTeacherScreen(
             )
         }
 
-        // Insights sheet — who saw the story + what they reacted.
-        state.insightsStory?.let { story ->
-            StoryInsightsSheet(
-                story = story,
-                insights = state.insights,
-                loading = state.insightsLoading,
-                onDismiss = viewModel::closeInsights
-            )
-        }
-
         // Archived gallery — full-screen grid of expired stories.
         if (state.showArchivedGallery) {
             ArchivedGalleryOverlay(
@@ -288,6 +293,8 @@ fun StoriesTeacherScreen(
 @Composable
 private fun StoriesTopBar(
     archivedCount: Int,
+    canPost: Boolean,
+    onNewStory: () -> Unit,
     onOpenArchived: () -> Unit
 ) {
     Row(
@@ -306,7 +313,7 @@ private fun StoriesTopBar(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "My Stories",
+                text = "Your stories",
                 style = MaterialTheme.typography.headlineSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -314,6 +321,30 @@ private fun StoriesTopBar(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Full-size "New story" action. The tray tile's `+` badge is the
+            // primary entry now that the FAB is gone, but that badge is ~22dp —
+            // too small to be the ONLY way to post. This keeps a comfortable
+            // target without reintroducing a floating button over the grid.
+            if (canPost) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Teal)
+                        .clickable { onNewStory() }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = BgStart, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        "New story",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = BgStart,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             // Archived pill — opens the full-screen gallery of expired stories.
             if (archivedCount > 0) {
                 Row(
@@ -655,6 +686,8 @@ private fun UploadStoryDialog(
     mediaUploadPercent: Int,
     /** True while a video is transcoding on-device (before upload). */
     isCompressing: Boolean = false,
+    /** True while a picked video's poster frame is still being produced. */
+    posterPending: Boolean = false,
     /** Local content:// Uri of picked media for the live preview. */
     pickedLocalUri: String,
     audienceOptions: List<AudienceOption>,
@@ -810,7 +843,7 @@ private fun UploadStoryDialog(
                                 )
                             }
                         }
-                        if (isPicking) {
+                        if (isPicking || posterPending) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -818,16 +851,30 @@ private fun UploadStoryDialog(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    CircularProgressIndicator(
-                                        progress = { mediaUploadPercent / 100f },
-                                        color = Color.White,
-                                        strokeWidth = 3.dp,
-                                        modifier = Modifier.size(42.dp)
-                                    )
+                                    if (posterPending) {
+                                        // Indeterminate: poster extraction has no
+                                        // meaningful percentage, and showing a
+                                        // frozen 100% bar would read as "done".
+                                        CircularProgressIndicator(
+                                            color = Color.White,
+                                            strokeWidth = 3.dp,
+                                            modifier = Modifier.size(42.dp)
+                                        )
+                                    } else {
+                                        CircularProgressIndicator(
+                                            progress = { mediaUploadPercent / 100f },
+                                            color = Color.White,
+                                            strokeWidth = 3.dp,
+                                            modifier = Modifier.size(42.dp)
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        if (isCompressing) "Compressing… $mediaUploadPercent%"
-                                        else "Uploading… $mediaUploadPercent%",
+                                        when {
+                                            posterPending -> "Preparing preview…"
+                                            isCompressing -> "Compressing… $mediaUploadPercent%"
+                                            else -> "Uploading… $mediaUploadPercent%"
+                                        },
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White
                                     )
@@ -985,14 +1032,19 @@ private fun UploadStoryDialog(
         confirmButton = {
             Button(
                 onClick = onUpload,
-                enabled = !isUploading && !isPicking && url.isNotBlank(),
+                // posterPending is the fix for the race that shipped a
+                // posterless video: the media upload completes (enabling this
+                // button) a few seconds BEFORE the poster frame finishes
+                // uploading, and a story written in that window carries an
+                // empty thumbnailUrl — a permanently blank tile everywhere.
+                enabled = !isUploading && !isPicking && url.isNotBlank() && !posterPending,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Teal,
                     contentColor = BgStart
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                if (isUploading) {
+                if (isUploading || posterPending) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         color = BgStart,
@@ -1001,7 +1053,11 @@ private fun UploadStoryDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text(
-                    if (isUploading) "Sharing…" else "Share Story",
+                    when {
+                        isUploading -> "Sharing…"
+                        posterPending -> "Preparing preview…"
+                        else -> "Share Story"
+                    },
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -1023,258 +1079,61 @@ private fun UploadStoryDialog(
     )
 }
 
-// ─────────────────────────────────────────────────────────────────────
-//  Insights sheet — who saw the story + what they reacted
-// ─────────────────────────────────────────────────────────────────────
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StoryInsightsSheet(
+private fun StoryPosterTile(
     story: Story,
-    insights: com.schoolsync.teacher.data.repository.firestore.StoryInsights?,
-    loading: Boolean,
-    onDismiss: () -> Unit
+    size: androidx.compose.ui.unit.Dp,
+    corner: androidx.compose.ui.unit.Dp
 ) {
-    BackHandler(onBack = onDismiss)
-    // Full-screen in-composition overlay (NOT a Dialog) so it lives in the
-    // app's edge-to-edge window and fits landscape + camera cutout. Cap the
-    // sheet to 92% height so it never runs off the top; body scrolls.
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val maxSheetHeight = maxHeight * 0.92f
-        // Tap the dimmed area to dismiss; the sheet itself swallows taps.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.55f))
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null
-                ) { onDismiss() },
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            Column(
+    val isVideo = story.type.equals("video", ignoreCase = true)
+    val tileUrl = storyTileUrl(story)
+    var failed by remember(tileUrl) { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(corner))
+            .background(Glass),
+        contentAlignment = Alignment.Center
+    ) {
+        if (tileUrl.isNotBlank() && !failed) {
+            // Poster URL, not the video. VideoFrameDecoder needs a LOCAL file,
+            // so pointing Coil at a remote .mp4 made it buffer the entire clip
+            // to disk just to draw this tile — routinely timing out blank.
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                    .data(tileUrl)
+                    .crossfade(true).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                onError = { failed = true }
+            )
+        } else {
+            Icon(
+                if (isVideo) Icons.Filled.Videocam else Icons.Filled.Image,
+                contentDescription = null,
+                tint = TextTertiary,
+                modifier = Modifier.size(size * 0.45f)
+            )
+        }
+        // Play affordance so a video still reads as a video even when the
+        // poster loaded (matching the archived grid's treatment).
+        if (isVideo && tileUrl.isNotBlank() && !failed) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = maxSheetHeight)
-                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
-                    .background(SurfaceDark)
-                    .clickable(
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                        indication = null
-                    ) { /* swallow */ }
-                    // Keep content clear of the side notch + bottom nav bar.
-                    .displayCutoutPadding()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .size(size * 0.42f)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center
             ) {
-                // Grabber
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(CircleShape)
-                        .background(TextTertiary.copy(alpha = 0.4f))
-                )
-                Spacer(Modifier.height(16.dp))
-
-                // Scrollable body so tall content (long viewer lists) never clips.
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-
-                // Header: thumbnail + caption + close
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Glass)
-                    ) {
-                        // Poster URL, not the video. VideoFrameDecoder needs a
-                        // LOCAL file, so pointing it at a remote .mp4 made Coil
-                        // buffer the entire video to disk just to draw this 46dp
-                        // box — routinely timing out and leaving it blank.
-                        val posterOrImage = storyTileUrl(story)
-                        if (posterOrImage.isNotBlank()) {
-                            AsyncImage(
-                                model = coil.request.ImageRequest.Builder(LocalContext.current)
-                                    .data(posterOrImage)
-                                    .crossfade(true).build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = story.caption.ifBlank { "Your story" },
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (story.createdAt > 0) {
-                            Text(
-                                text = story.createdAt.toRelativeTime(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextTertiary
-                            )
-                        }
-                    }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(34.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary)
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                // Stat row: views + total reactions
-                val totalReactions = insights?.reactionCounts?.values?.sum()
-                    ?: story.reactionCounts.values.sum()
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatPill(
-                        icon = Icons.Filled.Visibility,
-                        value = (insights?.viewCount ?: story.viewCount).toString(),
-                        label = "Views",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatPill(
-                        icon = Icons.Filled.Person,
-                        value = totalReactions.toString(),
-                        label = "Reactions",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Reaction breakdown chips
-                val breakdown = (insights?.reactionCounts ?: story.reactionCounts)
-                    .filterValues { it > 0 }
-                    .entries.sortedByDescending { it.value }
-                if (breakdown.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        breakdown.forEach { (emoji, count) ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(Glass)
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                Text(emoji, fontSize = 15.sp)
-                                Spacer(Modifier.width(5.dp))
-                                Text(
-                                    "$count",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = GlassBorder)
-                Spacer(Modifier.height(12.dp))
-
-                Text(
-                    text = "Seen by",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TextSecondary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(8.dp))
-
-                when {
-                    loading -> {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                            contentAlignment = Alignment.Center
-                        ) { CircularProgressIndicator(color = Teal, modifier = Modifier.size(28.dp)) }
-                    }
-                    insights == null || insights.viewers.isEmpty() -> {
-                        Text(
-                            text = "No views yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextTertiary,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        )
-                    }
-                    else -> {
-                        Column {
-                            insights.viewers.forEach { v -> ViewerRow(v) }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                } // end scrollable body
-            }
-        }
-    } // end BoxWithConstraints
-}
-
-@Composable
-private fun StatPill(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    value: String,
-    label: String,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(Glass)
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(icon, contentDescription = null, tint = Teal, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(value, style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-    }
-}
-
-@Composable
-private fun ViewerRow(v: com.schoolsync.teacher.data.repository.firestore.StoryViewerEntry) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.size(38.dp).clip(CircleShape).background(TealSurface),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = v.name.trim().firstOrNull()?.uppercase() ?: "?",
-                style = MaterialTheme.typography.titleSmall,
-                color = Teal,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = v.name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (v.viewedAtMillis > 0) {
-                Text(
-                    text = v.viewedAtMillis.toRelativeTime(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(size * 0.3f)
                 )
             }
-        }
-        if (v.emoji != null) {
-            Text(v.emoji, fontSize = 18.sp)
         }
     }
 }
@@ -1359,15 +1218,29 @@ private fun ArchivedThumb(story: Story, viewCount: Int, onClick: () -> Unit) {
         ) {
             // Poster URL, not the video — see storyTileUrl().
             val archivedTileUrl = storyTileUrl(story)
-            if (archivedTileUrl.isNotBlank()) {
+            var archivedTileFailed by remember(archivedTileUrl) { mutableStateOf(false) }
+            if (archivedTileUrl.isNotBlank() && !archivedTileFailed) {
                 AsyncImage(
                     model = coil.request.ImageRequest.Builder(LocalContext.current)
                         .data(archivedTileUrl)
                         .crossfade(true).build(),
                     contentDescription = story.caption.ifBlank { "Story" },
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    onError = { archivedTileFailed = true }
                 )
+            } else if (story.type != "video") {
+                // No poster / it 404'd. Videos already draw the play glyph
+                // below; an image with nothing to show needs its own, or the
+                // cell renders as an unexplained empty square.
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Filled.Image,
+                        contentDescription = null,
+                        tint = TextTertiary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
             if (story.type == "video") {
                 Box(
@@ -1668,6 +1541,10 @@ private suspend fun downloadStoryMedia(context: android.content.Context, story: 
 private fun storyTileUrl(story: Story): String =
     if (story.type.equals("video", ignoreCase = true)) story.thumbnailUrl else story.mediaUrl
 
+// Media3's ProgressiveMediaSource / DataSource factories are @UnstableApi.
+// Opting in explicitly, same as the Parent app's StoryViewer does — androidx's
+// OptIn, not Kotlin's, because the marker is Java-defined.
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun ArchivedVideoPlayer(url: String) {
     val context = LocalContext.current

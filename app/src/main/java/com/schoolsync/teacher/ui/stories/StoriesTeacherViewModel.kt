@@ -41,15 +41,15 @@ data class StoriesUiState(
      *  TTL cleans them up. Newest-first, same as active. */
     val archivedStories: List<Story> = emptyList(),
     val viewCounts: Map<String, Int> = emptyMap(),
+    // ── Identity for the tray's "Your story" tile ──
+    /** This staff member's own id — used to split own stories out of the tray. */
+    val myUserId: String = "",
+    val myName: String = "",
+    val myPic: String = "",
     /** Class-sections this teacher can target (from assignments). */
     val audienceOptions: List<AudienceOption> = emptyList(),
     /** Selected canonical tokens. EMPTY = whole school. */
     val selectedAudience: Set<String> = emptySet(),
-    // ── Insights sheet (who saw / reacted) ──
-    /** Story whose insights sheet is open; null = closed. */
-    val insightsStory: Story? = null,
-    val insights: com.schoolsync.teacher.data.repository.firestore.StoryInsights? = null,
-    val insightsLoading: Boolean = false,
     // ── Archived gallery + viewer ──
     /** Whether the full-screen archived gallery overlay is showing. */
     val showArchivedGallery: Boolean = false,
@@ -68,6 +68,19 @@ data class StoriesUiState(
     val uploadStoragePath: String = "",
     /** Generated poster URL for a picked VIDEO (empty for images). */
     val uploadThumbnailUrl: String = "",
+    /**
+     * True while a picked video's poster frame is still being extracted and
+     * uploaded. Posting is BLOCKED until this clears.
+     *
+     * Without it there was a race that silently shipped posterless videos: the
+     * media upload sets uploadUrl (enabling Share) and only THEN starts the
+     * poster job, so tapping Share promptly wrote a story with an empty
+     * thumbnailUrl — a permanently blank tile, since nothing ever backfilled
+     * it. This is exactly what happened to the video story now in production.
+     */
+    val posterPending: Boolean = false,
+    /** Poster extraction genuinely failed — the author is told, not left guessing. */
+    val posterFailed: Boolean = false,
     /** Local content:// Uri of the picked media — shown as a live
      *  preview WHILE the upload is in flight (before the download URL
      *  returns). Cleared on publish / clear / dialog close. */
@@ -122,6 +135,25 @@ class StoriesTeacherViewModel @Inject constructor(
     init {
         observeMyStories()
         loadAudienceOptions()
+        loadIdentity()
+    }
+
+    /**
+     * Own id/name/avatar for the tray's "Your story" tile. Needed even when
+     * this staff member has posted nothing — the tile is still shown (as the
+     * post entry) whenever they hold edit rights, so it can't be derived from
+     * their own story group the way the other tiles are.
+     */
+    private fun loadIdentity() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    myUserId = tokenManager.userId.firstOrNull().orEmpty(),
+                    myName = tokenManager.userName.firstOrNull().orEmpty(),
+                    myPic = tokenManager.profilePic.firstOrNull().orEmpty()
+                )
+            }
+        }
     }
 
     /**
@@ -184,6 +216,12 @@ class StoriesTeacherViewModel @Inject constructor(
                 val archived = expiredDocs.map { it.toStory() }
                 val counts = docs.associate { it.id to it.viewCount }
                 Log.d(TAG, "snapshot: ${active.size} active, ${archived.size} archived")
+                // Repair any of THIS author's videos that have no poster.
+                // Previously this only fired when they opened the insights
+                // sheet, so a blank tile persisted for every other viewer until
+                // the author happened to tap their own card. Driving it off the
+                // snapshot fixes it as soon as the story is known about.
+                active.forEach { backfillPosterIfMissing(it) }
                 _uiState.update {
                     it.copy(
                         myStories = active,
@@ -202,6 +240,17 @@ class StoriesTeacherViewModel @Inject constructor(
         if (state.uploadUrl.isBlank()) {
             com.schoolsync.teacher.util.debugLog("Stories.publish BLOCKED — uploadUrl blank")
             viewModelScope.launch { _events.emit(StoriesEvent.Error("Media URL is required")) }
+            return
+        }
+        // Backstop for the poster race. The Share button is already disabled
+        // while a poster is in flight, but state can be re-entered (rotation,
+        // a queued tap) and a posterless video is unrecoverable from the doc
+        // alone — so refuse here too rather than trusting the button.
+        if (state.posterPending) {
+            com.schoolsync.teacher.util.debugLog("Stories.publish BLOCKED — poster still generating")
+            viewModelScope.launch {
+                _events.emit(StoriesEvent.Error("Still preparing the video preview — one moment."))
+            }
             return
         }
 
@@ -237,7 +286,9 @@ class StoriesTeacherViewModel @Inject constructor(
                                 pickedLocalUri = "",
                                 uploadCaption = "",
                                 uploadType = "image",
-                                mediaUploadPercent = -1
+                                mediaUploadPercent = -1,
+                                posterPending = false,
+                                posterFailed = false
                             )
                         }
                         _events.emit(StoriesEvent.Success("Story uploaded successfully"))
@@ -286,21 +337,31 @@ class StoriesTeacherViewModel @Inject constructor(
         }
     }
 
-    // ── Insights (who saw / reacted) ───────────────────────────────
-    fun openInsights(story: Story) {
-        _uiState.update { it.copy(insightsStory = story, insights = null, insightsLoading = true) }
+    // ── Poster self-heal ───────────────────────────────────────────
+
+    /** One self-heal attempt per story per session — never a retry storm. */
+    private val posterBackfillAttempted = mutableSetOf<String>()
+
+    /**
+     * Self-healing poster: a video story with no `thumbnailUrl` shows a blank
+     * tile in every surface forever. Decode a frame from the already-uploaded
+     * video, upload it, patch the doc — the listener then pushes the repaired
+     * story back into the list on its own.
+     *
+     * Covers legacy posts, admin-panel posts (PHP extracts no frames) and any
+     * post where on-device generation failed. Silent by design: a missing
+     * poster is cosmetic and not worth interrupting the author over.
+     */
+    private fun backfillPosterIfMissing(story: Story) {
+        if (!story.type.equals("video", ignoreCase = true)) return
+        if (story.thumbnailUrl.isNotBlank()) return
+        if (!posterBackfillAttempted.add(story.storyId)) return
         viewModelScope.launch {
-            storyRepo.getStoryInsights(story.storyId).fold(
-                onSuccess = { data -> _uiState.update { it.copy(insights = data, insightsLoading = false) } },
-                onFailure = { e ->
-                    _uiState.update { it.copy(insightsLoading = false) }
-                    _events.emit(StoriesEvent.Error(e.message ?: "Couldn't load insights"))
-                }
+            storyRepo.backfillThumbnail(story.storyId).fold(
+                onSuccess = { Log.d(TAG, "poster backfilled for ${story.storyId}") },
+                onFailure = { e -> Log.d(TAG, "poster backfill skipped for ${story.storyId}: ${e.message}") }
             )
         }
-    }
-    fun closeInsights() {
-        _uiState.update { it.copy(insightsStory = null, insights = null, insightsLoading = false) }
     }
 
     // ── Archived gallery + viewer ──────────────────────────────────
@@ -340,7 +401,10 @@ class StoriesTeacherViewModel @Inject constructor(
                 pickedLocalUri = if (closing) "" else it.pickedLocalUri,
                 mediaUploadPercent = if (closing) -1 else it.mediaUploadPercent,
                 uploadCaption = if (closing) "" else it.uploadCaption,
-                uploadType = if (closing) "image" else it.uploadType
+                uploadType = if (closing) "image" else it.uploadType,
+                uploadThumbnailUrl = if (closing) "" else it.uploadThumbnailUrl,
+                posterPending = if (closing) false else it.posterPending,
+                posterFailed = if (closing) false else it.posterFailed
             )
         }
     }
@@ -403,8 +467,18 @@ class StoriesTeacherViewModel @Inject constructor(
             )
 
             // Show the picked media immediately as a live preview while
-            // it processes (download URL only arrives at the end).
-            _uiState.update { it.copy(mediaUploadPercent = 0, pickedLocalUri = uri.toString()) }
+            // it processes (download URL only arrives at the end). Drop any
+            // poster from a PREVIOUS pick in the same dialog — otherwise
+            // re-picking would carry the old video's frame forward.
+            _uiState.update {
+                it.copy(
+                    mediaUploadPercent = 0,
+                    pickedLocalUri = uri.toString(),
+                    uploadThumbnailUrl = "",
+                    posterPending = false,
+                    posterFailed = false
+                )
+            }
 
             // Videos: transcode to ~720p/2Mbps on-device first (WhatsApp/
             // Instagram do the same). Images are downscaled inside the
@@ -431,21 +505,49 @@ class StoriesTeacherViewModel @Inject constructor(
                         com.schoolsync.teacher.util.debugLog(
                             "Stories.upload DONE url=${progress.downloadUrl.take(60)}… path=${progress.storagePath}"
                         )
+                        val isVideo = declaredType == "video"
                         _uiState.update {
                             it.copy(
                                 uploadUrl = progress.downloadUrl,
                                 uploadStoragePath = progress.storagePath,
-                                mediaUploadPercent = 100
+                                mediaUploadPercent = 100,
+                                // Latch BEFORE the poster job starts, in the same
+                                // update that enables the Share button — otherwise
+                                // there is a window where Share is live and the
+                                // poster isn't, which is the race that shipped the
+                                // posterless video currently in production.
+                                posterPending = isVideo,
+                                posterFailed = false
                             )
                         }
-                        // For videos, generate + upload a real poster frame so the
-                        // story never shows a blank/black tile. Best-effort — a null
-                        // result just falls back to first-frame rendering.
-                        if (declaredType == "video") {
+                        if (isVideo) {
+                            // Try the COMPRESSED file first — it is a real local
+                            // file the frame extractor can always open — then the
+                            // originally-picked Uri as the fallback.
                             val thumb = com.schoolsync.teacher.util.StoryMediaUploader
-                                .uploadThumbnail(context, uri, schoolCode, teacherId)
-                            if (!thumb.isNullOrBlank()) {
-                                _uiState.update { it.copy(uploadThumbnailUrl = thumb) }
+                                .uploadThumbnail(
+                                    context = context,
+                                    candidates = listOf(sourceUri, uri),
+                                    schoolId = schoolCode,
+                                    teacherId = teacherId
+                                )
+                            _uiState.update {
+                                it.copy(
+                                    uploadThumbnailUrl = thumb.orEmpty(),
+                                    posterPending = false,
+                                    posterFailed = thumb.isNullOrBlank()
+                                )
+                            }
+                            if (thumb.isNullOrBlank()) {
+                                com.schoolsync.teacher.util.debugLog("Stories.poster FAILED for $sourceUri")
+                                // Not fatal — posting is still allowed and the
+                                // author's own client repairs the poster from the
+                                // uploaded video the first time they open the
+                                // story's insights (backfillPosterIfMissing).
+                                _events.emit(StoriesEvent.Error(
+                                    "Couldn't make a preview frame — you can still post; " +
+                                    "the thumbnail will be generated shortly."
+                                ))
                             }
                         }
                         _events.emit(StoriesEvent.Success("Media ready — tap Share Story to post"))
@@ -466,7 +568,13 @@ class StoriesTeacherViewModel @Inject constructor(
      */
     fun clearPickedMedia() {
         val path = _uiState.value.uploadStoragePath
-        _uiState.update { it.copy(uploadUrl = "", uploadStoragePath = "", uploadThumbnailUrl = "", pickedLocalUri = "", mediaUploadPercent = -1) }
+        _uiState.update {
+            it.copy(
+                uploadUrl = "", uploadStoragePath = "", uploadThumbnailUrl = "",
+                pickedLocalUri = "", mediaUploadPercent = -1,
+                posterPending = false, posterFailed = false
+            )
+        }
         if (path.isNotBlank()) {
             viewModelScope.launch {
                 com.schoolsync.teacher.util.StoryMediaUploader.deleteByPath(path)

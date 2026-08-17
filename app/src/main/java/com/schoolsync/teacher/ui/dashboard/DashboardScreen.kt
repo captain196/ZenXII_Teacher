@@ -120,6 +120,10 @@ import java.util.Locale
 fun DashboardScreen(
     onNotificationsClick: () -> Unit = {},
     onOpenStory: (authorId: String) -> Unit = {},
+    /** Stories edit rights — drives whether the tray shows a post affordance. */
+    canPostStory: Boolean = false,
+    /** Navigate to the Stories screen to post (the dashboard doesn't host the dialog). */
+    onCreateStory: () -> Unit = {},
     onNavigate: (route: String) -> Unit = {},
     // Capability gate — hides tiles the staff member lacks. Defaults to show-all.
     canAccess: (route: String) -> Boolean = { true },
@@ -224,10 +228,24 @@ fun DashboardScreen(
                 // Stories ring carousel — everyone's active stories. Tap a
                 // ring to open the full-screen viewer. Shimmer while the first
                 // snapshot loads; hidden once loaded with nothing to show.
-                if (storyGroups.isNotEmpty()) {
+                if (storyGroups.isNotEmpty() || canPostStory) {
+                    // Same tray as the Stories screen, leading with "Your
+                    // story" — so a staff member's own post is represented
+                    // once, in the same place, on both surfaces.
+                    val myId by storyViewerViewModel.currentUserId.collectAsStateWithLifecycle()
+                    val myName by storyViewerViewModel.currentUserName.collectAsStateWithLifecycle()
+                    val myPic by storyViewerViewModel.currentUserPic.collectAsStateWithLifecycle()
                     com.schoolsync.teacher.ui.stories.StoriesSection(
-                        groups = storyGroups,
+                        groups = storyGroups.filter { it.authorId != myId },
+                        myGroup = storyGroups.firstOrNull { it.authorId == myId },
+                        myName = myName,
+                        myPic = myPic,
+                        canPost = canPostStory,
                         onOpenStory = onOpenStory,
+                        // Posting lives on the Stories screen; from here the
+                        // `+` just takes them there rather than hoisting the
+                        // whole upload dialog onto the dashboard.
+                        onCreateStory = onCreateStory,
                         title = "Stories",
                         showWhenEmpty = false
                     )

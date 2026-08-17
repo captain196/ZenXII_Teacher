@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,15 +20,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.People
@@ -35,21 +33,15 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -75,7 +67,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.schoolsync.teacher.data.model.StudentFlag
 import com.schoolsync.teacher.data.model.StudentInfo
-import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.ErrorRed
 import com.schoolsync.teacher.ui.theme.ErrorRedSurface
 import com.schoolsync.teacher.ui.theme.Glass
@@ -235,7 +226,16 @@ fun RedFlagTeacherScreen(
                         }
                     }
                 } else {
-                    // Two-panel landscape: student list on left, flags on right
+                    // Responsive split. This used to be an unconditional Row at
+                    // 35/65 — on a portrait phone that left the student list at
+                    // ~125dp wide, clipping names and roll numbers. Side-by-side
+                    // only once there is genuinely room for two panes; otherwise
+                    // stack, giving the roster a fixed slice and the detail the
+                    // rest. (Dialogs/sheets/lists must fit small screens and
+                    // landscape — the most repeated UI bug class in this app.)
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val sideBySide = maxWidth >= 600.dp
+                    if (sideBySide) {
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
@@ -277,6 +277,7 @@ fun RedFlagTeacherScreen(
                             students = state.students,
                             flagsByStudent = state.flagsByStudent,
                             currentTeacherUid = state.currentTeacherUid,
+                            canEdit = canEdit,
                             busyFlagIds = state.busyFlagIds,
                             onResolve = viewModel::resolveFlag,
                             onDelete = viewModel::deleteFlag,
@@ -285,25 +286,58 @@ fun RedFlagTeacherScreen(
                                 .fillMaxHeight()
                         )
                     }
+                    } else {
+                        // Narrow (portrait phone): stack. The roster keeps a
+                        // usable full-width slice; the detail panel takes the
+                        // remainder and scrolls internally.
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            StudentFlagList(
+                                students = state.students,
+                                flagsByStudent = state.flagsByStudent,
+                                selectedStudentId = state.selectedStudentId,
+                                onStudentSelected = viewModel::selectStudent,
+                                onCreateFlag = { student ->
+                                    val cs = state.selectedClass
+                                    if (cs != null) {
+                                        quickFlagState.showFor(
+                                            student          = student,
+                                            classKey         = cs.className,
+                                            sectionKey       = cs.section,
+                                            defaultSubject   = "",
+                                            forceSubjectPick = true,
+                                            subjectsForClass = state.subjectsForClass
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(0.45f)
+                            )
+                            FlagDetailPanel(
+                                selectedStudentId = state.selectedStudentId,
+                                students = state.students,
+                                flagsByStudent = state.flagsByStudent,
+                                currentTeacherUid = state.currentTeacherUid,
+                                canEdit = canEdit,
+                                busyFlagIds = state.busyFlagIds,
+                                onResolve = viewModel::resolveFlag,
+                                onDelete = viewModel::deleteFlag,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(0.55f)
+                            )
+                        }
+                    }
+                    }
                 }
             }
         }
 
-        // Create flag dialog
-        if (state.showCreateDialog) {
-            CreateFlagDialog(
-                formState = state.formState,
-                students = state.students,
-                subjects = state.subjectsForClass,
-                onTypeChange = viewModel::updateFormType,
-                onMessageChange = viewModel::updateFormMessage,
-                onSubjectChange = viewModel::updateFormSubject,
-                onSeverityChange = viewModel::updateFormSeverity,
-                onStudentChange = viewModel::updateFormStudent,
-                onCreate = viewModel::createFlag,
-                onDismiss = viewModel::hideCreateDialog
-            )
-        }
 
         // Phase 6A — quick flag sheet, controlled by quickFlagState
         QuickFlagSheet(
@@ -643,6 +677,13 @@ private fun FlagDetailPanel(
     students: List<StudentInfo>,
     flagsByStudent: Map<String, List<StudentFlag>>,
     currentTeacherUid: String,
+    /**
+     * Level-gated write affordance (F15). A `view`-level Red Flags grantee can
+     * read flags but must not be offered Resolve/Delete — the Firestore rule now
+     * denies those too, so showing the buttons would only produce a
+     * PERMISSION_DENIED toast. Mirrors how the FAB is already gated.
+     */
+    canEdit: Boolean,
     busyFlagIds: Set<String>,
     onResolve: (studentId: String, flagId: String) -> Unit,
     onDelete: (flagId: String) -> Unit,
@@ -740,8 +781,8 @@ private fun FlagDetailPanel(
                     // delete additionally requires it be a teacher-created flag
                     // (admin-issued flags routed to them are resolve-only).
                     val isOwn = currentTeacherUid.isNotBlank() && flag.teacherId == currentTeacherUid
-                    val canResolve = isOwn
-                    val canDelete = isOwn && flag.status != "deleted" && flag.createdByRole == "teacher"
+                    val canResolve = isOwn && canEdit
+                    val canDelete = isOwn && canEdit && flag.status != "deleted" && flag.createdByRole == "teacher"
                     FlagCard(
                         flag = flag,
                         showStudentName = selectedStudentId == null,
@@ -1015,263 +1056,4 @@ private fun FlagCard(
             }
         }
     }
-}
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun CreateFlagDialog(
-    formState: FlagFormState,
-    students: List<StudentInfo>,
-    subjects: List<String>,
-    onTypeChange: (String) -> Unit,
-    onMessageChange: (String) -> Unit,
-    onSubjectChange: (String) -> Unit,
-    onSeverityChange: (String) -> Unit,
-    onStudentChange: (String, String) -> Unit,
-    onCreate: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    var studentDropdownExpanded by remember { mutableStateOf(false) }
-    var subjectDropdownExpanded by remember { mutableStateOf(false) }
-
-    val textFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = TextPrimary,
-        unfocusedTextColor = TextPrimary,
-        cursorColor = Teal,
-        focusedBorderColor = Teal,
-        unfocusedBorderColor = GlassBorder,
-        focusedLabelColor = Teal,
-        unfocusedLabelColor = TextSecondary
-    )
-
-    val types = listOf("homework", "behavior", "performance")
-    val severities = listOf("low", "medium", "high")
-
-    AlertDialog(
-        // Outside-tap must NOT dismiss — teacher may tap the form's edge while
-        // typing and lose entered data. Only the X button or Cancel closes.
-        onDismissRequest = { },
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Flag, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Create Red Flag",
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(
-                    onClick = { if (!formState.isSubmitting) onDismiss() },
-                    enabled = !formState.isSubmitting
-                ) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = "Close",
-                        tint = TextSecondary
-                    )
-                }
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Student selector — ExposedDropdownMenuBox is the only
-                // pattern that reliably opens a dropdown anchored to a
-                // readOnly OutlinedTextField. The previous Box+clickable
-                // pattern was swallowed by the text field's pointer handler.
-                ExposedDropdownMenuBox(
-                    expanded = studentDropdownExpanded,
-                    onExpandedChange = { studentDropdownExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = formState.studentName.ifBlank { "Select Student *" },
-                        onValueChange = {},
-                        label = { Text("Student *") },
-                        readOnly = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = studentDropdownExpanded)
-                        },
-                        colors = textFieldColors
-                    )
-                    DropdownMenu(
-                        expanded = studentDropdownExpanded,
-                        onDismissRequest = { studentDropdownExpanded = false },
-                        modifier = Modifier.background(SurfaceDark)
-                    ) {
-                        students.forEach { student ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "${student.rollNo.ifBlank { "-" }}. ${student.displayName}",
-                                        color = if (student.studentId == formState.studentId) Teal else TextPrimary
-                                    )
-                                },
-                                onClick = {
-                                    onStudentChange(student.studentId, student.displayName)
-                                    studentDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Type selector
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    types.forEach { type ->
-                        val isSelected = type == formState.type
-                        val chipColor = if (isSelected) Teal else TextTertiary
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) TealSurface else Glass)
-                                .border(
-                                    1.dp,
-                                    if (isSelected) Teal.copy(alpha = 0.4f) else GlassBorder,
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .clickable { onTypeChange(type) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = type.replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = chipColor,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-
-                // Severity selector
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    severities.forEach { severity ->
-                        val isSelected = severity == formState.severity
-                        val sevColor = when (severity) {
-                            "high" -> ErrorRed
-                            "medium" -> WarningAmber
-                            else -> WarningAmber.copy(alpha = 0.6f)
-                        }
-                        val sevBg = when (severity) {
-                            "high" -> ErrorRedSurface
-                            "medium" -> WarningAmberSurface
-                            else -> WarningAmberSurface.copy(alpha = 0.5f)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) sevBg else Glass)
-                                .border(
-                                    1.dp,
-                                    if (isSelected) sevColor.copy(alpha = 0.4f) else GlassBorder,
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .clickable { onSeverityChange(severity) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = severity.uppercase(),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (isSelected) sevColor else TextTertiary,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-
-                // Subject — same ExposedDropdownMenuBox pattern as Student.
-                ExposedDropdownMenuBox(
-                    expanded = subjectDropdownExpanded,
-                    onExpandedChange = { subjectDropdownExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = formState.subject,
-                        onValueChange = {},
-                        label = { Text("Subject") },
-                        readOnly = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = subjectDropdownExpanded)
-                        },
-                        colors = textFieldColors
-                    )
-                    DropdownMenu(
-                        expanded = subjectDropdownExpanded,
-                        onDismissRequest = { subjectDropdownExpanded = false },
-                        modifier = Modifier.background(SurfaceDark)
-                    ) {
-                        subjects.forEach { subject ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        subject,
-                                        color = if (subject == formState.subject) Teal else TextPrimary
-                                    )
-                                },
-                                onClick = {
-                                    onSubjectChange(subject)
-                                    subjectDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Message
-                OutlinedTextField(
-                    value = formState.message,
-                    onValueChange = onMessageChange,
-                    label = { Text("Message *") },
-                    minLines = 3,
-                    maxLines = 5,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = textFieldColors
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onCreate,
-                enabled = !formState.isSubmitting && formState.studentId.isNotBlank() && formState.message.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ErrorRed,
-                    contentColor = TextPrimary
-                ),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                if (formState.isSubmitting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = TextPrimary,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text(
-                    if (formState.isSubmitting) "Creating..." else "Create Flag",
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !formState.isSubmitting
-            ) {
-                Text("Cancel", color = TextSecondary)
-            }
-        },
-        containerColor = SurfaceDark,
-        shape = RoundedCornerShape(20.dp)
-    )
 }
