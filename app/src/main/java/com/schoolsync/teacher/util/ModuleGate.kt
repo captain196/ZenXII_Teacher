@@ -97,9 +97,24 @@ object ModuleGate {
      * Fail-open is preserved:
      *  - UNKNOWN caps (not loaded)  → true (legacy accounts unchanged).
      *  - Route/module never gated   → true.
-     *  - Module held but NO level entry → true (server defaults missing levels to
-     *    `manage`, so treat a present-but-unlevelled grant as full access).
+     *  - Module held but NO level entry → true.
      * Fail-closed only in the explicit case: module held AND level == `view`.
+     *
+     * ⚠️ Known asymmetry with the server, for the "module held but NO level entry"
+     * case ONLY: this returns true (allow), whereas firestore.rules
+     * `hasCapabilityLevel()` reads `levels.get(module, 'view')` and therefore
+     * DENIES. So a UI affordance shown here would be rejected by the rules.
+     *
+     * This state is unreachable in practice: functions/staffCapabilities.js writes a
+     * `levels[m]` entry for EVERY module it grants — role-resolved grants default to
+     * 'manage' when the role carries no permissionLevels, the legacy schools.roles
+     * fallback also defaults to 'manage', and per-person overrides always carry a
+     * level. So `modules` can never contain a module missing from `levels`.
+     *
+     * Do NOT "fix" this by loosening the rule — the rule failing closed is correct.
+     * If staffCapabilities.js ever stops emitting a level per module, fix the WRITER.
+     * Pinned by a regression test: firebase-rules/tests/student_flags.test.js
+     * ("module held with NO level entry → denied").
      */
     fun canEdit(routeOrModule: String, caps: Capabilities): Boolean {
         if (!caps.loaded) return true                         // unknown → fail-open

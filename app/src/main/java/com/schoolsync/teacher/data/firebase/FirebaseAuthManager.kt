@@ -3,6 +3,9 @@ package com.schoolsync.teacher.data.firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GetTokenResult
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -81,6 +84,22 @@ class FirebaseAuthManager @Inject constructor(
      */
     fun signOut() {
         firebaseAuth.signOut()
+    }
+
+    /**
+     * Observe Firebase auth state as a Flow, emitting the current FirebaseUser
+     * (or null) on every change.
+     *
+     * Consumed by SessionGuardViewModel: when Firebase drops `currentUser`
+     * mid-session — a revoked refresh token after an admin password reset, or a
+     * disabled/deleted account — the app must end the session rather than sit in
+     * a dead one where every Firestore read fails with PERMISSION_DENIED.
+     * (The Parent app already had this; Teacher did not.)
+     */
+    fun observeAuthState(): Flow<FirebaseUser?> = callbackFlow {
+        val listener = FirebaseAuth.AuthStateListener { auth -> trySend(auth.currentUser) }
+        firebaseAuth.addAuthStateListener(listener)
+        awaitClose { firebaseAuth.removeAuthStateListener(listener) }
     }
 
     /**

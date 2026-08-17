@@ -33,16 +33,6 @@ data class FlagClassSection(
     val displayName: String get() = "$className - $section"
 }
 
-data class FlagFormState(
-    val type: String = "homework",       // homework, behavior, performance
-    val message: String = "",
-    val subject: String = "",
-    val severity: String = "low",        // low, medium, high
-    val studentId: String = "",
-    val studentName: String = "",
-    val isSubmitting: Boolean = false
-)
-
 data class RedFlagUiState(
     val availableClasses: List<FlagClassSection> = emptyList(),
     val selectedClass: FlagClassSection? = null,
@@ -50,8 +40,6 @@ data class RedFlagUiState(
     val flagsByStudent: Map<String, List<StudentFlag>> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val showCreateDialog: Boolean = false,
-    val formState: FlagFormState = FlagFormState(),
     val selectedStudentId: String? = null,
     val subjectsForClass: List<String> = emptyList(),
     /** Current teacher's Firebase UID — drives delete-button visibility. */
@@ -253,47 +241,6 @@ class RedFlagTeacherViewModel @Inject constructor(
         }
     }
 
-    // --- Create flag ---
-
-    fun showCreateDialog(studentId: String = "", studentName: String = "") {
-        _uiState.update {
-            it.copy(
-                showCreateDialog = true,
-                formState = FlagFormState(
-                    studentId = studentId,
-                    studentName = studentName,
-                    subject = it.subjectsForClass.firstOrNull() ?: ""
-                )
-            )
-        }
-    }
-
-    fun hideCreateDialog() {
-        _uiState.update { it.copy(showCreateDialog = false, formState = FlagFormState()) }
-    }
-
-    fun updateFormType(type: String) {
-        _uiState.update { it.copy(formState = it.formState.copy(type = type)) }
-    }
-
-    fun updateFormMessage(message: String) {
-        _uiState.update { it.copy(formState = it.formState.copy(message = message)) }
-    }
-
-    fun updateFormSubject(subject: String) {
-        _uiState.update { it.copy(formState = it.formState.copy(subject = subject)) }
-    }
-
-    fun updateFormSeverity(severity: String) {
-        _uiState.update { it.copy(formState = it.formState.copy(severity = severity)) }
-    }
-
-    fun updateFormStudent(studentId: String, studentName: String) {
-        _uiState.update {
-            it.copy(formState = it.formState.copy(studentId = studentId, studentName = studentName))
-        }
-    }
-
     /**
      * Phase 6A — submit a flag built by the QuickFlagSheet.
      *
@@ -372,102 +319,6 @@ class RedFlagTeacherViewModel @Inject constructor(
     /** Surface a one-line hint to the user via the existing snackbar host. */
     fun showHint(message: String) {
         viewModelScope.launch { _events.emit(RedFlagEvent.Success(message)) }
-    }
-
-    fun createFlag() {
-        val state = _uiState.value
-        val form = state.formState
-
-        if (form.studentId.isBlank()) {
-            viewModelScope.launch { _events.emit(RedFlagEvent.Error("Select a student")) }
-            return
-        }
-        if (form.message.isBlank()) {
-            viewModelScope.launch { _events.emit(RedFlagEvent.Error("Message is required")) }
-            return
-        }
-
-        // Hydrate denorm fields from the loaded class roster + selected class.
-        // Admin RBAC and dashboard analytics depend on className/section/rollNo
-        // being populated — empty strings break the teacher-can-access check.
-        val classSection = state.selectedClass
-        if (classSection == null) {
-            viewModelScope.launch { _events.emit(RedFlagEvent.Error("No class selected")) }
-            return
-        }
-        val student = state.students.firstOrNull { it.studentId == form.studentId }
-        if (student == null) {
-            viewModelScope.launch {
-                _events.emit(RedFlagEvent.Error("Student not found in current class roster"))
-            }
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(formState = it.formState.copy(isSubmitting = true)) }
-            try {
-                val teacherId   = tokenManager.userId.firstOrNull().orEmpty()
-                val teacherName = tokenManager.userName.firstOrNull().orEmpty()
-
-                // Match the canonical "Class X" / "Section Y" prefixed form
-                // that admin's _normalize_class_key/_normalize_section_key
-                // produces, so dashboard filters match exactly.
-                val classKey = if (classSection.className.startsWith("Class ", ignoreCase = true)) {
-                    classSection.className
-                } else "Class ${classSection.className}"
-                val sectionKey = if (classSection.section.startsWith("Section ", ignoreCase = true)) {
-                    classSection.section
-                } else "Section ${classSection.section}"
-
-                val flag = StudentFlag(
-                    studentId   = student.studentId,
-                    studentName = student.name.ifBlank { form.studentName },
-                    rollNo      = student.rollNo,
-                    fatherName  = student.fatherName,
-                    className   = classKey,
-                    section     = sectionKey,
-                    type        = form.type,
-                    message     = form.message.trim(),
-                    subject     = form.subject.trim(),
-                    teacherId   = teacherId,
-                    teacherName = teacherName,
-                    severity    = form.severity,
-                    createdAtMs = System.currentTimeMillis(),
-                    status      = "active"
-                )
-
-                redFlagRepository.createFlag(flag).fold(
-                    onSuccess = { flagId ->
-                        Log.d(TAG, "Flag created: $flagId")
-                        _uiState.update {
-                            it.copy(
-                                showCreateDialog = false,
-                                formState = FlagFormState(),
-                                // Auto-focus the just-flagged student so the
-                                // right panel immediately shows the new flag.
-                                selectedStudentId = student.studentId
-                            )
-                        }
-                        _events.emit(RedFlagEvent.Success("Flag created for ${student.name}"))
-                        // No manual reload — the live observeFlagsForClass
-                        // listener already reflects the new flag. Reloading here
-                        // would cancel+restart the listener and re-fetch the
-                        // whole roster for a change we already see for free.
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Failed to create flag", e)
-                        _uiState.update {
-                            it.copy(formState = it.formState.copy(isSubmitting = false))
-                        }
-                        _events.emit(RedFlagEvent.Error(e.message ?: "Failed to create flag"))
-                    }
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to create flag", e)
-                _uiState.update { it.copy(formState = it.formState.copy(isSubmitting = false)) }
-                _events.emit(RedFlagEvent.Error(e.message ?: "Failed to create flag"))
-            }
-        }
     }
 
     // --- Resolve flag ---

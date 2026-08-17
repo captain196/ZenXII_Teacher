@@ -17,7 +17,7 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.schoolsync.teacher"
-    compileSdk = 35
+    compileSdk = 36
 
     signingConfigs {
         if (keystorePropsFile.exists()) {
@@ -33,9 +33,9 @@ android {
     defaultConfig {
         applicationId = "com.schoolsync.teacher"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        targetSdk = 36
+        versionCode = 3
+        versionName = "1.0.2"
 
         vectorDrawables { useSupportLibrary = true }
 
@@ -72,8 +72,29 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            // Generates the en-XA pseudolocale (~30% longer strings, bracketed).
+            // Primary layout-overflow detector for the multi-language work — it
+            // exposes clipping before any real translation exists, which matters
+            // most in this app, where dialog/sheet clipping is already the most
+            // repeated UI bug. Switch the device language to "English (XA)".
+            isPseudoLocalesEnabled = true
+        }
     }
     compileOptions {
+        // Backports java.time (and other Java 8 APIs) to API 24-25.
+        //
+        // Both apps declare minSdk 24 but use java.time throughout — which
+        // requires API 26. Without this, an Android 7.0/7.1 device installs
+        // the app happily and then throws NoClassDefFoundError the moment it
+        // touches LocalDate/YearMonth (e.g. opening Attendance). Lint reported
+        // 167 NewApi errors for exactly this.
+        //
+        // Desugaring is chosen over raising minSdk to 26 deliberately: the
+        // users still on Android 7 are on old low-end handsets, which is the
+        // same group the regional-language support was built for. Dropping
+        // them would undercut the point.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -90,9 +111,38 @@ android {
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
+
+    // MUST stay disabled. Play's default behaviour is to strip every locale the
+    // installing device isn't set to — so a staff member whose phone is in
+    // English and who picks Tamil inside the app would silently get English
+    // back, with nothing in logcat. Debug APKs are unaffected, so this fails
+    // ONLY on the production artifact. Verify by installing the release AAB
+    // through Play internal testing on an English-locale device, then switching
+    // in-app.
+    bundle {
+        language { enableSplit = false }
+    }
+
+    lint {
+        // Translation correctness is enforced at build time, not by review.
+        // MissingTranslation is what stops the catalogue rotting as new features
+        // add English-only strings; the StringFormat checks stop a translated
+        // "%1$s" that lost or reordered its argument from throwing
+        // IllegalFormatException inside a composable at runtime.
+        error += listOf(
+            "MissingTranslation",
+            "ExtraTranslation",
+            "StringFormatInvalid",
+            "StringFormatMatches",
+            "ImpliedQuantity"
+        )
+    }
 }
 
 dependencies {
+    // Required by isCoreLibraryDesugaringEnabled above.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+
     // Core
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")

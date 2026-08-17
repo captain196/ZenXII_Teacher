@@ -23,6 +23,7 @@ data class SplashState(
 @HiltViewModel
 class SplashViewModel @Inject constructor(
     private val tokenManager: TokenManager,
+    private val firestoreService: com.schoolsync.teacher.data.firebase.FirestoreService,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -65,9 +66,43 @@ class SplashViewModel @Inject constructor(
                             is String  -> v.equals("true", ignoreCase = true)
                             else       -> false
                         }
-                        if (freshMustChange != mustChange) {
-                            tokenManager.saveMustChangePassword(freshMustChange)
-                            mustChange = freshMustChange
+                        // OR in the staff-doc mirror rather than letting the claim
+                        // overwrite the cached value outright.
+                        //
+                        // A wholesale claims re-mint can drop a pending
+                        // must_change_password while the mirror still says true
+                        // (production: STA0078, STA0094). Assigning the claim
+                        // straight over the cache DOWNGRADED such a user to false,
+                        // undoing the gate that login had correctly set from the
+                        // doc — and once SessionGuard began re-checking on every
+                        // foreground, it read the doc, disagreed, and logged them
+                        // out, giving an endless login → dashboard → logout loop.
+                        // Parent has always read its doc here; this brings Teacher
+                        // to parity.
+                        val docMustChange = try {
+                            val schoolId = tokenManager.schoolId.first()
+                            val userId = tokenManager.userId.first()
+                            if (!schoolId.isNullOrBlank() && !userId.isNullOrBlank()) {
+                                val doc = firestoreService.getDocumentMap(
+                                    com.schoolsync.teacher.util.Constants.Firestore.STAFF,
+                                    "${schoolId}_$userId"
+                                )
+                                when (val v = doc?.get("mustChangePassword")) {
+                                    is Boolean -> v
+                                    is String  -> v.equals("true", ignoreCase = true)
+                                    else       -> false
+                                }
+                            } else false
+                        } catch (e: Exception) {
+                            // Offline / transient: fall back to the claim alone
+                            // rather than inventing a gate.
+                            false
+                        }
+
+                        val resolved = freshMustChange || docMustChange
+                        if (resolved != mustChange) {
+                            tokenManager.saveMustChangePassword(resolved)
+                            mustChange = resolved
                         }
                     }
                 } catch (e: com.google.firebase.auth.FirebaseAuthInvalidUserException) {

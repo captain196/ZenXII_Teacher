@@ -216,18 +216,22 @@ fun QuickFlagSheet(
         }
     }
 
-    val needsSubject = state.forceSubjectPick && subject.isBlank()
-    // Strict subject integrity: when the screen forces a pick but the
-    // teacher has no subjectAssignments for this class+section, the
-    // sheet refuses to accept the flag at all. No free-text fallback —
-    // an admin must wire up an assignment first.
+    // Subject integrity: when subjects ARE available for this class+section the
+    // teacher must pick one — no free-text fallback, so reporting stays clean.
     val noAssignedSubjects = state.forceSubjectPick && state.subjectsForClass.isEmpty()
+    // …but when the teacher has NO subjectAssignments at all for this class, a
+    // hard refusal locked them out of raising ANY flag (F-NEW-1). Since the
+    // full CreateFlagDialog is unreachable (see RedFlagTeacherScreen), this
+    // sheet is the only create path in the app — so the lockout meant a real
+    // safeguarding concern could not be recorded at all until an admin fixed
+    // the assignment data. Degrade instead: allow the flag through with a blank
+    // subject (the panel buckets blank as "General") and warn inline.
+    val needsSubject = state.forceSubjectPick && subject.isBlank() && !noAssignedSubjects
     val canSubmit = !submitting
         && type.isNotBlank()
         && severity.isNotBlank()
         && message.isNotBlank()
         && !needsSubject
-        && !noAssignedSubjects
 
     ModalBottomSheet(
         onDismissRequest = { state.dismiss() },
@@ -385,9 +389,11 @@ fun QuickFlagSheet(
             if (noAssignedSubjects) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "No subject assigned — contact admin.",
+                    text = "No subject is assigned to you for this class — this flag " +
+                        "will be filed without a subject. Ask an admin to set up your " +
+                        "subject assignment.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else if (needsSubject) {
                 Spacer(Modifier.height(6.dp))

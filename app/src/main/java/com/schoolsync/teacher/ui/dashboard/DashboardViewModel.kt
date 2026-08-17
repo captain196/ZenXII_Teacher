@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -126,6 +127,13 @@ class DashboardViewModel @Inject constructor(
     private val firestoreService: com.schoolsync.teacher.data.firebase.FirestoreService
 ) : ViewModel() {
 
+    private companion object {
+        /** Ceiling for the whole dashboard fan-out — see loadDashboard(). A healthy
+         *  load is sub-second; this only ever fires when a Firestore call has
+         *  stopped responding, and it exists so `isLoading` can never stick. */
+        const val DASHBOARD_LOAD_TIMEOUT_MS = 20_000L
+    }
+
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
@@ -140,6 +148,22 @@ class DashboardViewModel @Inject constructor(
                     if (!session.isNullOrBlank()) {
                         loadDashboard()
                         loadUpcomingEvents()
+                    } else {
+                        // No active session yet, so there is nothing to load — but
+                        // `isLoading` defaults to true, so returning here silently
+                        // left the dashboard spinning with no error and no retry.
+                        // Release it: the login RTDB-fallback path sets session=""
+                        // and relies on observeSchool() to self-heal, which may
+                        // never happen if the school has no currentSession.
+                        // A later non-blank emission still triggers the real load.
+                        android.util.Log.w("DashboardVM",
+                            "no active academic session — releasing spinner, awaiting self-heal")
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "No active academic session for your school yet. Pull to refresh."
+                            )
+                        }
                     }
                 }
         }
@@ -207,6 +231,21 @@ class DashboardViewModel @Inject constructor(
                 val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                 val todayDate = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
 
+                // Hard ceiling on the fan-out.
+                //
+                // Every child below is individually try/caught, but the enclosing
+                // coroutineScope still waits for ALL of them, and a Firestore
+                // .get() that never calls back is neither a success nor a failure —
+                // it just stays pending. On a degraded connection that left
+                // `isLoading` (which defaults to true) stuck forever, so the
+                // dashboard showed a spinner with no error, no retry and no way
+                // out. Observed on a teacher with 0 subject assignments while the
+                // device's network was flapping.
+                //
+                // withTimeoutOrNull cancels the stragglers and lets us fall
+                // through to a real state instead of hanging. 20s is far above a
+                // healthy fan-out (sub-second) and well inside a user's patience.
+                val completed = withTimeoutOrNull(DASHBOARD_LOAD_TIMEOUT_MS) {
                 coroutineScope {
                     // 1. Today's attendance — class-wide query, NOT per-student.
                     //    One Firestore RPC per class-teacher section returns
@@ -347,6 +386,22 @@ class DashboardViewModel @Inject constructor(
                             quickStats = stats,
                             substituteInfo = subInfo,
                             isLoading = false
+                        )
+                    }
+                    true
+                }
+                }
+
+                // Timed out: at least one Firestore call never came back. Release
+                // the spinner and tell the user, with the header/assignments we
+                // already populated above still on screen, so Refresh is reachable.
+                if (completed == null) {
+                    android.util.Log.w("DashboardVM",
+                        "dashboard load timed out after ${DASHBOARD_LOAD_TIMEOUT_MS}ms — releasing spinner")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Couldn't load your dashboard — check your connection and pull to refresh."
                         )
                     }
                 }

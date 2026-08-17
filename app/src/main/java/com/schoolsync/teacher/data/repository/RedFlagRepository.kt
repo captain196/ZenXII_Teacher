@@ -57,6 +57,27 @@ class RedFlagRepository @Inject constructor(
     private fun defaultSinceMs(): Long =
         System.currentTimeMillis() - (DEFAULT_WINDOW_DAYS * 24L * 60L * 60L * 1000L)
 
+    /**
+     * Retention predicate for teacher-facing lists (F7).
+     *
+     * The 60-day window used to be pushed down to Firestore as a
+     * `createdAtMs >=` filter, which meant an **unresolved** flag older than 60
+     * days vanished from every teacher view — while the student's own parent
+     * still saw it (the Parent app applies no window at all). For a safety
+     * feature, silently hiding an open issue is the wrong default: the flag
+     * that has been ignored longest is the one that matters most.
+     *
+     * The window is now applied client-side and only to CLOSED flags, so:
+     *   • status == 'active'  → always visible, however old;
+     *   • resolved/other      → visible while inside the rolling window.
+     *
+     * Queries therefore drop the inequality and rely on the existing
+     * (schoolId, createdAtMs↓) / (schoolId, studentId, createdAtMs↓) indexes —
+     * no new index, no deploy needed.
+     */
+    private fun isVisibleForTeacher(status: String, createdAtMs: Long, sinceMs: Long): Boolean =
+        status == "active" || createdAtMs >= sinceMs
+
     /** Match admin's flagId format: RF_YYYYMMDD_HHMMSS_xxxxxx */
     private fun newFlagId(): String {
         val c = Calendar.getInstance()
@@ -162,6 +183,12 @@ class RedFlagRepository @Inject constructor(
                 "message"      to message,
                 "subject"      to flag.subject,
                 "teacherId"    to teacherUid,
+                // Cross-surface stable identity (F4). `teacherId` MUST stay the
+                // Firebase uid (the create rule enforces teacherId == auth.uid),
+                // but the panel stores the staff id there instead — so grouping
+                // analytics on teacherId listed one teacher twice. Both writers
+                // now stamp the staff id here; the panel groups on it.
+                "teacherStaffId" to (tokenManager.userId.firstOrNull().orEmpty()),
                 "teacherName"  to flag.teacherName,
                 "createdAtMs"   to nowMs,
                 "createdAt"     to firestoreService.serverTimestamp(),
@@ -365,9 +392,11 @@ class RedFlagRepository @Inject constructor(
 
             val ref = firestoreService.firestore
                 .collection(Constants.Firestore.STUDENT_FLAGS)
+            // No createdAtMs floor (F7) — retention is applied per-flag below so
+            // an old ACTIVE flag is never hidden from the teacher.
+            val sinceMs = defaultSinceMs()
             val query = ref.whereEqualTo("schoolId", schoolId)
                 .whereEqualTo("studentId", studentId)
-                .whereGreaterThanOrEqualTo("createdAtMs", defaultSinceMs())
                 .orderBy("createdAtMs", Query.Direction.DESCENDING)
 
             val snap = try {
@@ -376,10 +405,11 @@ class RedFlagRepository @Inject constructor(
                 if (BuildConfig.DEBUG) Log.w(TAG, "Server fetch failed for student $studentId, falling back to cache: ${e.message}")
                 query.get(Source.CACHE).await()
             }
-            // Hide soft-deleted flags.
+            // Hide soft-deleted flags; keep active regardless of age.
             val flags = snap.documents
                 .filter { (it.getString("status") ?: "") != "deleted" }
                 .map { snapshotToFlag(it) }
+                .filter { isVisibleForTeacher(it.status, it.createdAtMs, sinceMs) }
             Result.success(flags)
         } catch (e: Exception) {
             Result.failure(e)
@@ -405,11 +435,15 @@ class RedFlagRepository @Inject constructor(
             val ids = students.map { it.studentId }.toHashSet()
             if (ids.isEmpty()) return Result.success(emptyMap())
 
+            // No createdAtMs floor (F7); retention applied per-flag below.
+            // Bounded by CLASS_SCAN_LIMIT so an old school with years of history
+            // can't turn one class screen into an unbounded read.
+            val sinceMs = defaultSinceMs()
             val ref = firestoreService.firestore
                 .collection(Constants.Firestore.STUDENT_FLAGS)
             val query = ref.whereEqualTo("schoolId", schoolId)
-                .whereGreaterThanOrEqualTo("createdAtMs", defaultSinceMs())
                 .orderBy("createdAtMs", Query.Direction.DESCENDING)
+                .limit(CLASS_SCAN_LIMIT)
 
             val snap = try {
                 query.get(Source.SERVER).await()
@@ -424,7 +458,9 @@ class RedFlagRepository @Inject constructor(
                 if (sid !in ids) continue
                 // Hide soft-deleted flags from the teacher list.
                 if ((doc.getString("status") ?: "") == "deleted") continue
-                grouped.getOrPut(sid) { mutableListOf() }.add(snapshotToFlag(doc))
+                val flag = snapshotToFlag(doc)
+                if (!isVisibleForTeacher(flag.status, flag.createdAtMs, sinceMs)) continue
+                grouped.getOrPut(sid) { mutableListOf() }.add(flag)
             }
             Result.success(grouped)
         } catch (e: Exception) {
@@ -449,15 +485,16 @@ class RedFlagRepository @Inject constructor(
         val sinceMs = defaultSinceMs()
         emitAll(
             firestoreService.observeQuery(Constants.Firestore.STUDENT_FLAGS) { ref ->
+                // No createdAtMs floor (F7) — see isVisibleForTeacher.
                 ref.whereEqualTo("schoolId", schoolId)
                     .whereEqualTo("studentId", studentId)
-                    .whereGreaterThanOrEqualTo("createdAtMs", sinceMs)
                     .orderBy("createdAtMs", Query.Direction.DESCENDING)
             }.map { snap ->
                 snap.documents
                     .filterNot { it.metadata.hasPendingWrites() }
                     .filter { (it.getString("status") ?: "") != "deleted" }
                     .map { snapshotToFlag(it) }
+                    .filter { isVisibleForTeacher(it.status, it.createdAtMs, sinceMs) }
             }
         )
     }
@@ -485,9 +522,10 @@ class RedFlagRepository @Inject constructor(
         val sinceMs = defaultSinceMs()
         emitAll(
             firestoreService.observeQuery(Constants.Firestore.STUDENT_FLAGS) { ref ->
+                // No createdAtMs floor (F7); bounded scan, retention per-flag.
                 ref.whereEqualTo("schoolId", schoolId)
-                    .whereGreaterThanOrEqualTo("createdAtMs", sinceMs)
                     .orderBy("createdAtMs", Query.Direction.DESCENDING)
+                    .limit(CLASS_SCAN_LIMIT)
             }.map { snap ->
                 val grouped = mutableMapOf<String, MutableList<StudentFlag>>()
                 for (doc in snap.documents) {
@@ -495,7 +533,9 @@ class RedFlagRepository @Inject constructor(
                     val sid = (doc.getString("studentId") ?: continue)
                     if (sid !in ids) continue
                     if ((doc.getString("status") ?: "") == "deleted") continue
-                    grouped.getOrPut(sid) { mutableListOf() }.add(snapshotToFlag(doc))
+                    val flag = snapshotToFlag(doc)
+                    if (!isVisibleForTeacher(flag.status, flag.createdAtMs, sinceMs)) continue
+                    grouped.getOrPut(sid) { mutableListOf() }.add(flag)
                 }
                 grouped
             }
@@ -527,9 +567,11 @@ class RedFlagRepository @Inject constructor(
 
             val ref = firestoreService.firestore
                 .collection(Constants.Firestore.STUDENT_FLAGS)
+            // Every ACTIVE flag counts, however old (F7). The dashboard tile is
+            // an "open issues" count — ageing one out of it is exactly backwards.
+            // Served by the (schoolId, status, createdAtMs) index as a prefix.
             val query = ref.whereEqualTo("schoolId", schoolId)
                 .whereEqualTo("status", "active")
-                .whereGreaterThanOrEqualTo("createdAtMs", defaultSinceMs())
 
             val snap = try {
                 query.get(Source.SERVER).await()
@@ -544,6 +586,13 @@ class RedFlagRepository @Inject constructor(
     companion object {
         private const val TAG = "RedFlagRepo"
         private const val DEFAULT_WINDOW_DAYS = 60L
+        /**
+         * Upper bound on the class-wide scan (F7). The createdAtMs floor is gone
+         * so that old ACTIVE flags stay visible; this keeps the worst case (a
+         * long-running school with years of resolved flags) bounded. Ordered
+         * DESC, so the newest 1000 are always the ones retained.
+         */
+        private const val CLASS_SCAN_LIMIT = 1000L
         private const val MAX_MESSAGE_LENGTH = 1000   // matches admin panel MAX_MESSAGE_LENGTH
         private val ALLOWED_TYPES      = setOf("homework", "behavior", "performance")
         private val ALLOWED_SEVERITIES = setOf("low", "medium", "high")
