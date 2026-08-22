@@ -294,9 +294,13 @@ object AppModule {
     @Singleton
     fun provideTransportFirestoreRepository(
         firestoreService: FirestoreService,
-        tokenManager: TokenManager
+        tokenManager: TokenManager,
+        // F13.1 M3 / D-8: trip STATE transitions now go through the canonical
+        // Transport_service lifecycle over HTTP. Everything else in this
+        // repository stays Firestore-direct.
+        apiService: ApiService
     ): TransportFirestoreRepository =
-        TransportFirestoreRepository(firestoreService, tokenManager)
+        TransportFirestoreRepository(firestoreService, tokenManager, apiService)
 
     @Provides
     @Singleton

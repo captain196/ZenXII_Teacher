@@ -34,4 +34,22 @@ object ClientMetadata {
         "device_sdk"       to Build.VERSION.SDK_INT,
         "device_model"     to (Build.MODEL ?: "")
     )
+
+    /**
+     * The three fields `hasClientMetadata()` actually requires, and nothing else.
+     *
+     * F13.1 live-position writes go to `vehicleLivePositions`, whose rule pins
+     * the writable fields with `affectedKeys().hasOnly(...)`. The diagnostic
+     * extras in [asMap] are NOT in that allowlist, so using it there would make
+     * Firestore reject every position update with permission-denied.
+     *
+     * Keeping the payload minimal is also the right call on its own terms: this
+     * map is written up to four times a minute per vehicle for the length of
+     * every trip, and `device_model` never changes mid-trip.
+     */
+    fun required(): Map<String, Any> = mapOf(
+        "app_version"      to BuildConfig.VERSION_NAME,
+        "client_platform"  to PLATFORM,
+        "client_timestamp" to System.currentTimeMillis()
+    )
 }

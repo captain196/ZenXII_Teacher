@@ -60,7 +60,7 @@ fun FuelLogScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Fuel log") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }
+                // Back affordance removed — the device provides system back/gesture.
             )
         }
     ) { padding ->
@@ -75,13 +75,30 @@ fun FuelLogScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Vehicle")
-                    Text(
-                        state.vehicle?.registrationNo
-                            ?: state.vehicle?.id
-                            ?: "Loading…",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.Gray
-                    )
+                    val v = state.vehicle
+                    if (v == null) {
+                        Text("Loading…", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
+                    } else {
+                        // ifBlank, NOT elvis: registrationNo defaults to "" and is
+                        // never null, so `?:` never fired and this rendered an
+                        // EMPTY box. The panel writes the plate as `number`.
+                        Text(
+                            v.number.ifBlank { v.registrationNo }.ifBlank { v.id },
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        // The driver is fuelling a specific bus — enough detail to
+                        // confirm it is the right one before money is recorded.
+                        val detail = listOfNotNull(
+                            v.type.takeIf { it.isNotBlank() }?.replaceFirstChar { c -> c.uppercase() },
+                            listOf(v.make, v.model).filter { it.isNotBlank() }
+                                .joinToString(" ").takeIf { it.isNotBlank() },
+                            v.capacity.takeIf { it > 0 }?.let { "$it seats" }
+                        ).joinToString(" · ")
+                        if (detail.isNotBlank()) {
+                            Spacer(Modifier.height(2.dp))
+                            Text(detail, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        }
+                    }
                 }
             }
             OutlinedTextField(

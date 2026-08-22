@@ -17,6 +17,12 @@ data class VehicleDoc(
     @DocumentId
     val id: String = "",
     val schoolId: String = "",
+    // The admin panel writes the plate as `number` (Transport_service
+    // save_vehicle). `registrationNo` is kept for older documents, but it is
+    // absent on everything current — which is why the driver screen fell back
+    // to the raw document id and showed "SCH_..._VH0100" where the plate
+    // belongs. Read `number` first.
+    val number: String = "",
     val registrationNo: String = "",
     val type: String = "bus",
     val make: String = "",

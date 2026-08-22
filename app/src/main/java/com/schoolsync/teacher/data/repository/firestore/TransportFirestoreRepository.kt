@@ -10,10 +10,14 @@ import com.schoolsync.teacher.data.model.firestore.RouteDoc
 import com.schoolsync.teacher.data.model.firestore.SosAlertDoc
 import com.schoolsync.teacher.data.model.firestore.StaffDoc
 import com.schoolsync.teacher.data.model.firestore.StudentRouteDoc
-import com.schoolsync.teacher.data.model.firestore.TransportAttendanceDoc
 import com.schoolsync.teacher.data.model.firestore.TripLogDoc
 import com.schoolsync.teacher.data.model.firestore.VehicleDoc
+import java.util.UUID
+import com.schoolsync.teacher.data.model.ScanOutcome
+import com.schoolsync.teacher.data.model.TripRoster
+import com.schoolsync.teacher.data.remote.ApiService
 import com.schoolsync.teacher.util.Constants
+import retrofit2.Response
 import kotlinx.coroutines.flow.firstOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -40,16 +44,41 @@ import javax.inject.Singleton
 @Singleton
 class TransportFirestoreRepository @Inject constructor(
     private val firestoreService: FirestoreService,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    // D-8: trip STATE transitions go through the canonical PHP lifecycle.
+    // Everything else in this repository stays Firestore-direct — only the
+    // lifecycle moved, because only the lifecycle carries business rules.
+    private val apiService: ApiService
 ) {
 
     /**
      * Fetch the route assignment for a specific student.
      * Query: schoolId + studentId.
      */
+    /**
+     * TRN-SESS-B (2026-08-15) — the CURRENT transport assignment, converging on
+     * the backend's canonical definition.
+     *
+     * This used to filter on schoolId + studentId only, with limit(1) and no
+     * ordering. An unordered limit(1) returns an ARBITRARY matching row, so a
+     * student carrying a prior-session or deactivated studentRoutes document
+     * could resolve to the wrong route and stop.
+     *
+     * The backend has always been stricter (Transport_service.php:6914-6921):
+     *     [studentId == X, status == 'Active']  then  session == sessionYear
+     * The session comes from the existing getSession() path used by the
+     * Attendance, CampusLife, Exam, Fee and Gallery repositories — no new
+     * session source, no second abstraction.
+     *
+     * FAIL CLOSED on a blank session: the session-less query would span every
+     * session, and a driver resolving the wrong stop is a safety problem, not a
+     * cosmetic one.
+     */
     suspend fun getStudentRoute(studentId: String): Result<StudentRouteDoc?> {
         val schoolCode = getSchoolCode()
             ?: return Result.failure(Exception("School code not available"))
+        val session = getSession()
+            ?: return Result.failure(Exception("Session not set"))
 
         return try {
             val docs = firestoreService.queryDocumentsAs<StudentRouteDoc>(
@@ -57,12 +86,24 @@ class TransportFirestoreRepository @Inject constructor(
             ) { ref ->
                 ref.whereEqualTo("schoolId", schoolCode)
                     .whereEqualTo("studentId", studentId)
+                    .whereEqualTo("status", "Active")
+                    .whereEqualTo("session", session)
                     .limit(1)
             }
             Result.success(docs.firstOrNull())
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Canonical current academic session, identical to the accessor used by
+     * AttendanceFirestoreRepository:340, CampusLifeFirestoreRepository:447,
+     * ExamFirestoreRepository:299 and FeeFirestoreRepository:429. Ultimately
+     * sourced from schools/{schoolId}.currentSession (AuthRepository:107-114).
+     */
+    private suspend fun getSession(): String? {
+        return tokenManager.session.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     /**
@@ -233,8 +274,19 @@ class TransportFirestoreRepository @Inject constructor(
     suspend fun getMyDriverInfo(): Result<StaffDoc?> {
         val teacherId = getTeacherId()
             ?: return Result.failure(Exception("Teacher ID not available"))
+        val schoolCode = getSchoolCode()
+            ?: return Result.failure(Exception("School code not available"))
         return try {
-            val doc = firestoreService.getDocumentAs<StaffDoc>(Constants.Firestore.STAFF, teacherId)
+            // Staff document ids are school-prefixed: staff/{schoolId}_{userId}
+            // — the same construction AuthRepository.readStaffProfile() uses.
+            // Reading bare `staff/STA0001` finds nothing, and a missing document
+            // is indistinguishable here from "not a driver", so every real
+            // driver was shown "transport-driving not enabled in HR" no matter
+            // what the flag actually said.
+            val doc = firestoreService.getDocumentAs<StaffDoc>(
+                Constants.Firestore.STAFF,
+                "${schoolCode}_$teacherId"
+            )
             if (doc == null) return Result.success(null)
             val canDrive = (doc.flags?.get("can_drive_transport") as? Boolean) ?: false
             Result.success(if (canDrive) doc else null)
@@ -290,22 +342,24 @@ class TransportFirestoreRepository @Inject constructor(
     }
 
     /**
-     * Start a Ready trip (Refinement 2 — assigned driver is the normal
-     * path; admin override is a separate PHP-admin flow, fully audited).
-     * Firestore rule allows only field-level updates on the trip.
+     * Start a Ready trip through the CANONICAL server lifecycle (D-8).
+     *
+     * This used to write `tripLogs.status` directly to Firestore, which
+     * bypassed `Transport_service::startTrip()` and therefore skipped driver
+     * readiness re-validation, the CAS transition guard, the audit row, the
+     * "bus started" parent notification, vehicle route denormalisation, and
+     * GPS session creation. One lifecycle now serves both the panel and the
+     * app; the Firestore rule no longer permits a client status write at all.
+     *
+     * The server rejects a trip that is not assigned to the authenticated
+     * driver, so no driver id is sent. A 422 carries a real business reason
+     * (unfit driver, suspended route, wrong state) that the UI must show
+     * verbatim rather than replace with a generic failure.
      */
-    suspend fun startMyTrip(tripId: String): Result<Unit> {
-        val update = mapOf(
-            "status" to "InProgress",
-            "actual_start_at" to nowIso(),
-            "updated_at" to nowIso()
-        ) + ClientMetadata.asMap()
-        return try {
-            firestoreService.updateDocument(Constants.Firestore.TRIP_LOGS, tripId, update)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    suspend fun startMyTrip(tripId: String): Result<Unit> = runCatching {
+        val res = apiService.startTrip(tripId)
+        if (!res.isSuccessful) throw IllegalStateException(res.serverMessage("Could not start the trip."))
+        Unit
     }
 
     /**
@@ -357,7 +411,19 @@ class TransportFirestoreRepository @Inject constructor(
                 "route_progress_pct" to progressPct,
                 "next_checkpoint_id" to nextPending,
                 "updated_at" to nowIso()
-            ) + ClientMetadata.asMap()
+            ) + ClientMetadata.required()   // required(), NOT asMap() — see below.
+            // The tripLogs update rule pins the writable set with
+            // `affectedKeys().hasOnly([...])`, and asMap()'s two diagnostic
+            // extras — device_sdk / device_model — are in NEITHER the pre-D-8
+            // allowlist nor the D-8 one. Sending them makes Firestore reject the
+            // whole update with permission-denied, so checkpoint marking fails
+            // for every driver. This is the same trap ClientMetadata.required()
+            // was introduced for on vehicleLivePositions; tripLogs is the only
+            // other hasOnly-guarded write in the ruleset and had been missed.
+            //
+            // The creates elsewhere in this file (transportAttendance, fuelLogs,
+            // sosAlerts) keep asMap(): their rules require metadata presence but
+            // do NOT constrain the key set, so the extras remain useful there.
             firestoreService.updateDocument(Constants.Firestore.TRIP_LOGS, tripId, update)
             Result.success(Unit)
         } catch (e: Exception) {
@@ -365,72 +431,136 @@ class TransportFirestoreRepository @Inject constructor(
         }
     }
 
-    /** Write a boarding event to transportAttendance. Deterministic doc-id → idempotent. */
-    suspend fun markStudentBoarded(
-        tripId: String,
-        studentId: String,
-        actualStopId: String? = null,
-        notes: String = ""
-    ): Result<String> = writeBoardingEvent(tripId, studentId, "boarded_pickup", actualStopId, notes)
+    // ─── F14 QR attendance — server-authorized (2026-08-16) ─────────────
+    //
+    // WHAT WAS HERE BEFORE, AND WHY IT HAD TO GO.
+    // `markStudentBoarded/Dropped/NoShow` wrote straight into
+    // `transportAttendance` from the device. That bypassed
+    // Transport_qr_attendance_service entirely, so a boarding was recorded with
+    // NO eligibility check (studentRoutes status, effective dates, session,
+    // service days), NO state-transition validation, NO wrong-bus detection and
+    // NO QR signature — the device simply asserted `marked_by_role: "driver"`
+    // about itself.
+    //
+    // The Firestore rule has since WITHDRAWN the driver client-write arm for
+    // exactly that reason, and its own comment carries the warning: deployed
+    // ahead of this app change, "the current app's manual tap-to-board starts
+    // failing PERMISSION_DENIED — and, being a Firestore write, it would fail
+    // silently in the UI." This is that app change.
+    //
+    // Boarding now requires the SIGNED QR token, deliberately. A conductor
+    // cannot hand-board a child, because that is the hole F14 exists to close;
+    // a child without a scannable card is handled through
+    // [resolveStudentException], which records the real outcome (absent, took
+    // another bus, verified some other way) instead of a fake boarding.
 
-    suspend fun markStudentDropped(
+    /**
+     * Board a student by scanning their ID-card QR.
+     *
+     * The token is passed through untouched — decoding, signature verification
+     * and eligibility all happen server-side. [clientEventId] makes a retry
+     * idempotent: the same tap twice records one event.
+     *
+     * @return the server's own outcome so the UI can distinguish a fresh
+     *         boarding from a duplicate scan or a needs-confirmation case.
+     */
+    suspend fun scanStudentQr(
         tripId: String,
-        studentId: String,
-        actualStopId: String? = null,
-        notes: String = ""
-    ): Result<String> = writeBoardingEvent(tripId, studentId, "dropped_home", actualStopId, notes)
-
-    suspend fun markStudentNoShow(
-        tripId: String,
-        studentId: String,
-        notes: String = ""
-    ): Result<String> = writeBoardingEvent(tripId, studentId, "no_show", null, notes)
-
-    private suspend fun writeBoardingEvent(
-        tripId: String,
-        studentId: String,
-        eventType: String,
-        actualStopId: String?,
-        notes: String
-    ): Result<String> {
-        val schoolCode = getSchoolCode()
-            ?: return Result.failure(Exception("School code not available"))
-        val teacherId = getTeacherId()
-            ?: return Result.failure(Exception("Teacher ID not available"))
-        val docId = "${schoolCode}_${tripId}_${studentId}_${eventType}"
-        // Look up the trip for direction/route/gps_session_id inheritance
-        val trip = firestoreService.getDocumentAs<TripLogDoc>(Constants.Firestore.TRIP_LOGS, tripId)
-            ?: return Result.failure(Exception("Trip not found: $tripId"))
-        val data = buildMap<String, Any> {
-            put("id", docId)
-            put("schoolId", schoolCode)
-            put("tripId", tripId)
-            put("studentId", studentId)
-            put("route_id", trip.routeId)
-            put("session", "")   // server-side createTrip sets session; leave blank here to avoid drift
-            put("trip_date", trip.date)
-            put("trip_direction", trip.tripDirection)
-            put("actual_stop_id", actualStopId ?: "")
-            put("event_type", eventType)
-            put("event_at", FieldValue.serverTimestamp())
-            put("marked_by_staff_id", teacherId)
-            put("marked_by_role", "driver")   // F9-4 gate
-            put("notes", notes)
-            put("gps_session_id", trip.gpsSessionId)
-            put("created_at", FieldValue.serverTimestamp())
-            putAll(ClientMetadata.asMap())
+        rawQr: String,
+        confirmAlternate: Boolean = false,
+        clientEventId: String = UUID.randomUUID().toString(),
+    ): Result<ScanOutcome> = runCatching {
+        val res = apiService.scanStudentQr(
+            tripId = tripId,
+            qr = rawQr,
+            confirmAlternate = if (confirmAlternate) "1" else "",
+            clientEventId = clientEventId,
+            clientEventAt = isoNow(),
+        )
+        val body = res.body().orEmpty()
+        val status = (body["status"] as? String).orEmpty()
+        // A 422 with status=needs_confirmation is NOT a failure — it is the
+        // wrong-bus / alternate-transport prompt, and the conductor has to see
+        // it. Only a genuine error throws.
+        if (status == "error" || (!res.isSuccessful && status.isBlank())) {
+            throw IllegalStateException(res.serverMessage("Could not record the scan."))
         }
-        return try {
-            firestoreService.setDocument(Constants.Firestore.TRANSPORT_ATTENDANCE, docId, data)
-            Result.success(docId)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        ScanOutcome(
+            status      = status,
+            message     = (body["message"] as? String).orEmpty(),
+            studentId   = (body["student_id"] as? String).orEmpty(),
+            studentName = (body["student_name"] as? String).orEmpty(),
+        )
     }
 
     /**
-     * Complete a trip. Updates only the driver-mutable fields; rules
-     * enforce field-level discipline.
+     * Everyone still aboard has reached school.
+     *
+     * The bulk alighting the service already models — geofence-verified server
+     * side, so it cannot be used to close a trip while the bus is elsewhere.
+     */
+    suspend fun markAllAlightedAtSchool(
+        tripId: String,
+        clientEventId: String = UUID.randomUUID().toString(),
+    ): Result<Unit> = runCatching {
+        val res = apiService.markAllAlightedAtSchool(tripId, clientEventId)
+        if (!res.isSuccessful) throw IllegalStateException(
+            res.serverMessage("Could not record arrival at school.")
+        )
+        Unit
+    }
+
+    /**
+     * Record why a rostered student did not board.
+     *
+     * `resolution` is the service's own vocabulary — absent, alternate_bus,
+     * verified_other. These are what clear a completion blocker; the conductor
+     * is accounting for a child, not inventing a boarding.
+     */
+    suspend fun resolveStudentException(
+        tripId: String,
+        studentId: String,
+        resolution: String,
+        reason: String = "",
+        clientEventId: String = UUID.randomUUID().toString(),
+    ): Result<Unit> = runCatching {
+        val res = apiService.resolveException(tripId, studentId, resolution, reason, clientEventId)
+        if (!res.isSuccessful) throw IllegalStateException(
+            res.serverMessage("Could not record the resolution.")
+        )
+        Unit
+    }
+
+    /**
+     * The live roster: who is expected, who is aboard, and what still blocks
+     * completion.
+     *
+     * Counts are computed server-side by the one implementation the admin panel
+     * also reads, so the number on the conductor's phone and the number in the
+     * office cannot drift.
+     */
+    suspend fun tripRoster(tripId: String): Result<TripRoster> = runCatching {
+        val res = apiService.tripRoster(tripId)
+        if (!res.isSuccessful) throw IllegalStateException(
+            res.serverMessage("Could not load the student list.")
+        )
+        TripRoster.from(res.body().orEmpty())
+    }
+
+    private fun isoNow(): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US)
+            .format(java.util.Date())
+
+    /**
+     * Complete a trip through the CANONICAL server lifecycle (D-8).
+     *
+     * Was a direct Firestore write; see [startMyTrip] for why that had to go.
+     * Completion additionally disarms the F13 tracking kill switch and tears
+     * down the live-position session, so a parent can no longer see the bus
+     * once the children are off it — that teardown only happens on this path.
+     *
+     * A 422 is a real guard (for example a checkpoint still Pending) and its
+     * message must reach the driver unchanged.
      */
     suspend fun completeMyTrip(
         tripId: String,
@@ -438,24 +568,26 @@ class TransportFirestoreRepository @Inject constructor(
         distance: Double,
         fuelUsed: Double,
         notes: String = ""
-    ): Result<Unit> {
-        val update = mapOf<String, Any?>(
-            "status" to "Completed",
-            "actual_end_at" to nowIso(),
-            "endTime" to nowIso(),
-            "endOdometer" to endOdometer,
-            "distance" to distance,
-            "distance_km" to distance,
-            "fuelUsed" to fuelUsed,
-            "notes" to notes,
-            "updated_at" to nowIso()
-        ) + ClientMetadata.asMap()
-        return try {
-            firestoreService.updateDocument(Constants.Firestore.TRIP_LOGS, tripId, update)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    ): Result<Unit> = runCatching {
+        val res = apiService.completeTrip(tripId, endOdometer, distance, fuelUsed, notes)
+        if (!res.isSuccessful) throw IllegalStateException(res.serverMessage("Could not complete the trip."))
+        Unit
+    }
+
+    /**
+     * Pull the server's own `message` out of a non-2xx response so the driver
+     * sees the actual reason — "Driver licence expired", "Route is suspended",
+     * "This trip is not assigned to you" — instead of a generic failure. These
+     * messages are the entire point of routing through the canonical service.
+     */
+    private fun Response<Map<String, Any>>.serverMessage(fallback: String): String {
+        val fromBody = (body()?.get("message") as? String)?.takeIf { it.isNotBlank() }
+        if (fromBody != null) return fromBody
+        val raw = try { errorBody()?.string() } catch (_: Exception) { null }
+        val fromError = raw
+            ?.let { Regex("\"message\"\\s*:\\s*\"([^\"]+)\"").find(it)?.groupValues?.getOrNull(1) }
+            ?.takeIf { it.isNotBlank() }
+        return fromError ?: "$fallback (HTTP ${code()})"
     }
 
     /**

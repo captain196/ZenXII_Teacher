@@ -13,6 +13,21 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
+    <!-- F13.1 Live GPS (2026-08-08): the bus position is streamed for the
+         duration of a trip by a FOREGROUND service with a permanent,
+         non-dismissible notification — the driver can always see that tracking
+         is live, which is a privacy invariant of the feature.
+
+         FOREGROUND_SERVICE_LOCATION is mandatory from Android 14 (API 34) for
+         any service declaring foregroundServiceType="location".
+
+         ACCESS_BACKGROUND_LOCATION is deliberately NOT requested: a foreground
+         service with a visible notification covers the entire trip, so asking
+         for background location would trigger Play's background-location review
+         for no functional gain. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <!-- No advertising / no Ad ID. Firebase Analytics (play-services-measurement)
          merges these Advertising-ID + Privacy-Sandbox attribution permissions by
          default; ZenXii uses none of them, so strip them from the merged manifest.
@@ -53,6 +68,14 @@
             </intent-filter>
         </service>
 
+        <!-- F13.1 Live GPS trip tracking. Not exported: started only from
+             within the app, after the canonical server lifecycle has confirmed
+             the trip is InProgress. -->
+        <service
+            android:name=".data.location.TripTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="school_sync_channel" />
@@ -71,6 +94,17 @@
         <meta-data
             android:name="google_analytics_adid_collection_enabled"
             android:value="false" />
+
+        <!-- F14 QR attendance (2026-08-16) — pre-download the scanner module.
+             GMS Code Scanner fetches its UI module from Play services on FIRST
+             use. Without this, the first scan a conductor ever attempts needs a
+             working connection, which on a bus at 6am is exactly when there
+             isn't one. Declaring the dependency moves that download to install
+             time. No CAMERA permission is required: Play services owns the
+             camera, which is why this API was chosen over ML Kit + CameraX. -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
 
     </application>
 </manifest>

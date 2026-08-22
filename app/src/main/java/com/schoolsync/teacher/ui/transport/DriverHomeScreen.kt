@@ -108,11 +108,35 @@ fun DriverHomeScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-                if (state.trips.isEmpty()) {
+                if (state.loadError != null) {
+                    // A failed lookup is NOT an empty schedule. Say which it is.
                     item {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.padding(16.dp)) {
-                                Text("No active trips assigned to you today.", color = Color.Gray)
+                                Text("Could not load your trips.", color = Color.Red)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    state.loadError,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                } else if (state.trips.isEmpty()) {
+                    item {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                // Name the DATE. "today" sent us hunting a query
+                                // bug when the only issue was that the trip had
+                                // been created for the previous day.
+                                Text(
+                                    "No active trips for ${
+                                        java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+                                            .format(java.util.Date())
+                                    }.",
+                                    color = Color.Gray
+                                )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
                                     "The school office schedules trips in the admin panel. Once a trip is dispatched, it appears here.",
@@ -141,7 +165,7 @@ private fun VehicleCard(vehicle: VehicleDoc?) {
             if (vehicle == null) {
                 Text("No vehicle assigned to you today.", color = Color.Gray)
             } else {
-                Text("Number: ${vehicle.registrationNo.ifBlank { vehicle.id }}")
+                Text("Number: ${vehicle.number.ifBlank { vehicle.registrationNo }.ifBlank { vehicle.id }}")
                 if (vehicle.make.isNotBlank() || vehicle.model.isNotBlank()) {
                     Text("Model: ${"${vehicle.make} ${vehicle.model}".trim()}")
                 }
@@ -215,7 +239,9 @@ data class DriverHomeState(
     val loading: Boolean = true,
     val notADriver: Boolean = false,
     val vehicle: VehicleDoc? = null,
-    val trips: List<TripLogDoc> = emptyList()
+    val trips: List<TripLogDoc> = emptyList(),
+    /** Non-null when the trip query itself failed — never shown as "no trips". */
+    val loadError: String? = null
 )
 
 @HiltViewModel
@@ -234,12 +260,24 @@ class DriverHomeViewModel @Inject constructor(
                 return@launch
             }
             val vehicle = transportRepo.getMyAssignedVehicle().getOrNull()
-            val trips = transportRepo.getMyActiveTrips().getOrDefault(emptyList())
+
+            // Do NOT swallow this. getOrDefault(emptyList()) turned a missing
+            // composite index or a rules denial into "No active trips assigned
+            // to you today." — a confident, wrong answer that sent the operator
+            // looking at the admin panel for a trip that was already there.
+            // Surface the failure and log it.
+            val tripsResult = transportRepo.getMyActiveTrips()
+            val trips = tripsResult.getOrDefault(emptyList())
+            val loadError = tripsResult.exceptionOrNull()?.let { e ->
+                android.util.Log.e("DriverHome", "getMyActiveTrips failed", e)
+                e.message ?: e.javaClass.simpleName
+            }
             _state.value = DriverHomeState(
                 loading = false,
                 notADriver = false,
                 vehicle = vehicle,
-                trips = trips
+                trips = trips,
+                loadError = loadError
             )
         }
     }

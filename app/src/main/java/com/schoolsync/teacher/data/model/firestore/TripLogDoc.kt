@@ -24,7 +24,21 @@ import com.google.firebase.firestore.DocumentId
  *   status        → status  (Ready|InProgress|Completed|Cancelled)
  */
 data class TripLogDoc(
-    @DocumentId
+    // NO @DocumentId here.
+    //
+    // createTrip writes a literal `id` field into the document
+    // (Transport_service.php:6267 → 'id' => 'TRP000097'), and the Firestore
+    // SDK refuses to map @DocumentId onto a property that also exists as a
+    // document field:
+    //     'id' was found from document tripLogs/SCH_..._TRP000097,
+    //     cannot apply @DocumentId on this property
+    // That exception aborted the WHOLE query, so a driver with a valid trip saw
+    // no trips at all.
+    //
+    // Mapping the stored field is also the form the backend needs: the driver
+    // API does getEntity('tripLogs', $tripId), which prefixes the school id
+    // itself — so it must receive the short 'TRP000097', not the prefixed
+    // document id.
     val id: String = "",
     val schoolId: String = "",
     val vehicleId: String = "",

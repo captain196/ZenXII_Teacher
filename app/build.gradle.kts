@@ -72,6 +72,29 @@ android {
                 "proguard-rules.pro"
             )
         }
+
+        // ── DEBUG ONLY — local end-to-end validation ─────────────────────
+        // Overrides BASE_URL so a debug build never talks to production. The
+        // release block above is untouched and still ships
+        // https://www.zenxii.com/.
+        //
+        // `localhost` on the phone is bridged to this PC's Apache by
+        //     adb reverse tcp:8080 tcp:80
+        // which needs only the USB cable — no shared WiFi, no LAN IP to chase
+        // when DHCP moves, and nothing reachable from outside this machine.
+        //
+        // Port 8080 on the DEVICE side, not 80: binding a privileged port
+        // (<1024) inside the app sandbox fails with "cannot bind listener:
+        // Permission denied". 8080 forwards to Apache's :80 on this PC.
+        //
+        // Set F13_LOCAL_BASE_URL in gradle.properties (or -P on the command
+        // line) to point a debug build somewhere else; the default is the
+        // local XAMPP path this repo is developed against.
+        debug {
+            val localBase = (project.findProperty("F13_LOCAL_BASE_URL") as String?)
+                ?: "http://localhost:8080/ZenX/school/"
+            buildConfigField("String", "BASE_URL", "\"$localBase\"")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -179,6 +202,15 @@ dependencies {
 
     // Razorpay checkout
     implementation("com.razorpay:checkout:1.6.38")
+
+    // ── F14 QR attendance — conductor scanner (2026-08-16) ──────────────
+    // GMS Code Scanner, not ML Kit + CameraX. It ships its own scanner UI and
+    // camera handling inside Play services, so the app needs NO CAMERA
+    // permission, no preview surface and no lifecycle plumbing — the smallest
+    // integration that gives a conductor a working scanner. play-services is
+    // already a dependency here (location, integrity), so this adds no new
+    // platform requirement.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 
     // Unit tests (JVM). Pure-logic homework harness — no Firebase/Android runtime.
     testImplementation("junit:junit:4.13.2")

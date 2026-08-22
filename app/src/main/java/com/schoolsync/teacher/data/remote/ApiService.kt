@@ -100,6 +100,76 @@ interface ApiService {
     /** Read the authenticated staff member's own attendance (today + month + 30-day history). */
     @GET("staff_attendance/me")
     suspend fun staffMe(): Response<Map<String, Any>>
+
+    // ─── Transport: canonical driver trip lifecycle (D-8, 2026-08-08) ────
+    //
+    // Exactly the move Phase 1 made for attendance, now for transport. The app
+    // used to write `tripLogs.status` straight to Firestore, which bypassed
+    // Transport_service and so skipped driver-readiness re-validation, the CAS
+    // transition guard, the audit row, the "bus started" parent notification,
+    // route denormalisation, and GPS session setup. These two endpoints put the
+    // admin panel and the driver app on ONE lifecycle.
+    //
+    // `trip_id` identifies the trip; the driver is NEVER sent — the server
+    // derives identity from the Firebase token and refuses any trip not
+    // assigned to that driver. Same discipline as staffPunch above.
+
+    @FormUrlEncoded
+    @POST("transport_driver_api/start_trip")
+    suspend fun startTrip(@Field("trip_id") tripId: String): Response<Map<String, Any>>
+
+    @FormUrlEncoded
+    @POST("transport_driver_api/complete_trip")
+    suspend fun completeTrip(
+        @Field("trip_id") tripId: String,
+        @Field("end_odometer") endOdometer: Double,
+        @Field("distance_km") distanceKm: Double,
+        @Field("fuel_used") fuelUsed: Double,
+        @Field("notes") notes: String,
+    ): Response<Map<String, Any>>
+
+    // ─── F14 QR attendance (2026-08-16) ────────────────────────────────
+    //
+    // The rest of the same migration. `transportAttendance` withdrew its driver
+    // client-write arm because rules cannot verify a QR HMAC and cannot resolve
+    // a transport entitlement across studentRoutes status, effective dates,
+    // session and service days — so a student holding a valid card but with no
+    // transport facility could be recorded. Attendance now goes through
+    // Transport_qr_attendance_service, which does all of that, and the driver is
+    // derived from the Firebase token exactly as the lifecycle calls above.
+    //
+    // `client_event_id` is the idempotency key: a retried tap, a lost response
+    // or a double scan must not produce a second boarding event.
+
+    @FormUrlEncoded
+    @POST("transport_driver_api/scan")
+    suspend fun scanStudentQr(
+        @Field("trip_id") tripId: String,
+        @Field("qr") qr: String,
+        @Field("confirm_alternate") confirmAlternate: String = "",
+        @Field("client_event_id") clientEventId: String = "",
+        @Field("client_event_at") clientEventAt: String = "",
+    ): Response<Map<String, Any>>
+
+    @GET("transport_driver_api/trip_roster")
+    suspend fun tripRoster(@Query("trip_id") tripId: String): Response<Map<String, Any>>
+
+    @FormUrlEncoded
+    @POST("transport_driver_api/mark_all_alighted_at_school")
+    suspend fun markAllAlightedAtSchool(
+        @Field("trip_id") tripId: String,
+        @Field("client_event_id") clientEventId: String = "",
+    ): Response<Map<String, Any>>
+
+    @FormUrlEncoded
+    @POST("transport_driver_api/resolve_exception")
+    suspend fun resolveException(
+        @Field("trip_id") tripId: String,
+        @Field("student_id") studentId: String,
+        @Field("resolution") resolution: String,
+        @Field("reason") reason: String = "",
+        @Field("client_event_id") clientEventId: String = "",
+    ): Response<Map<String, Any>>
 }
 
 /**

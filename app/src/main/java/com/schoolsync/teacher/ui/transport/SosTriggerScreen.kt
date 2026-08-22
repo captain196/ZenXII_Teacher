@@ -70,10 +70,8 @@ fun SosTriggerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Raise SOS") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Back") }
-                }
+                title = { Text("Raise SOS") }
+                // Back affordance removed — the device provides system back/gesture.
             )
         }
     ) { padding ->
