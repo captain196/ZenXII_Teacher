@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 11: user-visible ifBlank fallbacks found by the fallback sweep.
+     Wire values (low/active/general/pending) and groupBy keys deliberately excluded. -->
+<resources>
+    <string name="attapi_reason_required">காரணம் தேவை (குறைந்தது 10 எழுத்துகள்)</string>
+    <string name="attapi_forbidden">இந்த வகுப்பிற்கு அனுமதி இல்லை.</string>
+    <string name="attapi_not_found">கிடைக்கவில்லை.</string>
+    <string name="attapi_conflict">முரண்பாடு.</string>
+    <string name="attapi_holiday">விடுமுறை நாளில் குறிக்க முடியாது.</string>
+    <string name="attapi_locked">வருகை பூட்டப்பட்டுள்ளது.</string>
+    <string name="attapi_network_fmt">நெட்வொர்க் பிழை (%1$d)</string>
+    <string name="staffatt_session_expired">அமர்வு காலாவதியானது. மீண்டும் உள்நுழையவும்.</string>
+    <string name="staffatt_not_permitted">அனுமதி இல்லை.</string>
+    <string name="staffatt_gps_disabled">GPS வருகை இயக்கப்படவில்லை.</string>
+    <string name="staffatt_not_recorded">வருகையைப் பதிவு செய்ய முடியவில்லை.</string>
+    <string name="staffatt_invalid_request">தவறான கோரிக்கை.</string>
+    <string name="staffatt_server_error">சர்வர் பிழை. மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="auth_reset_failed_fmt">மீட்டமைப்பு தோல்வி (HTTP %1$d).</string>
+    <string name="lib_book_id_fmt">புத்தகம்: %1$s</string>
+    <string name="story_generic">ஸ்டோரி</string>
+    <string name="story_viewer_generic">பார்வையாளர்</string>
+    <string name="lp_another_teacher">மற்றொரு ஆசிரியர்</string>
+    <string name="search_untitled_generic">(தலைப்பில்லை)</string>
+</resources>

@@ -17,6 +17,10 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 data class NoticeItem(
     val noticeId: String,
@@ -44,7 +48,10 @@ data class NoticesUiState(
 @HiltViewModel
 class NoticesViewModel @Inject constructor(
     private val communicationFirestoreRepo: CommunicationFirestoreRepository,
-    private val badgeBus: com.schoolsync.teacher.util.BadgeBus
+    private val badgeBus: com.schoolsync.teacher.util.BadgeBus,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object {
@@ -93,7 +100,7 @@ class NoticesViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = e.message ?: "Couldn't refresh notices"
+                            error = e.message ?: appContext.localizedString(R.string.vm_notices_refresh_failed)
                         )
                     }
                 }

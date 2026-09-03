@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave: interpolated/concatenated UI copy that no position pattern could
+     see, because the literal was assembled into a val or passed positionally.
+     Found by the widened prose sweep (audit.py HOLE 8). -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="att_saved_rejected_fmt" tools:ignore="PluralsCandidate">Saved %1$d · %2$d rejected (see notes).</string>
+    <string name="att_correction_submitted_fmt">Correction submitted (#%1$s)</string>
+    <string name="ptm_hosting_fmt">Hosting %1$s</string>
+    <string name="ptm_mark_all_delivered_fmt" tools:ignore="PluralsCandidate">Mark all %1$d delivered</string>
+    <string name="ptm_roll_fmt">Roll #%1$s</string>
+    <string name="ptm_parent_fmt">Parent: %1$s</string>
+    <string name="marks_theory_max_fmt">Theory (%1$s)</string>
+    <string name="marks_practical_max_fmt">Practical (%1$s)</string>
+    <string name="marks_total_header">Total</string>
+    <string name="marks_theory_a11y_fmt">Theory marks for %1$s, roll %2$s</string>
+    <string name="marks_practical_a11y_fmt">Practical marks for %1$s, roll %2$s</string>
+    <string name="fp_no_contact_teacher_fmt">No contact found for "%1$s". Check your Teacher ID and try again.</string>
+    <string name="search_no_results_for_fmt">No results for "%1$s"</string>
+    <string name="dash_covering_period_fmt">Covering for %1$s — P%2$d %3$s</string>
+    <string name="dash_covering_periods_fmt">Covering for %1$s — %2$s</string>
+    <string name="students_subject_fmt">Subject: %1$s</string>
+    <string name="students_assigned">Assigned</string>
+    <string name="story_by_fmt">Story by %1$s</string>
+    <string name="hw_due_today_fmt2">Due today, %1$s IST</string>
+    <string name="hw_due_tomorrow_fmt2">Due tomorrow, %1$s IST</string>
+    <string name="hw_due_on_fmt2">Due %1$s, %2$s IST</string>
+    <string name="hw_upload_attach_failed_fmt">Could not upload attachments: %1$s</string>
+    <string name="leave_withdraw_confirm_fmt">This will withdraw your pending %1$s request for %2$s - %3$s.</string>
+    <string name="leave_applying_half_fmt">Applying Half-Day %1$s (%2$s) on %3$s</string>
+    <string name="leave_applying_one_fmt">Applying %1$s on %2$s (1 day)</string>
+    <string name="leave_type_default">Leave</string>
+    <string name="leave_half_morning">Morning</string>
+    <string name="leave_half_afternoon">Afternoon</string>
+    <string name="leave_pending_requests_fmt">Pending Requests (%1$d)</string>
+    <string name="leave_processed_count_fmt">Processed (%1$d)</string>
+    <string name="leave_processed_by_fmt">Processed by %1$s</string>
+    <string name="flag_raised_for_fmt">Flag raised for %1$s</string>
+    <string name="flag_raised_toast">🚩 Flag raised</string>
+</resources>

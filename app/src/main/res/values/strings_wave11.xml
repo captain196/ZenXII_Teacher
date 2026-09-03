@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 11: user-visible ifBlank fallbacks found by the fallback sweep.
+     Wire values (low/active/general/pending) and groupBy keys deliberately excluded. -->
+<resources>
+    <string name="attapi_reason_required">Reason required (at least 10 characters)</string>
+    <string name="attapi_forbidden">Not authorized for this class.</string>
+    <string name="attapi_not_found">Not found.</string>
+    <string name="attapi_conflict">Conflict.</string>
+    <string name="attapi_holiday">Cannot mark on a holiday.</string>
+    <string name="attapi_locked">Attendance is locked.</string>
+    <string name="attapi_network_fmt">Network error (%1$d)</string>
+    <string name="staffatt_session_expired">Session expired. Please sign in again.</string>
+    <string name="staffatt_not_permitted">Not permitted.</string>
+    <string name="staffatt_gps_disabled">GPS attendance is not enabled.</string>
+    <string name="staffatt_not_recorded">Attendance could not be recorded.</string>
+    <string name="staffatt_invalid_request">Invalid request.</string>
+    <string name="staffatt_server_error">Server error. Please retry.</string>
+    <string name="auth_reset_failed_fmt">Reset failed (HTTP %1$d).</string>
+    <string name="lib_book_id_fmt">Book: %1$s</string>
+    <string name="story_generic">Story</string>
+    <string name="story_viewer_generic">Viewer</string>
+    <string name="lp_another_teacher">another teacher</string>
+    <string name="search_untitled_generic">(Untitled)</string>
+</resources>

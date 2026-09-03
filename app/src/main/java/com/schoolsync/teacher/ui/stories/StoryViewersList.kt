@@ -51,6 +51,9 @@ import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.util.toRelativeTime
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.res.pluralStringResource
 
 /**
  * The "Seen by" list — ONE implementation shared by the author's insights
@@ -64,7 +67,7 @@ import com.schoolsync.teacher.util.toRelativeTime
  *     viewer inside a verticalScroll).
  *   • Search appears only once the list is long enough to need it.
  *   • Loading / error / empty are THREE distinct states. Collapsing an error
- *     into "No views yet" is exactly what made a failed read indistinguishable
+ *     into stringResource(R.string.story_no_views_short) is exactly what made a failed read indistinguishable
  *     from an unseen story, so a failure now says so and offers Retry.
  */
 
@@ -121,7 +124,7 @@ fun LazyListScope.storyViewersSection(
             if (filtered.isEmpty()) {
                 item(key = "viewers-nomatch") {
                     Text(
-                        text = "No viewer matches “$q”.",
+                        text = stringResource(R.string.story_no_viewer_match, q),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextTertiary,
                         modifier = Modifier.padding(vertical = 14.dp)
@@ -156,7 +159,7 @@ private fun ViewerSearchField(query: String, onQueryChange: (String) -> Unit) {
         singleLine = true,
         placeholder = {
             Text(
-                "Search viewers",
+                stringResource(R.string.story_search_viewers),
                 color = TextTertiary,
                 style = MaterialTheme.typography.bodyMedium
             )
@@ -220,11 +223,11 @@ private fun ViewerRow(v: StoryViewerEntry) {
                 overflow = TextOverflow.Ellipsis
             )
             val subtitle = when {
-                v.reactedOnly -> "Reacted"
+                v.reactedOnly -> stringResource(R.string.story_reacted_label)
                 // A server timestamp reads null for one snapshot on the writer's
-                // own device; "Just now" beats a 1970 date or a dropped row.
+                // own device; stringResource(R.string.story_just_now) beats a 1970 date or a dropped row.
                 v.viewedAtMillis > 0 -> v.viewedAtMillis.toRelativeTime()
-                else -> "Just now"
+                else -> stringResource(R.string.story_just_now)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -238,13 +241,13 @@ private fun ViewerRow(v: StoryViewerEntry) {
                     Spacer(Modifier.width(5.dp))
                     Icon(
                         Icons.Filled.CheckCircle,
-                        contentDescription = "Watched fully",
+                        contentDescription = stringResource(R.string.story_watched_fully),
                         tint = Teal,
                         modifier = Modifier.size(11.dp)
                     )
                     Spacer(Modifier.width(3.dp))
                     Text(
-                        text = "Watched",
+                        text = stringResource(R.string.story_watched),
                         style = MaterialTheme.typography.labelSmall,
                         color = Teal
                     )
@@ -259,7 +262,7 @@ private fun ViewerRow(v: StoryViewerEntry) {
 private fun ViewersEmpty() {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
         Text(
-            text = "No views yet.",
+            text = stringResource(R.string.story_no_views),
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             fontWeight = FontWeight.Medium
@@ -269,7 +272,7 @@ private fun ViewersEmpty() {
             // Says plainly why the author's own view isn't listed — otherwise
             // "0 views" on a story you just opened yourself reads as a bug
             // rather than as the same rule Instagram and WhatsApp apply.
-            text = "People appear here as they watch. Your own views aren't counted.",
+            text = stringResource(R.string.story_no_views_hint),
             style = MaterialTheme.typography.labelSmall,
             color = TextTertiary
         )
@@ -290,7 +293,7 @@ private fun ViewersError(message: String, onRetry: () -> Unit) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Couldn't load who viewed this.",
+            text = stringResource(R.string.story_viewers_error),
             style = MaterialTheme.typography.bodyMedium,
             color = TextPrimary,
             fontWeight = FontWeight.Medium
@@ -306,7 +309,7 @@ private fun ViewersError(message: String, onRetry: () -> Unit) {
             )
         }
         TextButton(onClick = onRetry) {
-            Text("Retry", color = Teal, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.common_retry), color = Teal, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -389,12 +392,11 @@ fun SeenByPill(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
         Text(
             // "0 views" on a story you just opened yourself reads as broken.
             // Your own views are excluded by design (Instagram and WhatsApp do
-            // the same) — "No views yet" states the fact without implying a
+            // the same) — stringResource(R.string.story_no_views_short) states the fact without implying a
             // number failed to update.
             text = when (count) {
-                0 -> "No views yet"
-                1 -> "1 view"
-                else -> "$count views"
+                0 -> stringResource(R.string.story_no_views_short)
+                else -> pluralStringResource(R.plurals.story_views_count, count, count)
             },
             style = MaterialTheme.typography.labelLarge,
             color = Color.White,

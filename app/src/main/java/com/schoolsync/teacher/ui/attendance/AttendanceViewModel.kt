@@ -30,6 +30,11 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
+import com.schoolsync.teacher.util.localizedPlural
 
 /**
  * UI attendance status mirrors the model enum for display purposes.
@@ -107,9 +112,11 @@ enum class AttendanceStatus(val code: String, val label: String) {
  * Mirror of the server's _stage() output. Drives the Save UI: free editing,
  * editing with reason, or locked → correction-request flow.
  */
-enum class Stage(val label: String) {
+// `label` stays the canonical English: it is the value compared against the
+// server's stage hint. Rendering goes through StatusLabels.Stage.displayLabel().
+enum class Stage(val label: String) {  // i18n-ignore
     S1_FREE("Editable"),
-    S2_RESTRICTED("Editable with reason"),
+    S2_RESTRICTED("Editable with reason"),  // i18n-ignore
     S3_LOCKED("Locked"),
     UNKNOWN("Loading…");
 
@@ -207,7 +214,10 @@ class AttendanceViewModel @Inject constructor(
     private val studentRepository: StudentRepository,
     private val attendanceFirestoreRepo: AttendanceFirestoreRepository,    // reads only
     private val attendanceApiRepo: AttendanceApiRepository,                 // ALL writes
-    private val tokenManager: TokenManager                                 // observes active-session changes
+    private val tokenManager: TokenManager,                                // observes active-session changes
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object {
@@ -464,7 +474,7 @@ class AttendanceViewModel @Inject constructor(
                     set(Calendar.MONTH, state.selectedMonth)
                 }
                 val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-                val monthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
+                val monthName = SimpleDateFormat("MMMM yyyy", Locale.ROOT).format(cal.time)  // log only
                 debugLog("[$TAG][D] Loading attendance for ${classSection.displayName}, month=$monthName")
 
                 // 1. Get student list for this class/section
@@ -530,7 +540,7 @@ class AttendanceViewModel @Inject constructor(
             } catch (e: Exception) {
                 debugLog("[$TAG][E] Failed to load attendance: ${e.message}")
                 _uiState.update {
-                    it.copy(isLoading = false, error = e.message ?: "Failed to load attendance")
+                    it.copy(isLoading = false, error = e.message ?: appContext.localizedString(R.string.vm_att_load_failed))
                 }
             }
         }
@@ -758,7 +768,7 @@ class AttendanceViewModel @Inject constructor(
                     && state.selectedYear == now.get(Calendar.YEAR)
             if (!isCurrentMonth) {
                 _uiState.update { it.copy(isSaving = false) }
-                _events.emit(AttendanceEvent.SaveError("Past-month edits require a correction request. Tap any locked cell to file one."))
+                _events.emit(AttendanceEvent.SaveError(appContext.localizedString(R.string.vm_att_past_month)))
                 return@launch
             }
 
@@ -770,7 +780,7 @@ class AttendanceViewModel @Inject constructor(
             // and reload today's sheet instead of persisting stale data.
             if (todayDay != state.todayDay) {
                 _uiState.update { it.copy(isSaving = false) }
-                _events.emit(AttendanceEvent.SaveError("The date changed since you started marking. Reloading today's sheet — please re-check and save again."))
+                _events.emit(AttendanceEvent.SaveError(appContext.localizedString(R.string.vm_att_date_changed)))
                 loadAttendance()
                 return@launch
             }
@@ -820,9 +830,9 @@ class AttendanceViewModel @Inject constructor(
                         stage = Stage.fromServer(res.stage)
                     ) }
                     val msg = if (res.rejected.isEmpty()) {
-                        "Saved ${res.updated.size} mark(s)."
+                        appContext.localizedPlural(R.plurals.att_saved_marks, res.updated.size, res.updated.size)
                     } else {
-                        "Saved ${res.updated.size} · ${res.rejected.size} rejected (see notes)."
+                        appContext.localizedString(R.string.att_saved_rejected_fmt, res.updated.size, res.rejected.size)
                     }
                     _events.emit(AttendanceEvent.SaveSuccess(msg))
                 },
@@ -839,18 +849,18 @@ class AttendanceViewModel @Inject constructor(
                             _events.emit(AttendanceEvent.ReasonRequired)
                         }
                         is AttendanceApiError.Forbidden -> {
-                            _events.emit(AttendanceEvent.SaveError(e.message ?: "Not authorized for this class."))
+                            _events.emit(AttendanceEvent.SaveError(e.message ?: appContext.localizedString(R.string.vm_att_not_authorized)))
                         }
                         is AttendanceApiError.Holiday -> {
-                            _events.emit(AttendanceEvent.SaveError(e.message ?: "Today is a holiday — attendance cannot be marked."))
+                            _events.emit(AttendanceEvent.SaveError(e.message ?: appContext.localizedString(R.string.vm_att_holiday)))
                         }
                         is AttendanceApiError.Conflict -> {
-                            _events.emit(AttendanceEvent.SaveError(e.message ?: "Conflict — refresh and retry."))
+                            _events.emit(AttendanceEvent.SaveError(e.message ?: appContext.localizedString(R.string.vm_conflict_refresh)))
                         }
                         is AttendanceApiError.NotFound -> {
-                            _events.emit(AttendanceEvent.SaveError(e.message ?: "Not found."))
+                            _events.emit(AttendanceEvent.SaveError(e.message ?: appContext.localizedString(R.string.vm_not_found)))
                         }
-                        else -> _events.emit(AttendanceEvent.SaveError(e.message ?: "Save failed"))
+                        else -> _events.emit(AttendanceEvent.SaveError(e.message ?: appContext.localizedString(R.string.vm_save_failed)))
                     }
                 }
             )
@@ -904,7 +914,9 @@ class AttendanceViewModel @Inject constructor(
             set(Calendar.MONTH, state.selectedMonth)
             set(Calendar.DAY_OF_MONTH, day)
         }
-        val isoDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+        // machine key — do not localize. This becomes correctionDate on the
+        // attendance-correction request that is WRITTEN to Firestore.
+        val isoDate = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(cal.time)
 
         _uiState.update { it.copy(
             showCorrectionDialog       = true,
@@ -969,15 +981,15 @@ class AttendanceViewModel @Inject constructor(
                         correctionDate         = "",
                         correctionReason       = ""
                     ) }
-                    _events.emit(AttendanceEvent.CorrectionSubmitted("Correction submitted (#$reqId)"))
+                    _events.emit(AttendanceEvent.CorrectionSubmitted(appContext.localizedString(R.string.att_correction_submitted_fmt, reqId)))
                 },
                 onFailure = { e ->
                     _uiState.update { it.copy(isSubmittingCorrection = false) }
                     val msg = when (e) {
-                        is AttendanceApiError.Conflict -> e.message ?: "A pending correction already exists."
-                        is AttendanceApiError.Forbidden -> e.message ?: "Not authorized for this class."
-                        is AttendanceApiError.ReasonRequired -> "Reason must be 10+ characters."
-                        else -> e.message ?: "Failed to submit"
+                        is AttendanceApiError.Conflict -> e.message ?: appContext.localizedString(R.string.vm_correction_exists)
+                        is AttendanceApiError.Forbidden -> e.message ?: appContext.localizedString(R.string.vm_att_not_authorized)
+                        is AttendanceApiError.ReasonRequired -> appContext.localizedString(R.string.vm_reason_min)
+                        else -> e.message ?: appContext.localizedString(R.string.vm_submit_failed)
                     }
                     _events.emit(AttendanceEvent.SaveError(msg))
                 }
@@ -1028,7 +1040,7 @@ class AttendanceViewModel @Inject constructor(
                 },
                 onFailure = { e ->
                     _uiState.update {
-                        it.copy(isLoadingRequests = false, requestsError = e.message ?: "Failed to load requests")
+                        it.copy(isLoadingRequests = false, requestsError = e.message ?: appContext.localizedString(R.string.vm_requests_load_failed))
                     }
                 }
             )

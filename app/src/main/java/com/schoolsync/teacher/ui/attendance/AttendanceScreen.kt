@@ -105,6 +105,11 @@ import kotlinx.coroutines.flow.collectLatest
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.DisplayFormat
+import androidx.compose.ui.platform.LocalContext
+import com.schoolsync.teacher.util.displayLabel
 
 /* ════════════════════════════════════════════════════════════════════════
    ATTENDANCE SCREEN — Today-first commercial-ERP redesign
@@ -128,13 +133,16 @@ fun AttendanceScreen(
     var showHistory by remember { mutableStateOf(false) }
     var showRequests by remember { mutableStateOf(false) }
 
+    // Hoisted: a LaunchedEffect block is a coroutine, not a composable scope.
+    val lockedMsg = stringResource(R.string.att_hint_locked)
+    val reasonMsg = stringResource(R.string.att_hint_reason_after)
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
                 is AttendanceEvent.SaveSuccess -> snackbarHostState.showSnackbar(event.message)
                 is AttendanceEvent.SaveError -> snackbarHostState.showSnackbar("Error: ${event.message}")
-                is AttendanceEvent.Locked -> snackbarHostState.showSnackbar("Attendance is locked. File a correction request.")
-                is AttendanceEvent.ReasonRequired -> snackbarHostState.showSnackbar("A reason (10+ chars) is required after 10:30 AM.")
+                is AttendanceEvent.Locked -> snackbarHostState.showSnackbar(lockedMsg)
+                is AttendanceEvent.ReasonRequired -> snackbarHostState.showSnackbar(reasonMsg)
                 is AttendanceEvent.CorrectionSubmitted -> snackbarHostState.showSnackbar(event.message)
             }
         }
@@ -169,7 +177,7 @@ fun AttendanceScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Saving…", fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.att_saving), fontWeight = FontWeight.SemiBold)
                         }
                     }
                     // NOTE: no auto-FAB in the locked state — a correction is filed by
@@ -186,7 +194,7 @@ fun AttendanceScreen(
                         ) {
                             Icon(Icons.Filled.Save, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Save Attendance", fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.att_save), fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -231,10 +239,10 @@ fun AttendanceScreen(
         state.error?.let { error ->
             AlertDialog(
                 onDismissRequest = viewModel::clearError,
-                title = { Text("Error", color = TextPrimary) },
+                title = { Text(stringResource(R.string.common_error), color = TextPrimary) },
                 text = { Text(error, color = TextSecondary) },
                 confirmButton = {
-                    TextButton(onClick = viewModel::clearError) { Text("OK", color = Teal) }
+                    TextButton(onClick = viewModel::clearError) { Text(stringResource(R.string.common_ok), color = Teal) }
                 },
                 containerColor = SurfaceDark,
                 shape = RoundedCornerShape(16.dp)
@@ -244,12 +252,13 @@ fun AttendanceScreen(
         if (state.showTardyDialog) {
             var timeInput by remember {
                 mutableStateOf(
-                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date())
+                    // Wire value: this string is submitted as the arrival time.
+                    SimpleDateFormat("HH:mm", Locale.ROOT).format(java.util.Date())
                 )
             }
             AlertDialog(
                 onDismissRequest = viewModel::dismissTardyDialog,
-                title = { Text("Arrival Time", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.att_arrival_time), color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
                     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         Text(
@@ -277,12 +286,12 @@ fun AttendanceScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { viewModel.confirmTardyTime(timeInput) }) {
-                        Text("OK", color = Teal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.common_ok), color = Teal, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = viewModel::dismissTardyDialog) {
-                        Text("Skip", color = TextTertiary)
+                        Text(stringResource(R.string.common_skip), color = TextTertiary)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -293,7 +302,7 @@ fun AttendanceScreen(
         if (state.showCorrectionDialog) {
             AlertDialog(
                 onDismissRequest = viewModel::closeCorrectionDialog,
-                title = { Text("Request Correction", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.att_request_correction), color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                         Text(
@@ -302,11 +311,11 @@ fun AttendanceScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Currently: ${state.correctionCurrentStatus.label}",
+                            stringResource(R.string.att_currently_fmt, state.correctionCurrentStatus.displayLabel(LocalContext.current)),
                             color = TextTertiary, fontSize = 12.sp
                         )
                         Spacer(Modifier.height(12.dp))
-                        Text("Change to:", color = TextSecondary, fontSize = 12.sp)
+                        Text(stringResource(R.string.att_change_to), color = TextSecondary, fontSize = 12.sp)
                         Spacer(Modifier.height(6.dp))
                         Row(modifier = Modifier.fillMaxWidth()) {
                             listOf(
@@ -328,7 +337,7 @@ fun AttendanceScreen(
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
-                                    Text(st.label, fontSize = 11.sp)
+                                    Text(st.displayLabel(LocalContext.current), fontSize = 11.sp)
                                 }
                             }
                         }
@@ -336,7 +345,7 @@ fun AttendanceScreen(
                         OutlinedTextField(
                             value = state.correctionReason,
                             onValueChange = viewModel::setCorrectionReason,
-                            placeholder = { Text("Reason (10+ chars)", fontSize = 12.sp) },
+                            placeholder = { Text(stringResource(R.string.att_reason_min), fontSize = 12.sp) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Teal,
@@ -362,7 +371,7 @@ fun AttendanceScreen(
                         enabled = !state.isSubmittingCorrection && state.correctionReason.trim().length >= 10
                     ) {
                         Text(
-                            if (state.isSubmittingCorrection) "Submitting…" else "Submit Request",
+                            if (state.isSubmittingCorrection) stringResource(R.string.common_submitting_ellipsis) else stringResource(R.string.att_submit_request),
                             color = if (state.isSubmittingCorrection || state.correctionReason.trim().length < 10) TextTertiary else Teal,
                             fontWeight = FontWeight.Bold
                         )
@@ -373,7 +382,7 @@ fun AttendanceScreen(
                         onClick = viewModel::closeCorrectionDialog,
                         enabled = !state.isSubmittingCorrection
                     ) {
-                        Text("Cancel", color = TextTertiary)
+                        Text(stringResource(R.string.common_cancel), color = TextTertiary)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -390,22 +399,22 @@ fun AttendanceScreen(
         if (state.showDiscardDialog) {
             AlertDialog(
                 onDismissRequest = viewModel::dismissDiscardChanges,
-                title = { Text("Discard unsaved changes?", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.att_discard_q), color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
                     Text(
-                        "You have attendance marks that haven't been saved. Continuing will discard them and reload the latest saved data.",
+                        stringResource(R.string.att_discard_body),
                         color = TextSecondary,
                         fontSize = 13.sp
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = viewModel::confirmDiscardChanges) {
-                        Text("Discard & reload", color = ErrorRed, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.att_discard_reload), color = ErrorRed, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = viewModel::dismissDiscardChanges) {
-                        Text("Keep editing", color = TextSecondary)
+                        Text(stringResource(R.string.att_keep_editing), color = TextSecondary)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -487,8 +496,7 @@ private fun TodayHeader(
     var classDropdownExpanded by remember { mutableStateOf(false) }
 
     val todayShort = remember {
-        SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault())
-            .format(Calendar.getInstance().time)
+        DisplayFormat.pattern(Calendar.getInstance().time, "EEE, d MMM yyyy")
     }
     val cls = state.selectedClass
 
@@ -504,7 +512,7 @@ private fun TodayHeader(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Attendance",
+                    text = stringResource(R.string.mod_attendance),
                     color = TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
@@ -540,13 +548,13 @@ private fun TodayHeader(
                         modifier = Modifier.widthIn(max = 150.dp)
                     ) {
                         Text(
-                            text = cls?.let { "${it.className} · ${it.section}" } ?: "Select Class",
+                            text = cls?.let { "${it.className} · ${it.section}" } ?: stringResource(R.string.att_select_class),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change class", modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.att_change_class), modifier = Modifier.size(18.dp))
                     }
                     DropdownMenu(
                         expanded = classDropdownExpanded,
@@ -555,7 +563,7 @@ private fun TodayHeader(
                     ) {
                         if (state.availableClasses.isEmpty()) {
                             DropdownMenuItem(
-                                text = { Text("No classes assigned", color = TextTertiary) },
+                                text = { Text(stringResource(R.string.att_no_classes), color = TextTertiary) },
                                 onClick = { classDropdownExpanded = false }
                             )
                         } else {
@@ -578,14 +586,14 @@ private fun TodayHeader(
                 }
 
                 IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
                 }
                 IconButton(onClick = onOpenHistory, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.DateRange, contentDescription = "History", tint = Teal)
+                    Icon(Icons.Filled.DateRange, contentDescription = stringResource(R.string.att_history), tint = Teal)
                 }
                 // My correction requests — right of the History button.
                 IconButton(onClick = onOpenRequests, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = "My Requests", tint = Teal)
+                    Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = stringResource(R.string.att_my_requests), tint = Teal)
                 }
             }
         }
@@ -617,31 +625,36 @@ private fun TodaySummaryCard(state: AttendanceUiState) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            StatPill("Present", present, AttendancePresent, Modifier.weight(1f))
+            StatPill(stringResource(R.string.attendance_status_present), present, AttendancePresent, Modifier.weight(1f))
             Spacer(Modifier.width(8.dp))
-            StatPill("Absent", absent, AttendanceAbsent, Modifier.weight(1f))
+            StatPill(stringResource(R.string.attendance_status_absent), absent, AttendanceAbsent, Modifier.weight(1f))
             Spacer(Modifier.width(8.dp))
-            StatPill("Leave", leave, AttendanceLeave, Modifier.weight(1f))
+            StatPill(stringResource(R.string.attendance_status_leave), leave, AttendanceLeave, Modifier.weight(1f))
             Spacer(Modifier.width(8.dp))
-            StatPill("Late", tardy, AttendanceTardy, Modifier.weight(1f))
+            StatPill(stringResource(R.string.attendance_status_late), tardy, AttendanceTardy, Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(14.dp))
 
         // Progress: Marked / Remaining / Total
-        Row(
+        // FlowRow, not SpaceBetween: "12 of 30 marked" + "All marked" fits one
+        // line in English and roughly doubles in every Indic script, at which
+        // point two unconstrained Texts collide. Same shape as the leave
+        // balance row that clipped on device.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = "$marked of $total marked",
+                text = stringResource(R.string.att_marked_of_total, marked, total),
                 color = TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = if (remaining == 0) "All marked ✓" else "$remaining remaining",
+                text = if (remaining == 0) stringResource(R.string.att_all_marked) else stringResource(R.string.att_remaining_fmt, remaining),
                 color = if (remaining == 0) AttendancePresent else WarningAmber,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
@@ -706,7 +719,7 @@ private fun BulkActionsRow(
         ) {
             Icon(Icons.Filled.DoneAll, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("All Present", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.att_all_present), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
         Button(
             onClick = onAllAbsent,
@@ -721,7 +734,7 @@ private fun BulkActionsRow(
         ) {
             Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("All Absent", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.att_all_absent), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -773,11 +786,11 @@ private fun TodayScrollBody(
             Text(
                 text = when {
                     !state.isClassTeacher ->
-                        "Read-only — only the class teacher can mark attendance."
+                        stringResource(R.string.att_hint_readonly)
                     state.stage == Stage.S3_LOCKED ->
-                        "Attendance is locked for today. Tap a student to request a correction."
+                        stringResource(R.string.att_hint_locked_today)
                     else ->
-                        "Tap a student to cycle Present / Absent / Leave · long-press to mark Late."
+                        stringResource(R.string.att_hint_cycle)
                 },
                 color = TextTertiary,
                 fontSize = 11.sp,
@@ -851,7 +864,7 @@ private fun StudentRow(
                 overflow = TextOverflow.Ellipsis
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Roll $rollText", color = TextTertiary, fontSize = 12.sp)
+                Text(stringResource(R.string.att_roll_fmt, rollText), color = TextTertiary, fontSize = 12.sp)
                 // Correction-request pending marker: the teacher filed a
                 // correction for this student and it's awaiting admin review.
                 // Without it the row looked unchanged after submit and a teacher
@@ -873,7 +886,7 @@ private fun StudentRow(
                         )
                         Spacer(Modifier.width(3.dp))
                         Text(
-                            "Correction pending",
+                            stringResource(R.string.att_correction_pending),
                             color = WarningAmber,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold
@@ -912,7 +925,7 @@ private fun StatusChip(status: AttendanceStatus?, color: Color, enabled: Boolean
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = status?.label ?: "Not marked",
+            text = status?.displayLabel(LocalContext.current) ?: stringResource(R.string.att_not_marked),
             color = if (status != null) color else TextTertiary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold
@@ -921,7 +934,7 @@ private fun StatusChip(status: AttendanceStatus?, color: Color, enabled: Boolean
             Spacer(Modifier.width(4.dp))
             Icon(
                 Icons.Filled.ChevronRight,
-                contentDescription = "Tap to change",
+                contentDescription = stringResource(R.string.att_tap_to_change),
                 tint = (if (status != null) color else TextTertiary).copy(alpha = 0.7f),
                 modifier = Modifier.size(16.dp)
             )
@@ -937,7 +950,7 @@ private fun LoadingState(modifier: Modifier = Modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = Teal)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Loading attendance…", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            Text(stringResource(R.string.att_loading), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
     }
 }
@@ -956,16 +969,16 @@ private fun EmptyState(
     val subtitle: String
     when {
         selectedClass == null -> {
-            title = "No students found"
-            subtitle = "Select a class to view attendance"
+            title = stringResource(R.string.att_no_students)
+            subtitle = stringResource(R.string.att_select_class)
         }
         hasOtherClasses -> {
-            title = "No students in ${selectedClass.displayName}"
-            subtitle = "This section has no enrolled students. Pick another class from the selector above."
+            title = stringResource(R.string.att_no_students_in, selectedClass.displayName)
+            subtitle = stringResource(R.string.att_section_empty_pick)
         }
         else -> {
-            title = "No students in ${selectedClass.displayName}"
-            subtitle = "This section has no enrolled students yet."
+            title = stringResource(R.string.att_no_students_in, selectedClass.displayName)
+            subtitle = stringResource(R.string.att_section_empty)
         }
     }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1012,7 +1025,7 @@ private fun ReadOnlyWarning() {
         Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = WarningAmber, modifier = Modifier.size(16.dp))
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = "Only class teachers can mark attendance. You are viewing in read-only mode.",
+            text = stringResource(R.string.att_read_only),
             style = MaterialTheme.typography.bodySmall,
             color = WarningAmber,
             fontWeight = FontWeight.Medium
@@ -1036,14 +1049,14 @@ private fun RequestsView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Filled.ChevronLeft, contentDescription = "Back", tint = TextSecondary)
+                Icon(Icons.Filled.ChevronLeft, contentDescription = stringResource(R.string.common_back), tint = TextSecondary)
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text("My Correction Requests", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Requests you filed and their status", color = TextSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.att_my_corrections_title), color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.att_my_corrections_sub), color = TextSecondary, fontSize = 12.sp)
             }
             IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
             }
         }
 
@@ -1066,8 +1079,8 @@ private fun RequestsView(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
                     Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(56.dp))
                     Spacer(Modifier.height(10.dp))
-                    Text("No correction requests yet", color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
-                    Text("Requests you file from a locked or past day appear here.", color = TextTertiary, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    Text(stringResource(R.string.att_no_corrections), color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+                    Text(stringResource(R.string.att_no_corrections_hint), color = TextTertiary, fontSize = 12.sp, textAlign = TextAlign.Center)
                 }
             }
             else -> LazyColumn(
@@ -1160,10 +1173,10 @@ private fun HistoryView(
         ) {
             TextButton(onClick = onBackToToday) {
                 Icon(Icons.Filled.ChevronLeft, contentDescription = null, tint = Teal, modifier = Modifier.size(20.dp))
-                Text("Today", color = Teal, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.common_today), color = Teal, fontWeight = FontWeight.SemiBold)
             }
             Text(
-                text = "Attendance History",
+                text = stringResource(R.string.att_history_title),
                 color = TextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
@@ -1247,27 +1260,27 @@ private fun StageBanner(
         Stage.S1_FREE -> StageBannerSpec(
             bg = AttendancePresent.copy(alpha = 0.15f),
             fg = AttendancePresent,
-            label = "Open",
-            message = "Free edit. No reason required."
+            label = stringResource(R.string.att_window_open),
+            message = stringResource(R.string.att_window_open_desc)
         )
         Stage.S2_RESTRICTED -> StageBannerSpec(
             bg = AttendanceTardy.copy(alpha = 0.15f),
             fg = AttendanceTardy,
-            label = "Restricted",
-            message = "Reason required for edits (10+ chars)."
+            label = stringResource(R.string.att_window_restricted),
+            message = stringResource(R.string.att_window_restricted_desc)
         )
         Stage.S3_LOCKED -> StageBannerSpec(
             bg = ErrorRed.copy(alpha = 0.12f),
             fg = ErrorRed,
-            label = "Locked",
-            message = lockedBy?.let { "Locked by $it. File a correction request." }
-                ?: "Locked. File a correction request to change marks."
+            label = stringResource(R.string.att_window_locked),
+            message = lockedBy?.let { stringResource(R.string.att_locked_by_fmt, it) }
+                ?: stringResource(R.string.att_locked_generic)
         )
         Stage.UNKNOWN -> StageBannerSpec(
             bg = Glass,
             fg = TextSecondary,
             label = "—",
-            message = "Loading…"
+            message = stringResource(R.string.common_loading)
         )
     }
     Column(
@@ -1293,7 +1306,7 @@ private fun StageBanner(
             OutlinedTextField(
                 value = editReason,
                 onValueChange = onReasonChange,
-                placeholder = { Text("Reason (e.g. 'Bus delay correction')", fontSize = 13.sp) },
+                placeholder = { Text(stringResource(R.string.att_reason_hint), fontSize = 13.sp) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = false,
                 maxLines = 2,
@@ -1307,7 +1320,7 @@ private fun StageBanner(
                 shape = RoundedCornerShape(10.dp)
             )
             Text(
-                text = "${editReason.trim().length} / 10+",
+                text = stringResource(R.string.att_reason_count, editReason.trim().length),
                 color = if (editReason.trim().length >= 10) AttendancePresent else spec.fg.copy(alpha = 0.7f),
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 4.dp)
@@ -1340,7 +1353,7 @@ private fun AttendanceTopBar(
             set(Calendar.MONTH, state.selectedMonth)
             set(Calendar.YEAR, state.selectedYear)
         }
-        SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
+        com.schoolsync.teacher.util.DisplayFormat.pattern(cal.time, "MMMM yyyy")
     }
     // "All P/All A" mark TODAY only, so they are meaningless on a past month —
     // disable them there instead of showing an enabled button that silently no-ops.
@@ -1367,7 +1380,7 @@ private fun AttendanceTopBar(
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Text(
-                    text = state.selectedClass?.displayName ?: "Select Class",
+                    text = state.selectedClass?.displayName ?: stringResource(R.string.att_select_class),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1400,7 +1413,7 @@ private fun AttendanceTopBar(
             horizontalArrangement = Arrangement.Center
         ) {
             IconButton(onClick = onPreviousMonth, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous month", tint = TextSecondary)
+                Icon(Icons.Filled.ChevronLeft, contentDescription = stringResource(R.string.att_prev_month), tint = TextSecondary)
             }
             Text(
                 text = monthYear,
@@ -1410,7 +1423,7 @@ private fun AttendanceTopBar(
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
             IconButton(onClick = onNextMonth, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = "Next month", tint = TextSecondary)
+                Icon(Icons.Filled.ChevronRight, contentDescription = stringResource(R.string.att_next_month), tint = TextSecondary)
             }
         }
 
@@ -1436,7 +1449,7 @@ private fun AttendanceTopBar(
             ) {
                 Icon(Icons.Filled.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("All P", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.att_all_p), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
             OutlinedButton(
                 onClick = onMarkAllAbsent,
@@ -1456,10 +1469,10 @@ private fun AttendanceTopBar(
             ) {
                 Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("All A", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.att_all_a), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
             IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
             }
         }
     }
@@ -1510,7 +1523,7 @@ private fun AttendanceGrid(
                             .border(0.5.dp, DividerColor),
                         contentAlignment = Alignment.CenterStart
                     ) {
-                        Text("Student", style = MaterialTheme.typography.labelMedium, color = TextTertiary, fontWeight = FontWeight.Bold, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp))
+                        Text(stringResource(R.string.att_col_student), style = MaterialTheme.typography.labelMedium, color = TextTertiary, fontWeight = FontWeight.Bold, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp))
                     }
                 }
                 LazyColumn(state = rowScrollState) {

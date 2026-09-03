@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dashboard current/next-period prefix (built via AnnotatedString.append). -->
+<resources>
+    <string name="dash_now_prefix">இப்போது: </string>
+    <string name="dash_next_prefix">அடுத்து: </string>
+</resources>

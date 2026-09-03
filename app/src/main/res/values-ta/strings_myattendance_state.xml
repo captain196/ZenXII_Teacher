@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c (cont.): GPS/permission state-prompt cards. -->
+<resources>
+    <string name="myatt_perm_blocked_body">வருகையைப் பதிவு செய்ய கணினி அமைப்புகளில் இந்தச் செயலிக்கு இருப்பிடத்தை இயக்கவும்.</string>
+    <string name="myatt_open_settings">அமைப்புகளைத் திற</string>
+    <string name="myatt_perm_needed_body">நீங்கள் வளாகத்தில் இருப்பதை உறுதிப்படுத்த வருகைக்கு உங்கள் இருப்பிடம் தேவை.</string>
+    <string name="myatt_grant_permission">அனுமதி வழங்கு</string>
+    <string name="myatt_location_off_body">சாதன இருப்பிடத்தை (GPS) இயக்கி மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="myatt_open_location_settings">இருப்பிட அமைப்புகளைத் திற</string>
+    <string name="myatt_weak_gps_body">துல்லியமான இருப்பிடம் கிடைக்கவில்லை. திறந்தவெளிக்குச் சென்று மீண்டும் முயற்சிக்கவும். இருப்பிடம் தோராயமாக அமைக்கப்பட்டிருந்தால், இந்தச் செயலிக்குத் துல்லியமான இருப்பிடத்தை இயக்கவும்.</string>
+    <string name="myatt_perm_required_body">தொடர இருப்பிட அனுமதியை வழங்கவும்.</string>
+    <string name="common_something_wrong">ஏதோ தவறு நடந்தது.</string>
+</resources>

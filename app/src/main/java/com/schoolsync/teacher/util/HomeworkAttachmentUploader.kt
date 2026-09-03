@@ -132,7 +132,7 @@ object HomeworkAttachmentUploader {
 
         if (size != null && size > MAX_FILE_BYTES) {
             val capMb = MAX_FILE_BYTES / MIB
-            val gotMb = "%.1f".format(size.toDouble() / MIB)
+            val gotMb = String.format(java.util.Locale.ROOT, "%.1f", size.toDouble() / MIB)
             debugLog("ACC_HW_ATTACHMENT_VALIDATE_FAIL reason=too_large mime=$mime size=$size")
             return "File too large ($gotMb MB). Maximum is $capMb MB per file."
         }

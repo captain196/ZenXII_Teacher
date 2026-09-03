@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2b: class attendance - marking grid, edit windows, correction requests. -->
+<resources>
+    <string name="att_saving">Saving…</string>
+    <string name="att_save">Save Attendance</string>
+    <string name="common_error">Error</string>
+    <string name="common_ok">OK</string>
+    <string name="common_refresh">Refresh</string>
+    <string name="common_today">Today</string>
+    <string name="common_loading">Loading…</string>
+    <string name="att_arrival_time">Arrival Time</string>
+    <string name="att_request_correction">Request Correction</string>
+    <string name="att_change_to">Change to:</string>
+    <string name="att_reason_min">Reason (10+ chars)</string>
+    <string name="att_discard_q">Discard unsaved changes?</string>
+    <string name="att_discard_reload">Discard &amp; reload</string>
+    <string name="att_keep_editing">Keep editing</string>
+    <string name="att_change_class">Change class</string>
+    <string name="att_no_classes">No classes assigned</string>
+    <string name="att_history">History</string>
+    <string name="att_my_requests">My Requests</string>
+    <string name="att_all_present">All Present</string>
+    <string name="att_all_absent">All Absent</string>
+    <string name="att_tap_to_change">Tap to change</string>
+    <string name="att_loading">Loading attendance…</string>
+    <string name="att_no_students">No students found</string>
+    <string name="att_select_class">Select a class to view attendance</string>
+    <string name="att_section_empty_pick">This section has no enrolled students. Pick another class from the selector above.</string>
+    <string name="att_section_empty">This section has no enrolled students yet.</string>
+    <string name="att_read_only">Only class teachers can mark attendance. You are viewing in read-only mode.</string>
+    <string name="att_my_corrections_title">My Correction Requests</string>
+    <string name="att_my_corrections_sub">Requests you filed and their status</string>
+    <string name="att_no_corrections">No correction requests yet</string>
+    <string name="att_no_corrections_hint">Requests you file from a locked or past day appear here.</string>
+    <string name="att_history_title">Attendance History</string>
+    <string name="att_window_open">Open</string>
+    <string name="att_window_open_desc">Free edit. No reason required.</string>
+    <string name="att_window_restricted">Restricted</string>
+    <string name="att_window_restricted_desc">Reason required for edits (10+ chars).</string>
+    <string name="att_window_locked">Locked</string>
+    <string name="att_reason_hint">Reason (e.g. \'Bus delay correction\')</string>
+    <string name="att_prev_month">Previous month</string>
+    <string name="att_all_p">All P</string>
+    <string name="att_all_a">All A</string>
+    <string name="att_next_month">Next month</string>
+    <string name="att_col_student">Student</string>
+</resources>

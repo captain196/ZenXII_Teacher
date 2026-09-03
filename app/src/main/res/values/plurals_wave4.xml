@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PluralsCandidate conversions. Several of these had a wrong
+     form before: Tamil stu_count_fmt read a singular noun for
+     every count. -->
+<resources>
+    <plurals name="hw_del_submissions">
+        <item quantity="one">%1$d submission</item>
+        <item quantity="other">%1$d submissions</item>
+    </plurals>
+    <plurals name="hw_del_marks">
+        <item quantity="one">%1$d mark</item>
+        <item quantity="other">%1$d marks</item>
+    </plurals>
+    <plurals name="gal_items_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <plurals name="lib_days_left">
+        <item quantity="one">%1$d day left</item>
+        <item quantity="other">%1$d days left</item>
+    </plurals>
+    <plurals name="lib_fines_count">
+        <item quantity="one">%1$d fine</item>
+        <item quantity="other">%1$d fines</item>
+    </plurals>
+    <plurals name="stu_count_fmt">
+        <item quantity="one">%1$d student</item>
+        <item quantity="other">%1$d students</item>
+    </plurals>
+    <plurals name="results_class_students">
+        <item quantity="one">%1$s - %2$s | %3$d student</item>
+        <item quantity="other">%1$s - %2$s | %3$d students</item>
+    </plurals>
+    <plurals name="fees_exam_blocked_count">
+        <item quantity="one">%1$d exam blocked</item>
+        <item quantity="other">%1$d exams blocked</item>
+    </plurals>
+    <plurals name="fees_result_held_count">
+        <item quantity="one">%1$d result held</item>
+        <item quantity="other">%1$d results held</item>
+    </plurals>
+    <plurals name="leave_applying_range_fmt">
+        <item quantity="one">Applying %1$s from %2$s to %3$s (%4$d day)</item>
+        <item quantity="other">Applying %1$s from %2$s to %3$s (%4$d days)</item>
+    </plurals>
+</resources>

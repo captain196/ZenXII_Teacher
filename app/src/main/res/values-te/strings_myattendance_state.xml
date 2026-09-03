@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c (cont.): GPS/permission state-prompt cards. -->
+<resources>
+    <string name="myatt_perm_blocked_body">హాజరు నమోదు చేయడానికి సిస్టమ్ సెట్టింగ్‌లలో ఈ యాప్‌కు స్థానాన్ని ఆన్ చేయండి.</string>
+    <string name="myatt_open_settings">సెట్టింగ్‌లు తెరవండి</string>
+    <string name="myatt_perm_needed_body">మీరు క్యాంపస్‌లో ఉన్నారని నిర్ధారించడానికి హాజరుకు మీ స్థానం అవసరం.</string>
+    <string name="myatt_grant_permission">అనుమతి ఇవ్వండి</string>
+    <string name="myatt_location_off_body">పరికర స్థానాన్ని (GPS) ఆన్ చేసి మళ్లీ ప్రయత్నించండి.</string>
+    <string name="myatt_open_location_settings">స్థాన సెట్టింగ్‌లు తెరవండి</string>
+    <string name="myatt_weak_gps_body">ఖచ్చితమైన స్థానం లభించలేదు. ఖాళీ ప్రదేశానికి వెళ్లి మళ్లీ ప్రయత్నించండి. స్థానం సుమారుగా సెట్ చేసి ఉంటే, ఈ యాప్‌కు ఖచ్చితమైన స్థానాన్ని ఆన్ చేయండి.</string>
+    <string name="myatt_perm_required_body">కొనసాగించడానికి స్థాన అనుమతి ఇవ్వండి.</string>
+    <string name="common_something_wrong">ఏదో తప్పు జరిగింది.</string>
+</resources>

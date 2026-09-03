@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-existing keys from strings.xml that had never been translated. -->
+<resources>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_change">Change</string>
+    <string name="action_close">Close</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_send">Send</string>
+    <string name="action_sending">Sending…</string>
+    <string name="cd_back">Back</string>
+    <string name="cd_delete_chat">Delete chat</string>
+    <string name="cd_notifications">Notifications</string>
+    <string name="cd_send">Send</string>
+    <string name="dashboard_class_teacher_many">Class Teacher · %1$s</string>
+    <string name="dashboard_class_teacher_one">Class Teacher · %1$s</string>
+    <string name="dashboard_greeting">Hello, %1$s</string>
+    <string name="dashboard_no_classes_today">No classes scheduled today</string>
+    <string name="dashboard_no_recent_activity">No recent activity</string>
+    <string name="dashboard_period_label">P%1$d</string>
+    <string name="dashboard_recent_activity">Recent Activity</string>
+    <string name="dashboard_title">Dashboard</string>
+    <string name="dashboard_today_schedule">Today\'s Schedule</string>
+    <string name="messages_class_label">Class %1$s</string>
+    <string name="messages_class_section">Class %1$s %2$s</string>
+    <string name="messages_compose_to">Message %1$s</string>
+    <string name="messages_delete_chat">Delete chat</string>
+    <string name="messages_delete_confirm">Delete this conversation with %1$s? It will be removed from your inbox only — the other person will still see it.</string>
+    <string name="messages_delete_default_name">this contact</string>
+    <string name="messages_input_placeholder">Type a message…</string>
+    <string name="messages_new">New Message</string>
+    <string name="messages_no_conversations">No conversations yet</string>
+    <string name="messages_no_matches">No matches</string>
+    <string name="messages_no_students">No students found</string>
+    <string name="messages_parent_of">Parent of %1$s</string>
+    <string name="messages_search_placeholder">Search by name or class</string>
+    <string name="messages_select_conversation">Select a conversation</string>
+    <string name="messages_select_subtitle">Choose a parent from the list to start chatting</string>
+    <string name="messages_title">Messages</string>
+    <string name="messages_type_your_message">Type your message…</string>
+    <string name="notices_by_author">By %1$s</string>
+    <string name="notices_empty">No notices</string>
+    <string name="notices_title">Notices</string>
+    <string name="notices_unread">Unread</string>
+    <string name="stat_active">active</string>
+    <string name="stat_assigned">assigned</string>
+    <string name="stat_classes">Classes</string>
+    <string name="stat_flags">Flags</string>
+    <string name="stat_hw_due">HW Due</string>
+    <string name="stat_periods">periods</string>
+    <string name="stat_today">Today</string>
+    <string name="stat_today_lower">today</string>
+</resources>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2b: class attendance - marking grid, edit windows, correction requests. -->
+<resources>
+    <string name="att_saving">સાચવી રહ્યું છે…</string>
+    <string name="att_save">હાજરી સાચવો</string>
+    <string name="common_error">ભૂલ</string>
+    <string name="common_ok">બરાબર</string>
+    <string name="common_refresh">રિફ્રેશ</string>
+    <string name="common_today">આજે</string>
+    <string name="common_loading">લોડ થઈ રહ્યું છે…</string>
+    <string name="att_arrival_time">આગમન સમય</string>
+    <string name="att_request_correction">સુધારાની વિનંતી</string>
+    <string name="att_change_to">આમાં બદલો:</string>
+    <string name="att_reason_min">કારણ (10+ અક્ષર)</string>
+    <string name="att_discard_q">સાચવ્યા વગરના ફેરફારો રદ કરવા?</string>
+    <string name="att_discard_reload">રદ કરો અને ફરી લોડ કરો</string>
+    <string name="att_keep_editing">સંપાદન ચાલુ રાખો</string>
+    <string name="att_change_class">વર્ગ બદલો</string>
+    <string name="att_no_classes">કોઈ વર્ગ સોંપાયેલ નથી</string>
+    <string name="att_history">ઇતિહાસ</string>
+    <string name="att_my_requests">મારી વિનંતીઓ</string>
+    <string name="att_all_present">બધા હાજર</string>
+    <string name="att_all_absent">બધા ગેરહાજર</string>
+    <string name="att_tap_to_change">બદલવા માટે ટૅપ કરો</string>
+    <string name="att_loading">હાજરી લોડ થઈ રહી છે…</string>
+    <string name="att_no_students">કોઈ વિદ્યાર્થી મળ્યો નથી</string>
+    <string name="att_select_class">હાજરી જોવા માટે વર્ગ પસંદ કરો</string>
+    <string name="att_section_empty_pick">આ વિભાગમાં કોઈ નોંધાયેલ વિદ્યાર્થી નથી. ઉપરના પસંદગીકારમાંથી બીજો વર્ગ પસંદ કરો.</string>
+    <string name="att_section_empty">આ વિભાગમાં હજી કોઈ નોંધાયેલ વિદ્યાર્થી નથી.</string>
+    <string name="att_read_only">ફક્ત વર્ગ શિક્ષક જ હાજરી નોંધી શકે છે. તમે ફક્ત-વાંચન મોડમાં જુઓ છો.</string>
+    <string name="att_my_corrections_title">મારી સુધારા વિનંતીઓ</string>
+    <string name="att_my_corrections_sub">તમે દાખલ કરેલી વિનંતીઓ અને તેમની સ્થિતિ</string>
+    <string name="att_no_corrections">હજી કોઈ સુધારા વિનંતી નથી</string>
+    <string name="att_no_corrections_hint">બંધ અથવા પાછલા દિવસ માટે દાખલ કરેલી વિનંતીઓ અહીં દેખાશે.</string>
+    <string name="att_history_title">હાજરી ઇતિહાસ</string>
+    <string name="att_window_open">ખુલ્લું</string>
+    <string name="att_window_open_desc">મુક્ત સંપાદન. કારણ જરૂરી નથી.</string>
+    <string name="att_window_restricted">પ્રતિબંધિત</string>
+    <string name="att_window_restricted_desc">સંપાદન માટે કારણ જરૂરી (10+ અક્ષર).</string>
+    <string name="att_window_locked">બંધ</string>
+    <string name="att_reason_hint">કારણ (દા.ત. \'બસ મોડું સુધારો\')</string>
+    <string name="att_prev_month">પાછલો મહિનો</string>
+    <string name="att_all_p">બધા P</string>
+    <string name="att_all_a">બધા A</string>
+    <string name="att_next_month">આગલો મહિનો</string>
+    <string name="att_col_student">વિદ્યાર્થી</string>
+</resources>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3b: lesson plan, marks entry, results, student profile. -->
+<resources>
+    <string name="lp_title">பாட திட்டமிடல்</string>
+    <string name="lp_no_periods">இன்று வகுப்பு நேரம் எதுவும் இல்லை</string>
+    <string name="lp_done">முடிந்தது</string>
+    <string name="lp_skip">தவிர்</string>
+    <string name="common_edit">திருத்து</string>
+    <string name="lp_topic">தலைப்பு</string>
+    <string name="lp_no_topic">— தலைப்பு இல்லை —</string>
+    <string name="lp_no_topics_curriculum">பாடத்திட்டத்தில் தலைப்புகள் இல்லை</string>
+    <string name="lp_notes">குறிப்புகள்</string>
+    <string name="lp_notes_hint">இந்த வகுப்பு நேரம் குறித்து நினைவில் கொள்ள வேண்டியது…</string>
+    <string name="common_status">நிலை</string>
+    <string name="lp_reschedule_to">மறு அட்டவணை (YYYY-MM-DD)</string>
+    <string name="lp_period_no">வகுப்பு நேரம் #</string>
+    <string name="common_save">சேமி</string>
+    <string name="lesson_status_planned">திட்டமிடப்பட்டது</string>
+    <string name="lesson_status_completed">முடிந்தது</string>
+    <string name="lesson_status_skipped">தவிர்க்கப்பட்டது</string>
+    <string name="lesson_status_rescheduled">மறு அட்டவணை</string>
+    <string name="marks_save">மதிப்பெண்களைச் சேமி</string>
+    <string name="marks_discard_q">சேமிக்காத மதிப்பெண்களை நீக்கவா?</string>
+    <string name="common_discard">நீக்கு</string>
+    <string name="marks_select_exam_subject">தேர்வையும் பாடத்தையும் தேர்ந்தெடுக்கவும்</string>
+    <string name="marks_select_hint">மதிப்பெண் பதிவைத் தொடங்க தேர்வையும் பாடத்தையும் தேர்ந்தெடுக்கவும்</string>
+    <string name="marks_unsaved">சேமிக்காத மாற்றங்கள்</string>
+    <string name="marks_entry">மதிப்பெண் பதிவு</string>
+    <string name="common_class">வகுப்பு</string>
+    <string name="common_exam">தேர்வு</string>
+    <string name="marks_max">அதிகபட்ச மதிப்பெண்</string>
+    <string name="marks_theory">கோட்பாடு:</string>
+    <string name="marks_practical">செயல்முறை:</string>
+    <string name="marks_total">மொத்தம்:</string>
+    <string name="marks_absent_short">வர</string>
+    <string name="results_select">வகுப்பையும் தேர்வையும் தேர்ந்தெடுக்கவும்</string>
+    <string name="results_select_hint">வெளியிடப்பட்ட முடிவுகளைக் காண தேர்வைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="results_not_published">முடிவுகள் இன்னும் வெளியிடப்படவில்லை</string>
+    <string name="results_draft">இந்தத் தேர்வின் முடிவுகள் இன்னும் வரைவு நிலையில் உள்ளன, வெளியிடப்படவில்லை.</string>
+    <string name="results_no_breakdown">பாடவாரி விவரம் இல்லை</string>
+    <string name="stu_profile">மாணவர் சுயவிவரம்</string>
+    <string name="stu_id">மாணவர் ID</string>
+    <string name="stu_father">தந்தையின் பெயர்</string>
+    <string name="stu_mother">தாயின் பெயர்</string>
+    <string name="stu_dob">பிறந்த தேதி</string>
+    <string name="stu_gender">பாலினம்</string>
+    <string name="stu_admission_date">சேர்க்கை தேதி</string>
+    <string name="stu_fees_hdr">கட்டணம்</string>
+    <string name="stu_monthly_status">மாதாந்திர நிலை</string>
+</resources>

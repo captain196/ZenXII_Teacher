@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firebase Auth failures, mapped by error code instead of leaking the raw provider message. -->
+<resources>
+    <string name="err_auth_invalid">ID அல்லது கடவுச்சொல் தவறு. சரிபார்த்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="err_auth_disabled">இந்தக் கணக்கு முடக்கப்பட்டுள்ளது. பள்ளி அலுவலகத்தைத் தொடர்பு கொள்ளவும்.</string>
+    <string name="err_auth_too_many">அதிக முயற்சிகள். சில நிமிடங்கள் காத்திருந்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="err_account_deactivated">உங்கள் கணக்கு முடக்கப்பட்டுள்ளது. பள்ளி அலுவலகத்தைத் தொடர்பு கொள்ளவும்.</string>
+    <string name="err_staff_record_missing">உங்கள் பணியாளர் பதிவு கிடைக்கவில்லை. பள்ளி அலுவலகத்தைத் தொடர்பு கொள்ளவும்.</string>
+</resources>

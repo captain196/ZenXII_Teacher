@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- தமிழ் · Tamil
+     Teacher app foundation: canonical labels + language UI.
+     DISPLAY ONLY. The English source of the day/month/status names is
+     also a Firestore path segment, an RTDB key and a stored code — the
+     staff app WRITES these, so a translated form must never be sent
+     back. Read only via CanonicalLabels / StatusLabels at render. -->
+<resources>
+    <string name="attendance_status_absent">வரவில்லை</string>
+    <string name="attendance_status_holiday">விடுமுறை</string>
+    <string name="attendance_status_late">தாமதம்</string>
+    <string name="attendance_status_leave">விடுப்பு</string>
+    <string name="attendance_status_present">ஆஜர்</string>
+    <string name="attendance_status_vacation">விடுமுறை</string>
+    <string name="day_friday">வெள்ளி</string>
+    <string name="day_monday">திங்கள்</string>
+    <string name="day_saturday">சனி</string>
+    <string name="day_sunday">ஞாயிறு</string>
+    <string name="day_thursday">வியாழன்</string>
+    <string name="day_tuesday">செவ்வாய்</string>
+    <string name="day_wednesday">புதன்</string>
+    <string name="lang_setup_continue">தொடரவும்</string>
+    <string name="lang_setup_subtitle">இதைச் சுயவிவரத்தில் எப்போது வேண்டுமானாலும் மாற்றலாம்</string>
+    <string name="lang_setup_title">உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="lang_sheet_title">மொழி</string>
+    <string name="leave_status_approved">அனுமதிக்கப்பட்டது</string>
+    <string name="leave_status_cancelled">ரத்து</string>
+    <string name="leave_status_pending">நிலுவை</string>
+    <string name="leave_status_rejected">நிராகரிக்கப்பட்டது</string>
+    <string name="month_april">ஏப்ரல்</string>
+    <string name="month_august">ஆகஸ்ட்</string>
+    <string name="month_december">டிசம்பர்</string>
+    <string name="month_february">பிப்ரவரி</string>
+    <string name="month_january">ஜனவரி</string>
+    <string name="month_july">ஜூலை</string>
+    <string name="month_june">ஜூன்</string>
+    <string name="month_march">மார்ச்</string>
+    <string name="month_may">மே</string>
+    <string name="month_november">நவம்பர்</string>
+    <string name="month_october">அக்டோபர்</string>
+    <string name="month_september">செப்டம்பர்</string>
+    <string name="settings_language">மொழி</string>
+
+</resources>

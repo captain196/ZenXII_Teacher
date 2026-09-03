@@ -21,6 +21,10 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 data class LeaveBalance(
     val type: String,
@@ -101,7 +105,10 @@ sealed class LeaveEvent {
 class LeaveViewModel @Inject constructor(
     private val leaveFirestoreRepo: LeaveFirestoreRepository,
     private val teacherRepository: TeacherRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object {
@@ -213,7 +220,7 @@ class LeaveViewModel @Inject constructor(
                         }
                     }
                 } catch (e: Exception) {
-                    panelError = e.message ?: "Failed to load leave types"
+                    panelError = e.message ?: appContext.localizedString(R.string.vm_leave_types_failed)
                 }
                 if (leaveTypeNames.isNotEmpty()) {
                     _uiState.update { it.copy(
@@ -239,11 +246,11 @@ class LeaveViewModel @Inject constructor(
                     // Overlay doc for used/carried (may be absent → all zero).
                     var balDoc: Map<String, Any>? = null
                     if (schoolCode.isNotBlank() && teacherId.isNotBlank()) {
-                        balDoc = leaveFirestoreRepo.getBalanceDoc("${schoolCode}_BAL_${teacherId}_$year")
+                        balDoc = leaveFirestoreRepo.getBalanceDoc("${schoolCode}_BAL_${teacherId}_$year")  // i18n-ignore: Firestore doc key
                         if (balDoc == null) {
                             val altSchool = tokenManager.schoolId.firstOrNull() ?: ""
                             if (altSchool.isNotBlank() && altSchool != schoolCode) {
-                                balDoc = leaveFirestoreRepo.getBalanceDoc("${altSchool}_BAL_${teacherId}_$year")
+                                balDoc = leaveFirestoreRepo.getBalanceDoc("${altSchool}_BAL_${teacherId}_$year")  // i18n-ignore: Firestore doc key
                             }
                         }
                     }
@@ -289,7 +296,7 @@ class LeaveViewModel @Inject constructor(
                         }
                     }
                 } catch (e: Exception) {
-                    panelError = e.message ?: "Failed to load leave balances"
+                    panelError = e.message ?: appContext.localizedString(R.string.vm_leave_balances_failed)
                 }
 
                 // Firestore-only contract: empty result == no balances. The
@@ -432,28 +439,28 @@ class LeaveViewModel @Inject constructor(
     fun submitLeaveRequest() {
         val state = _uiState.value
         if (state.applyStartDate.isBlank()) {
-            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Start date is required")) }
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_start_required))) }
             return
         }
         if (state.applyEndDate.isBlank()) {
-            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("End date is required")) }
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_end_required))) }
             return
         }
         // MEDIUM #6: reason must be non-empty once trimmed, capped at 1000 chars.
         val trimmedReason = state.applyReason.trim()
         if (trimmedReason.isEmpty()) {
-            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Reason is required")) }
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_reason_required))) }
             return
         }
         if (trimmedReason.length > 1000) {
-            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Reason is too long (max 1000 characters)")) }
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_reason_too_long))) }
             return
         }
         // Phase 4 cross-system: half-day leave must be a single date. Backend
         // rejects multi-day half-day requests; surface clearly here so the
         // user sees the error before the round-trip.
         if (state.applyHalfDay && state.applyStartDate != state.applyEndDate) {
-            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Half-day leave must be for a single date")) }
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_halfday_single))) }
             return
         }
         // Hardening: period must be present and valid when half-day is on.
@@ -461,7 +468,7 @@ class LeaveViewModel @Inject constructor(
         // prevents a malformed payload reaching the backend if state ever
         // drifts (e.g. process restoration with an old persisted value).
         if (state.applyHalfDay && state.applyHalfDayPeriod !in listOf("AM", "PM")) {
-            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Select Morning (AM) or Afternoon (PM) for half-day leave")) }
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_halfday_period))) }
             return
         }
         // Phase 9b: date validation
@@ -470,17 +477,17 @@ class LeaveViewModel @Inject constructor(
             val end = java.time.LocalDate.parse(state.applyEndDate)
             val today = java.time.LocalDate.now()
             if (start.isBefore(today)) {
-                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Start date cannot be in the past")) }
+                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_start_past))) }
                 return
             }
             if (end.isBefore(start)) {
-                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("End date must be on or after start date")) }
+                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_end_after_start))) }
                 return
             }
             // MEDIUM #6: bound the span. Contract: staff <= 366 days inclusive.
             val spanDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1
             if (spanDays > 366) {
-                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Leave span cannot exceed 366 days")) }
+                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_leave_span))) }
                 return
             }
             // MEDIUM #6: overlap/duplicate guard — reject if the new range
@@ -495,11 +502,11 @@ class LeaveViewModel @Inject constructor(
                 !start.isAfter(ee) && !es.isAfter(end)
             }
             if (overlap) {
-                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("This range overlaps an existing pending or approved leave")) }
+                viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_leave_overlap))) }
                 return
             }
         } catch (_: Exception) {
-            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError("Invalid date format")) }
+            viewModelScope.launch { _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_invalid_date))) }
             return
         }
 
@@ -531,17 +538,17 @@ class LeaveViewModel @Inject constructor(
                 ).fold(
                     onSuccess = {
                         _uiState.update { it.copy(isSubmitting = false, showApplyDialog = false) }
-                        _events.emit(LeaveEvent.SubmitSuccess("Leave request submitted"))
+                        _events.emit(LeaveEvent.SubmitSuccess(appContext.localizedString(R.string.vm_leave_submitted)))
                         loadLeaveData()
                     },
                     onFailure = { e ->
                         _uiState.update { it.copy(isSubmitting = false) }
-                        _events.emit(LeaveEvent.SubmitError(e.message ?: "Failed to submit"))
+                        _events.emit(LeaveEvent.SubmitError(e.message ?: appContext.localizedString(R.string.vm_submit_failed)))
                     }
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSubmitting = false) }
-                _events.emit(LeaveEvent.SubmitError(e.message ?: "Failed to submit"))
+                _events.emit(LeaveEvent.SubmitError(e.message ?: appContext.localizedString(R.string.vm_submit_failed)))
             }
         }
     }
@@ -576,11 +583,11 @@ class LeaveViewModel @Inject constructor(
         viewModelScope.launch {
             leaveFirestoreRepo.cancelLeave(requestId).fold(
                 onSuccess = {
-                    _events.emit(LeaveEvent.SubmitSuccess("Leave cancelled"))
+                    _events.emit(LeaveEvent.SubmitSuccess(appContext.localizedString(R.string.vm_leave_cancelled)))
                     loadLeaveData()
                 },
                 onFailure = { e ->
-                    _events.emit(LeaveEvent.SubmitError(e.message ?: "Failed to cancel leave"))
+                    _events.emit(LeaveEvent.SubmitError(e.message ?: appContext.localizedString(R.string.vm_leave_cancel_failed)))
                 }
             )
         }
@@ -665,7 +672,7 @@ class LeaveViewModel @Inject constructor(
                 // to show). A partial success still renders what we got.
                 val errorMsg = if (!anySuccess && lastError != null) {
                     Log.e(TAG, "Failed to load student leaves", lastError)
-                    lastError?.message ?: "Failed to load student leave requests"
+                    lastError?.message ?: appContext.localizedString(R.string.vm_leave_student_failed)
                 } else null
                 _uiState.update { it.copy(
                     studentLeaves = result,
@@ -676,7 +683,7 @@ class LeaveViewModel @Inject constructor(
                 Log.e(TAG, "Student leaves exception", e)
                 _uiState.update { it.copy(
                     isLoadingStudentLeaves = false,
-                    studentLeavesError = e.message ?: "Failed to load student leave requests"
+                    studentLeavesError = e.message ?: appContext.localizedString(R.string.vm_leave_student_failed)
                 )}
             }
         }
@@ -688,15 +695,15 @@ class LeaveViewModel @Inject constructor(
             try {
                 leaveFirestoreRepo.approveStudentLeave(leaveId, remarks).fold(
                     onSuccess = {
-                        _events.emit(LeaveEvent.SubmitSuccess("Leave approved"))
+                        _events.emit(LeaveEvent.SubmitSuccess(appContext.localizedString(R.string.vm_leave_approved)))
                         loadStudentLeaves()
                     },
                     onFailure = { e ->
-                        _events.emit(LeaveEvent.SubmitError(e.message ?: "Failed to approve"))
+                        _events.emit(LeaveEvent.SubmitError(e.message ?: appContext.localizedString(R.string.vm_leave_approve_failed)))
                     }
                 )
             } catch (e: Exception) {
-                _events.emit(LeaveEvent.SubmitError(e.message ?: "Failed to approve"))
+                _events.emit(LeaveEvent.SubmitError(e.message ?: appContext.localizedString(R.string.vm_leave_approve_failed)))
             }
             _uiState.update { it.copy(processingLeaveId = null) }
         }
@@ -705,7 +712,7 @@ class LeaveViewModel @Inject constructor(
     fun rejectStudentLeave(leaveId: String, remarks: String) {
         if (remarks.isBlank()) {
             viewModelScope.launch {
-                _events.emit(LeaveEvent.SubmitError("Remarks are required when rejecting"))
+                _events.emit(LeaveEvent.SubmitError(appContext.localizedString(R.string.vm_leave_remarks_required)))
             }
             return
         }
@@ -714,15 +721,15 @@ class LeaveViewModel @Inject constructor(
             try {
                 leaveFirestoreRepo.rejectStudentLeave(leaveId, remarks).fold(
                     onSuccess = {
-                        _events.emit(LeaveEvent.SubmitSuccess("Leave rejected"))
+                        _events.emit(LeaveEvent.SubmitSuccess(appContext.localizedString(R.string.vm_leave_rejected)))
                         loadStudentLeaves()
                     },
                     onFailure = { e ->
-                        _events.emit(LeaveEvent.SubmitError(e.message ?: "Failed to reject"))
+                        _events.emit(LeaveEvent.SubmitError(e.message ?: appContext.localizedString(R.string.vm_leave_reject_failed)))
                     }
                 )
             } catch (e: Exception) {
-                _events.emit(LeaveEvent.SubmitError(e.message ?: "Failed to reject"))
+                _events.emit(LeaveEvent.SubmitError(e.message ?: appContext.localizedString(R.string.vm_leave_reject_failed)))
             }
             _uiState.update { it.copy(processingLeaveId = null) }
         }

@@ -1,5 +1,6 @@
 package com.schoolsync.teacher.data.repository
 
+import android.content.Context
 import android.util.Log
 import com.schoolsync.teacher.data.firebase.FirebaseAuthManager
 import com.schoolsync.teacher.data.firebase.FirebaseService
@@ -8,10 +9,14 @@ import com.schoolsync.teacher.data.local.TokenManager
 import com.schoolsync.teacher.data.model.LoginUser
 import com.schoolsync.teacher.data.remote.AuthApi
 import com.schoolsync.teacher.util.Constants
+import com.schoolsync.teacher.util.LocaleManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /**
  * Handles authentication via Firebase Auth directly (email/password).
@@ -24,6 +29,7 @@ class AuthRepository @Inject constructor(
     private val firebaseService: FirebaseService,
     private val firestoreService: FirestoreService,
     private val authApi: AuthApi,
+    @ApplicationContext private val appContext: Context,
 ) {
     companion object { private const val TAG = "AuthRepository" }
 
@@ -87,7 +93,7 @@ class AuthRepository @Inject constructor(
                 Log.w(TAG, "login: no staff profile for $userId in Firestore or RTDB, refusing login")
                 firebaseAuthManager.signOut()
                 return Result.failure(
-                    Exception("Your staff record could not be found. Please contact the school office.")
+                    Exception(appContext.localizedString(R.string.err_staff_record_missing))
                 )
             }
 
@@ -123,7 +129,7 @@ class AuthRepository @Inject constructor(
             if (!rawStatus.equals("Active", ignoreCase = true)) {
                 Log.w(TAG, "login: staff $userId status=$rawStatus, refusing login")
                 firebaseAuthManager.signOut()
-                return Result.failure(Exception("Your account has been deactivated. Please contact the school office."))
+                return Result.failure(Exception(appContext.localizedString(R.string.err_account_deactivated)))
             }
 
             val loginUser = LoginUser(
@@ -361,6 +367,78 @@ class AuthRepository @Inject constructor(
      * is `{userId}_{safeDeviceId}` to match the Push_service prune path
      * and the admin Device_management lookup.
      */
+    /**
+     * Mirror the chosen language to Firestore so push can be composed in it and
+     * a reinstall can restore it.
+     *
+     * Every write is individually try/caught and the whole thing is
+     * fire-and-forget: the device-local preference set by [LocaleManager] is
+     * what actually renders the UI, so a rejected or offline write must never
+     * block or undo a language change. `staff.prefLang` is guarded by a narrow
+     * rules clause allowing only ['prefLang','updatedAt'] on a self-owned
+     * document; `userDevices` has no affectedKeys() constraint.
+     */
+    suspend fun mirrorPreferredLanguage(tag: String, deviceId: String? = null) {
+        if (!LocaleManager.isSupported(tag)) return
+        try {
+            val userId = tokenManager.userId.firstOrNull()
+            if (userId.isNullOrBlank()) return
+            val schoolId = tokenManager.schoolId.firstOrNull() ?: ""
+            val now = java.time.OffsetDateTime.now().toString()
+
+            try {
+                firestoreService.setDocument(
+                    Constants.Firestore.STAFF,
+                    "${schoolId}_${userId}",
+                    mapOf("prefLang" to tag, "updatedAt" to now),
+                    merge = true
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "prefLang mirror failed (non-fatal)", e)
+            }
+
+            // Update this device's row too, so the next push is already correct
+            // rather than waiting for the next token refresh.
+            if (!deviceId.isNullOrBlank()) {
+                val safeDeviceId = deviceId.replace(Regex("[^A-Za-z0-9_\\-]"), "_")
+                try {
+                    firestoreService.setDocument(
+                        "userDevices",
+                        "${userId}_${safeDeviceId}",
+                        mapOf("lang" to tag, "lastActive" to now),
+                        merge = true
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "userDevices.lang mirror failed (non-fatal)", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "language mirror failed (non-fatal)", e)
+        }
+    }
+
+    /**
+     * Reinstall / account-switch restore. The device-local preference is gone
+     * but `staff.prefLang` is not, so adopt it — unless the user has already
+     * made an explicit choice on this device, which always wins.
+     *
+     * Call after a successful login, before the first screen renders.
+     */
+    suspend fun restoreLanguageFromServer() {
+        if (LocaleManager.hasExplicitChoice(appContext)) return
+        try {
+            val userId = tokenManager.userId.firstOrNull()
+            if (userId.isNullOrBlank()) return
+            val schoolId = tokenManager.schoolId.firstOrNull() ?: ""
+            val doc = firestoreService.getDocument(
+                Constants.Firestore.STAFF, "${schoolId}_${userId}")
+            val serverTag = doc?.getString("prefLang")
+            LocaleManager.adoptFromServerIfUnset(appContext, serverTag)
+        } catch (e: Exception) {
+            Log.w(TAG, "language restore failed (non-fatal)", e)
+        }
+    }
+
     suspend fun registerFcmToken(fcmToken: String, userId: String, deviceId: String): Result<Unit> {
         return try {
             val schoolId = tokenManager.schoolId.firstOrNull() ?: ""
@@ -376,7 +454,13 @@ class AuthRepository @Inject constructor(
                 "platform"   to "android",
                 "status"     to "active",
                 "lastActive" to now,
-                "appRole"    to "teacher"
+                "appRole"    to "teacher",
+                // Language for server-side push composition. It lives HERE, on the
+                // device doc, rather than only on staff/{...}.prefLang because the
+                // Cloud Function's token resolvers already read these snapshots in
+                // full to get fcmToken — bucketing a fan-out by language therefore
+                // costs zero extra reads. Sourcing it from `staff` would be an N+1.
+                "lang"       to LocaleManager.effectiveTag(appContext)
             )
 
             try {

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave: interpolated/concatenated UI copy that no position pattern could
+     see, because the literal was assembled into a val or passed positionally.
+     Found by the widened prose sweep (audit.py HOLE 8). -->
+<resources>
+    <string name="att_saved_rejected_fmt">%1$d सहेजे · %2$d अस्वीकृत (टिप्पणी देखें)।</string>
+    <string name="att_correction_submitted_fmt">सुधार जमा किया गया (#%1$s)</string>
+    <string name="ptm_hosting_fmt">%1$s की मेज़बानी</string>
+    <string name="ptm_mark_all_delivered_fmt">सभी %1$d को वितरित चिह्नित करें</string>
+    <string name="ptm_roll_fmt">रोल #%1$s</string>
+    <string name="ptm_parent_fmt">अभिभावक: %1$s</string>
+    <string name="marks_theory_max_fmt">सिद्धांत (%1$s)</string>
+    <string name="marks_practical_max_fmt">प्रायोगिक (%1$s)</string>
+    <string name="marks_total_header">कुल</string>
+    <string name="marks_theory_a11y_fmt">%1$s, रोल %2$s के सिद्धांत अंक</string>
+    <string name="marks_practical_a11y_fmt">%1$s, रोल %2$s के प्रायोगिक अंक</string>
+    <string name="fp_no_contact_teacher_fmt">"%1$s" के लिए कोई संपर्क नहीं मिला। अपनी शिक्षक आईडी जाँचें और पुनः प्रयास करें।</string>
+    <string name="search_no_results_for_fmt">"%1$s" के लिए कोई परिणाम नहीं</string>
+    <string name="dash_covering_period_fmt">%1$s के लिए स्थानापन्न — पी%2$d %3$s</string>
+    <string name="dash_covering_periods_fmt">%1$s के लिए स्थानापन्न — %2$s</string>
+    <string name="students_subject_fmt">विषय: %1$s</string>
+    <string name="students_assigned">सौंपा गया</string>
+    <string name="story_by_fmt">%1$s की स्टोरी</string>
+    <string name="hw_due_today_fmt2">आज देय, %1$s IST</string>
+    <string name="hw_due_tomorrow_fmt2">कल देय, %1$s IST</string>
+    <string name="hw_due_on_fmt2">%1$s को देय, %2$s IST</string>
+    <string name="hw_upload_attach_failed_fmt">अनुलग्नक अपलोड नहीं हो सके: %1$s</string>
+    <string name="leave_withdraw_confirm_fmt">इससे %2$s - %3$s के लिए आपका लंबित %1$s अनुरोध वापस ले लिया जाएगा।</string>
+    <string name="leave_applying_half_fmt">%3$s को अर्ध-दिवस %1$s (%2$s) के लिए आवेदन</string>
+    <string name="leave_applying_one_fmt">%2$s को %1$s के लिए आवेदन (1 दिन)</string>
+    <string name="leave_type_default">अवकाश</string>
+    <string name="leave_half_morning">पूर्वाह्न</string>
+    <string name="leave_half_afternoon">अपराह्न</string>
+    <string name="leave_pending_requests_fmt">लंबित अनुरोध (%1$d)</string>
+    <string name="leave_processed_count_fmt">संसाधित (%1$d)</string>
+    <string name="leave_processed_by_fmt">%1$s द्वारा संसाधित</string>
+    <string name="flag_raised_for_fmt">%1$s के लिए फ़्लैग उठाया गया</string>
+    <string name="flag_raised_toast">🚩 फ़्लैग उठाया गया</string>
+</resources>

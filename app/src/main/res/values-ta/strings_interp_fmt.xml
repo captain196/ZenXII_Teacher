@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Interpolated user-facing copy converted to format strings. -->
+<resources>
+    <string name="fees_paid_of_total_yearly">%2$d இல் %1$d செலுத்தினர் · தனி ஆண்டு பில்லிங்</string>
+    <string name="common_collapse_fmt">%1$s சுருக்கு</string>
+    <string name="common_expand_fmt">%1$s விரிவாக்கு</string>
+    <string name="hw_created_fmt">%1$s உருவாக்கப்பட்டது</string>
+    <string name="hw_status_incomplete">முழுமையடையாதது</string>
+    <string name="hw_status_pending">நிலுவையில்</string>
+    <string name="hw_score_fmt">மதிப்பெண்: %1$s</string>
+    <string name="hw_marked_no_submission">குறிக்கப்பட்டது (சமர்ப்பிப்பு இல்லை)</string>
+    <string name="hw_current_status_cd">தற்போதைய நிலை: %1$s, மாற்ற தட்டவும்</string>
+    <string name="hw_review_of">மதிப்பாய்வு — %1$s</string>
+    <string name="leave_remaining_of">%2$s இல் %1$s மீதம்</string>
+    <string name="leave_used_fmt">%1$s பயன்படுத்தப்பட்டது</string>
+    <string name="leave_half_day_fmt">அரை நாள் (%1$s)</string>
+    <string name="lp_period_time">வகுப்பு %1$s  •  %2$s</string>
+    <string name="lib_shelf_fmt">அலமாரி: %1$s</string>
+    <string name="lib_issued_fmt">வழங்கப்பட்டது: %1$s</string>
+    <string name="lib_due_fmt">கெடு: %1$s</string>
+    <string name="lib_issued">வழங்கப்பட்டது</string>
+    <string name="marks_header_fmt">%1$s - %2$s | அதிகபட்சம்: %3$s</string>
+    <string name="marks_toggle_absent_cd">%1$s க்கு வரவில்லை மாற்று</string>
+    <string name="myatt_today_is_rest">இன்று %1$s</string>
+    <string name="myatt_distance_from_school">பள்ளியிலிருந்து %1$s</string>
+    <string name="myatt_all_done_times">இன்றைக்கு எல்லாம் முடிந்தது · %1$s — %2$s</string>
+    <string name="myatt_already_recorded">இன்று வருகை ஏற்கனவே பதிவாகியுள்ளது (%1$s).</string>
+    <string name="myatt_checkin_opens">உள்நுழைவு %1$s மணிக்குத் திறக்கும்.</string>
+    <string name="myatt_on_time_by">சரியான நேரம் — %1$s க்குள் வருகை பதிவு%2$s</string>
+    <string name="myatt_will_be_late">நீங்கள் தாமதமாகக் குறிக்கப்படுவீர்கள் (+%1$d நிமி.)%2$s</string>
+    <string name="myatt_window_closed">உள்நுழைவு நேரம் முடிந்தது (%1$s க்குப் பிறகு). மாற்றாக ஒழுங்குபடுத்தல் தாக்கல் செய்யவும்.</string>
+    <string name="myatt_distance_from_campus">நீங்கள் %2$s இலிருந்து %1$s தொலைவில்</string>
+    <string name="myatt_until_fmt">%1$s வரை</string>
+    <string name="myatt_working_since">%1$s முதல் பணியில்</string>
+    <string name="reg_my_requests_count">என் கோரிக்கைகள் (%1$d)</string>
+    <string name="reg_refresh_failed">புதுப்பிக்க முடியவில்லை: %1$s</string>
+    <string name="reg_applied_fmt">விண்ணப்பித்தது: %1$s</string>
+    <string name="not_notice_cd">அறிவிப்பு: %1$s, %2$s</string>
+    <string name="rec_posted_fmt">%1$s அன்று வெளியிடப்பட்டது</string>
+    <string name="rf_active_count">%1$d செயலில்</string>
+    <string name="rf_resolved_count">%1$d தீர்க்கப்பட்டது</string>
+    <string name="rf_flags_of_student">கொடிகள் - %1$s</string>
+    <string name="rf_flag_student_cd">🚩 %1$s ஐக் கொடியிடு</string>
+    <string name="results_header_fmt">%1$s - %2$s | %3$d மாணவர்</string>
+    <string name="results_roll_fmt">எண் %1$s</string>
+    <string name="results_result_fmt">முடிவு: %1$s</string>
+    <string name="search_class_fmt">வகுப்பு %1$s</string>
+    <string name="story_index_of">ஸ்டோரி %1$d / %2$d</string>
+    <string name="story_author_photo_cd">%1$s இன் சுயவிவரப் படம்</string>
+    <string name="story_no_viewer_match">“%1$s” உடன் பொருந்தும் பார்வையாளர் இல்லை.</string>
+    <string name="stu_roll_fmt">எண்: %1$s</string>
+    <string name="stu_flag_cd">%1$s ஐக் கொடியிடு</string>
+    <string name="stu_call_cd">%1$s ஐ அழை</string>
+    <string name="stu_class_roll_fmt">%1$s - %2$s | எண்: %3$s</string>
+    <string name="pay_present_days">வருகை</string>
+    <string name="pay_absent_days">வரவில்லை</string>
+</resources>

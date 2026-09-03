@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 9: found by the live UI-tree scanner on its first run. -->
+<resources>
+    <string name="flag_by_fmt">%1$s દ્વારા</string>
+</resources>

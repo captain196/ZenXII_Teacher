@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Short weekday headers + attendance stage labels. -->
+<resources>
+    <string name="day_short_monday">திங்</string>
+    <string name="day_short_tuesday">செவ்</string>
+    <string name="day_short_wednesday">புத</string>
+    <string name="day_short_thursday">வியா</string>
+    <string name="day_short_friday">வெள்</string>
+    <string name="day_short_saturday">சனி</string>
+    <string name="day_short_sunday">ஞாயி</string>
+    <string name="att_stage_free">திருத்தக்கூடியது</string>
+    <string name="att_stage_restricted">காரணத்துடன் திருத்தக்கூடியது</string>
+    <string name="att_not_marked">குறிக்கப்படவில்லை</string>
+    <string name="att_currently_fmt">தற்போது: %1$s</string>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notice category chips. The VALUE stays the English wire string (compared
+     at NoticesViewModel:151 and written at :144); only the label localizes. -->
+<resources>
+    <string name="notice_cat_all">అన్నీ</string>
+    <string name="notice_cat_general">సాధారణ</string>
+    <string name="notice_cat_academic">విద్యా</string>
+    <string name="notice_cat_event">ఈవెంట్</string>
+    <string name="notice_cat_holiday">సెలవు</string>
+    <string name="notice_cat_exam">పరీక్ష</string>
+    <string name="notice_cat_fee">ఫీజు</string>
+    <string name="notice_cat_policy">విధానం</string>
+    <string name="notice_cat_administrative">పరిపాలన</string>
+    <string name="notice_cat_emergency">అత్యవసరం</string>
+    <string name="notice_cat_recruitment">నియామకం</string>
+</resources>

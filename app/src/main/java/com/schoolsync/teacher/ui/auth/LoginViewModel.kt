@@ -16,12 +16,21 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.friendlyErrorMessage
+import androidx.annotation.StringRes
+import com.schoolsync.teacher.util.friendlyErrorRes
 
 data class LoginUiState(
     val userId: String = "",
     val password: String = "",
     val isLoading: Boolean = false,
-    val error: String? = null,
+    // @StringRes, not String: a resolved message held here survives
+    // recreate() and so survives a language change, leaving the error stranded
+    // in the previous language while the rest of the screen switches.
+    @StringRes val errorRes: Int? = null,
     val isPasswordVisible: Boolean = false
 )
 
@@ -33,7 +42,10 @@ sealed class LoginEvent {
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -43,11 +55,11 @@ class LoginViewModel @Inject constructor(
     val events = _events.asSharedFlow()
 
     fun onUserIdChange(value: String) {
-        _uiState.update { it.copy(userId = value.trim(), error = null) }
+        _uiState.update { it.copy(userId = value.trim(), errorRes = null) }
     }
 
     fun onPasswordChange(value: String) {
-        _uiState.update { it.copy(password = value, error = null) }
+        _uiState.update { it.copy(password = value, errorRes = null) }
     }
 
     fun togglePasswordVisibility() {
@@ -57,16 +69,16 @@ class LoginViewModel @Inject constructor(
     fun login() {
         val state = _uiState.value
         if (state.userId.isBlank()) {
-            _uiState.update { it.copy(error = "Teacher ID is required") }
+            _uiState.update { it.copy(errorRes = R.string.vm_teacher_id_required) }
             return
         }
         if (state.password.isBlank()) {
-            _uiState.update { it.copy(error = "Password is required") }
+            _uiState.update { it.copy(errorRes = R.string.vm_password_required) }
             return
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, errorRes = null) }
             try {
                 // Resolve or generate a deviceId
                 val deviceId = tokenManager.deviceId.firstOrNull()
@@ -79,6 +91,11 @@ class LoginViewModel @Inject constructor(
                 )
                 result.fold(
                     onSuccess = {
+                        // Reinstall / new-device restore: adopt staff.prefLang
+                        // when this device has no explicit choice of its own.
+                        // Awaited (not fire-and-forget) so the language is
+                        // settled before the first post-login screen renders.
+                        authRepository.restoreLanguageFromServer()
                         _uiState.update { it.copy(isLoading = false) }
                         // Force-change-password gate: if the admin reset this
                         // user's password, AuthRepository.login cached the flag
@@ -93,7 +110,7 @@ class LoginViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                error = throwable.message ?: "Login failed"
+                                errorRes = friendlyErrorRes(throwable) ?: R.string.vm_login_failed
                             )
                         }
                     }
@@ -101,13 +118,16 @@ class LoginViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e("LoginViewModel", "Login error", e)
                 _uiState.update {
-                    it.copy(isLoading = false, error = e.message ?: "An error occurred")
+                    it.copy(
+                        isLoading = false,
+                        errorRes = friendlyErrorRes(e) ?: R.string.vm_error_occurred
+                    )
                 }
             }
         }
     }
 
     fun clearError() {
-        _uiState.update { it.copy(error = null) }
+        _uiState.update { it.copy(errorRes = null) }
     }
 }

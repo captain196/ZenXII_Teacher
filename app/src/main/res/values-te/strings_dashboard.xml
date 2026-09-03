@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2a: dashboard - quick actions, module grid, today's schedule. -->
+<resources>
+    <string name="dash_quick_actions">త్వరిత చర్యలు</string>
+    <string name="dash_upcoming_events">రాబోయే ఈవెంట్‌లు</string>
+    <string name="dash_all_modules">అన్ని మాడ్యూల్‌లు</string>
+    <string name="common_search">వెతకండి</string>
+    <string name="dash_schedule_error">మీ షెడ్యూల్‌ను లోడ్ చేయలేకపోయాము</string>
+    <string name="common_retry">మళ్లీ ప్రయత్నించండి</string>
+    <string name="dash_in_class_now">ఇప్పుడు తరగతిలో</string>
+    <string name="common_view_all">అన్నీ చూడండి</string>
+    <string name="dash_take_attendance">హాజరు తీసుకోండి</string>
+    <string name="dash_add_homework">హోంవర్క్ జోడించండి</string>
+    <string name="dash_enter_marks">మార్కులు నమోదు</string>
+    <string name="dash_post_notice">నోటీసు పోస్ట్ చేయండి</string>
+    <string name="dash_clock_in">క్లాక్ ఇన్</string>
+    <string name="dash_red_flags">రెడ్ ఫ్లాగ్‌లు</string>
+    <string name="dash_apply_leave">సెలవు దరఖాస్తు</string>
+    <string name="dash_no_upcoming_events">రాబోయే ఈవెంట్‌లు లేవు</string>
+    <string name="mod_attendance">హాజరు</string>
+    <string name="mod_homework">హోంవర్క్</string>
+    <string name="mod_timetable">టైమ్‌టేబుల్</string>
+    <string name="mod_my_attendance">నా హాజరు</string>
+    <string name="mod_lesson_plan">పాఠ ప్రణాళిక</string>
+    <string name="mod_payslips">జీతం స్లిప్‌లు</string>
+    <string name="att_unmarked">గుర్తించనివి</string>
+</resources>

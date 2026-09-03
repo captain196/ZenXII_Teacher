@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Attendance locked-window banner. -->
+<resources>
+    <string name="att_locked_by_fmt">%1$s ने बंद केले. दुरुस्ती विनंती दाखल करा.</string>
+    <string name="att_locked_generic">बंद. नोंदी बदलण्यासाठी दुरुस्ती विनंती दाखल करा.</string>
+</resources>

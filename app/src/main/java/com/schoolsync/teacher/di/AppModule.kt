@@ -143,8 +143,11 @@ object AppModule {
         firebaseAuthManager: FirebaseAuthManager,
         firebaseService: FirebaseService,
         firestoreService: FirestoreService,
-        authApi: AuthApi
-    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firebaseService, firestoreService, authApi)
+        authApi: AuthApi,
+        // Needed for the language mirror/restore: LocaleManager reads the
+        // device-local preference off the application Context.
+        @ApplicationContext appContext: Context
+    ): AuthRepository = AuthRepository(tokenManager, firebaseAuthManager, firebaseService, firestoreService, authApi, appContext)
 
     @Provides
     @Singleton

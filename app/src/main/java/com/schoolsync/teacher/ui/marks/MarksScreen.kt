@@ -93,6 +93,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 @Composable
 fun MarksScreen(
@@ -135,7 +137,7 @@ fun MarksScreen(
                     ) {
                         Icon(Icons.Filled.Save, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save Marks", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.marks_save), fontWeight = FontWeight.SemiBold)
                     }
                 } else if (state.isSaving) {
                     ExtendedFloatingActionButton(
@@ -150,7 +152,7 @@ fun MarksScreen(
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Saving...", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.common_saving), fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -236,10 +238,10 @@ fun MarksScreen(
                 AlertDialog(
                     onDismissRequest = { pendingSelection = null },
                     containerColor = SurfaceDark,
-                    title = { Text("Discard unsaved marks?", color = TextPrimary) },
+                    title = { Text(stringResource(R.string.marks_discard_q), color = TextPrimary) },
                     text = {
                         Text(
-                            "You have unsaved marks on this subject. Switching now will discard them.",
+                            stringResource(R.string.marks_discard_body),
                             color = TextSecondary
                         )
                     },
@@ -248,11 +250,11 @@ fun MarksScreen(
                             val run = action
                             pendingSelection = null
                             run()
-                        }) { Text("Discard", color = ErrorRed) }
+                        }) { Text(stringResource(R.string.common_discard), color = ErrorRed) }
                     },
                     dismissButton = {
                         TextButton(onClick = { pendingSelection = null }) {
-                            Text("Keep editing", color = Teal)
+                            Text(stringResource(R.string.att_keep_editing), color = Teal)
                         }
                     }
                 )
@@ -310,7 +312,7 @@ private fun MarksContent(
                                 contentColor = BgStart
                             ),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Text("Retry", fontWeight = FontWeight.SemiBold) }
+                        ) { Text(stringResource(R.string.common_retry), fontWeight = FontWeight.SemiBold) }
                     }
                 }
             }
@@ -325,12 +327,12 @@ private fun MarksContent(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Select exam and subject",
+                            text = stringResource(R.string.marks_select_exam_subject),
                             style = MaterialTheme.typography.titleMedium,
                             color = TextSecondary
                         )
                         Text(
-                            text = "Choose an exam and subject to start entering marks",
+                            text = stringResource(R.string.marks_select_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextTertiary,
                             textAlign = TextAlign.Center
@@ -357,14 +359,14 @@ private fun MarksContent(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${state.selectedClassName} - ${state.selectedSection} | Max: ${state.selectedSubject?.maxTotal}",
+                            text = stringResource(R.string.marks_class_max, state.selectedClassName, state.selectedSection, state.selectedSubject?.maxTotal.toString()),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
                     }
                     if (state.hasUnsavedChanges) {
                         Text(
-                            text = "Unsaved changes",
+                            text = stringResource(R.string.marks_unsaved),
                             style = MaterialTheme.typography.labelSmall,
                             color = WarningAmber,
                             fontWeight = FontWeight.Medium
@@ -403,7 +405,7 @@ private fun MarksLeftPanel(
     ) {
         if (!compact) {
             Text(
-                text = "Marks Entry",
+                text = stringResource(R.string.marks_entry),
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -414,7 +416,7 @@ private fun MarksLeftPanel(
 
         // Class selector
         SelectorDropdown(
-            label = "Class",
+            label = stringResource(R.string.common_class),
             selectedText = if (state.selectedClassName.isNotEmpty())
                 "${state.selectedClassName} - ${state.selectedSection}" else "Select",
             items = state.availableClasses.map { "${it.first} - ${it.second}" },
@@ -426,8 +428,8 @@ private fun MarksLeftPanel(
 
         // Exam selector
         SelectorDropdown(
-            label = "Exam",
-            selectedText = state.selectedExam?.examName ?: "Select Exam",
+            label = stringResource(R.string.common_exam),
+            selectedText = state.selectedExam?.examName ?: stringResource(R.string.marks_select_exam),
             items = state.availableExams.map { it.examName },
             onItemSelected = { index ->
                 onExamSelected(state.availableExams[index])
@@ -436,8 +438,8 @@ private fun MarksLeftPanel(
 
         // Subject selector
         SelectorDropdown(
-            label = "Subject",
-            selectedText = state.selectedSubject?.subjectName ?: "Select Subject",
+            label = stringResource(R.string.common_subject),
+            selectedText = state.selectedSubject?.subjectName ?: stringResource(R.string.marks_select_subject),
             items = state.availableSubjects.map { it.subjectName },
             onItemSelected = { index ->
                 onSubjectSelected(state.availableSubjects[index])
@@ -457,7 +459,7 @@ private fun MarksLeftPanel(
                         .padding(10.dp)
                 ) {
                     Text(
-                        text = "Max Marks",
+                        text = stringResource(R.string.marks_max),
                         style = MaterialTheme.typography.labelMedium,
                         color = Teal,
                         fontWeight = FontWeight.SemiBold
@@ -467,21 +469,21 @@ private fun MarksLeftPanel(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Theory:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text(stringResource(R.string.marks_theory), style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                         Text("${subject.maxTheory}", style = MaterialTheme.typography.labelSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Practical:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text(stringResource(R.string.marks_practical), style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                         Text("${subject.maxPractical}", style = MaterialTheme.typography.labelSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Total:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text(stringResource(R.string.marks_total), style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                         Text("${subject.maxTotal}", style = MaterialTheme.typography.labelSmall, color = Teal, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -560,7 +562,7 @@ private fun SelectorDropdown(
                     DropdownMenuItem(
                         text = {
                             Text(
-                                "No items available",
+                                stringResource(R.string.common_no_items),
                                 color = TextTertiary,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -605,15 +607,15 @@ private fun MarksGrid(
                     .border(0.5.dp, DividerColor)
             ) {
                 // Fixed headers
-                HeaderCell("Roll No", rollWidth, headerHeight)
-                HeaderCell("Student (ID)", nameWidth, headerHeight)
+                HeaderCell(stringResource(R.string.marks_col_roll_no), rollWidth, headerHeight)
+                HeaderCell(stringResource(R.string.marks_col_student_id), nameWidth, headerHeight)
 
                 // Scrollable headers
                 Row(modifier = Modifier.horizontalScroll(horizontalScrollState)) {
-                    HeaderCell("Theory (${subject.maxTheory})", markCellWidth, headerHeight)
-                    HeaderCell("Practical (${subject.maxPractical})", markCellWidth, headerHeight)
-                    HeaderCell("Total", totalWidth, headerHeight)
-                    HeaderCell("AB", absentWidth, headerHeight)
+                    HeaderCell(stringResource(R.string.marks_theory_max_fmt, subject.maxTheory), markCellWidth, headerHeight)
+                    HeaderCell(stringResource(R.string.marks_practical_max_fmt, subject.maxPractical), markCellWidth, headerHeight)
+                    HeaderCell(stringResource(R.string.marks_total_header), totalWidth, headerHeight)
+                    HeaderCell(stringResource(R.string.marks_absent_short), absentWidth, headerHeight)
                 }
             }
 
@@ -686,7 +688,7 @@ private fun MarksGrid(
                                 enabled = !mark.isAbsent,
                                 width = markCellWidth,
                                 height = rowHeight,
-                                semanticLabel = "Theory marks for ${mark.name}, roll ${mark.rollNo}"
+                                semanticLabel = stringResource(R.string.marks_theory_a11y_fmt, mark.name, mark.rollNo)
                             )
 
                             // Practical input
@@ -698,7 +700,7 @@ private fun MarksGrid(
                                 enabled = !mark.isAbsent,
                                 width = markCellWidth,
                                 height = rowHeight,
-                                semanticLabel = "Practical marks for ${mark.name}, roll ${mark.rollNo}"
+                                semanticLabel = stringResource(R.string.marks_practical_a11y_fmt, mark.name, mark.rollNo)
                             )
 
                             // Total (read-only, auto-calculated). Turns red when the
@@ -747,12 +749,14 @@ private fun MarksGrid(
                             }
 
                             // Absent checkbox
+                            // Hoisted: Modifier.semantics {} is not a composable scope.
+                            val toggleAbsentCd = stringResource(R.string.marks_toggle_absent_cd, mark.name)
                             Box(
                                 modifier = Modifier
                                     .width(absentWidth)
                                     .height(rowHeight)
                                     .border(0.5.dp, DividerColor.copy(alpha = 0.3f))
-                                    .semantics { contentDescription = "Toggle absent for ${mark.name}" }
+                                    .semantics { contentDescription = toggleAbsentCd }
                                     .clickable { onToggleAbsent(mark.studentId) },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -873,7 +877,7 @@ private fun MarkInputCell(
             )
         } else {
             Text(
-                text = "AB",
+                text = stringResource(R.string.marks_absent_short),
                 style = MaterialTheme.typography.labelMedium,
                 color = ErrorRed.copy(alpha = 0.5f),
                 fontWeight = FontWeight.Medium,

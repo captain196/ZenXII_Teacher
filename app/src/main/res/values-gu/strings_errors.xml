@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transport-layer failures, in the staff member's language. -->
+<resources>
+    <string name="err_no_internet">ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરી ફરી જોડાઈને પ્રયાસ કરો.</string>
+    <string name="err_server_timeout">શાળાના સર્વરે જવાબ આપવામાં બહુ સમય લીધો. કૃપા કરી થોડી વારે પ્રયાસ કરો.</string>
+    <string name="err_session_expired">તમારું સત્ર સમાપ્ત થયું છે. કૃપા કરી લૉગ આઉટ કરીને ફરી લૉગ ઇન કરો.</string>
+    <string name="err_not_found">તે સર્વર પર મળ્યું નથી. કૃપા કરી રિફ્રેશ કરીને પ્રયાસ કરો.</string>
+    <string name="err_server_unavailable">શાળાનું સર્વર હાલ પૂરતું અનુપલબ્ધ છે. કૃપા કરી થોડી વારે ફરી પ્રયાસ કરો.</string>
+    <string name="err_action_paused">શાળાએ આ ક્રિયા હાલ પૂરતી અટકાવી છે (વર્ષાંત બંધ અથવા સમયગાળો લૉક). કૃપા કરી થોડી વારે ફરી પ્રયાસ કરો અથવા શાળા કાર્યાલયનો સંપર્ક કરો.</string>
+    <string name="err_cannot_reach_server">શાળાના સર્વર સુધી પહોંચી શકાયું નહીં. કૃપા કરી તમારું કનેક્શન તપાસીને ફરી પ્રયાસ કરો.</string>
+</resources>

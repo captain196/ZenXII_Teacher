@@ -323,7 +323,7 @@ class LessonPlanFirestoreRepository @Inject constructor(
             try {
                 writeAuditLog(
                     schoolId = schoolId, session = session,
-                    action = if (saved.version == 1L) "create" else "update",
+                    action = if (saved.version == 1L) "create"  /* i18n-ignore: audit action */ else "update",
                     entityId = docId, status = input.status, topicId = input.topicId,
                     actorUid = teacherId, actorName = teacherName
                 )
@@ -403,7 +403,7 @@ class LessonPlanFirestoreRepository @Inject constructor(
         val ts = isoNow()
         val compact = ts.replace(Regex("[^0-9T]"), "").substring(0, 15)
         val rand = SecureRandom().let { sr ->
-            val bytes = ByteArray(4); sr.nextBytes(bytes); bytes.joinToString("") { "%02x".format(it) }
+            val bytes = ByteArray(4); sr.nextBytes(bytes); bytes.joinToString("") { String.format(java.util.Locale.ROOT, "%02x", it) }
         }
         val logId = "${schoolId}_${compact}_$rand"
         val doc = mapOf(

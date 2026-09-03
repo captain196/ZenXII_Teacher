@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lesson-plan optimistic-concurrency notice. -->
+<resources>
+    <string name="lp_conflict">યોજના બીજે બદલાઈ. ફરી લોડ થઈ રહી છે…</string>
+</resources>

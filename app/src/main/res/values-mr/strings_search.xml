@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Topbar search: section headers and result placeholders. -->
+<resources>
+    <string name="search_cat_my_classes">माझे वर्ग</string>
+    <string name="search_cat_goto">येथे जा</string>
+    <string name="search_open_fmt">%1$s उघडा</string>
+    <string name="search_unnamed_student">(नाव नसलेला विद्यार्थी)</string>
+    <string name="search_untitled_notice">(शीर्षक नसलेली सूचना)</string>
+    <string name="search_untitled_event">(शीर्षक नसलेला कार्यक्रम)</string>
+    <string name="search_class_teacher">वर्गशिक्षक</string>
+</resources>

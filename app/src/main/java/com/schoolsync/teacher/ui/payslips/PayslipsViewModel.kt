@@ -12,6 +12,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 data class PayslipsUiState(
     val isLoading: Boolean = false,
@@ -22,7 +26,10 @@ data class PayslipsUiState(
 
 @HiltViewModel
 class PayslipsViewModel @Inject constructor(
-    private val hrRepo: HRFirestoreRepository
+    private val hrRepo: HRFirestoreRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object { private const val TAG = "PayslipsVM" }
@@ -41,7 +48,7 @@ class PayslipsViewModel @Inject constructor(
                 },
                 onFailure = { e ->
                     Log.e(TAG, "Failed to load payslips", e)
-                    _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to load") }
+                    _uiState.update { it.copy(isLoading = false, error = e.message ?: appContext.localizedString(R.string.vm_load_failed)) }
                 }
             )
         }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Login branding-panel feature bullets (wide layout only). -->
+<resources>
+    <string name="login_feature_attendance">Take attendance in seconds</string>
+    <string name="login_feature_marks">Upload marks with auto-calculation</string>
+    <string name="login_feature_communicate">Communicate with parents instantly</string>
+</resources>

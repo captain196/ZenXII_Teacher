@@ -8,6 +8,10 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.schoolsync.teacher.util.localizedString
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
+import com.schoolsync.teacher.R
 
 /**
  * StaffAttendanceRepository — the ONLY backend-communication surface for GPS
@@ -26,6 +30,7 @@ import javax.inject.Singleton
 @Singleton
 class StaffAttendanceRepository @Inject constructor(
     private val api: ApiService,
+    @ApplicationContext private val ctx: Context,
 ) {
     companion object { private const val TAG = "StaffAttendanceRepo" }
 
@@ -120,13 +125,13 @@ class StaffAttendanceRepository @Inject constructor(
             runCatching { org.json.JSONObject(raw).optString("message", "") }.getOrNull()
         } ?: ""
         return when (code()) {
-            401 -> StaffAttendanceError.Auth(msg.ifBlank { "Session expired. Please sign in again." })
-            403 -> StaffAttendanceError.Forbidden(msg.ifBlank { "Not permitted." })
-            422 -> StaffAttendanceError.Disabled(msg.ifBlank { "GPS attendance is not enabled." })
-            409 -> StaffAttendanceError.Rejected(msg.ifBlank { "Attendance could not be recorded." })
-            400 -> StaffAttendanceError.Rejected(msg.ifBlank { "Invalid request." })
-            in 500..599 -> StaffAttendanceError.Server(msg.ifBlank { "Server error. Please retry." })
-            else -> StaffAttendanceError.Network(msg.ifBlank { "Network error (${code()})" })
+            401 -> StaffAttendanceError.Auth(msg.ifBlank { ctx.localizedString(R.string.staffatt_session_expired) })
+            403 -> StaffAttendanceError.Forbidden(msg.ifBlank { ctx.localizedString(R.string.staffatt_not_permitted) })
+            422 -> StaffAttendanceError.Disabled(msg.ifBlank { ctx.localizedString(R.string.staffatt_gps_disabled) })
+            409 -> StaffAttendanceError.Rejected(msg.ifBlank { ctx.localizedString(R.string.staffatt_not_recorded) })
+            400 -> StaffAttendanceError.Rejected(msg.ifBlank { ctx.localizedString(R.string.staffatt_invalid_request) })
+            in 500..599 -> StaffAttendanceError.Server(msg.ifBlank { ctx.localizedString(R.string.staffatt_server_error) })
+            else -> StaffAttendanceError.Network(msg.ifBlank { ctx.localizedString(R.string.attapi_network_fmt, code()) })
         }
     }
 

@@ -16,6 +16,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -96,6 +97,9 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /**
  * MyAttendanceScreen — GPS staff self-attendance, minimal "clock" design.
@@ -311,13 +315,13 @@ private fun HomeView(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showOffConfirm = false },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { showOffConfirm = false; vm.checkIn() }) { Text("Clock in anyway") }
+                androidx.compose.material3.TextButton(onClick = { showOffConfirm = false; vm.checkIn() }) { Text(stringResource(R.string.myatt_clock_in_anyway)) }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showOffConfirm = false }) { Text("Not now") }
+                androidx.compose.material3.TextButton(onClick = { showOffConfirm = false }) { Text(stringResource(R.string.common_not_now)) }
             },
-            title = { Text("Today is a $restLabel") },
-            text = { Text("Clocking in will record today as extra work and add extra pay for the day, per your company policy.") },
+            title = { Text(stringResource(R.string.myatt_today_is, restLabel)) },
+            text = { Text(stringResource(R.string.myatt_extra_work_warn)) },
         )
     }
 
@@ -355,9 +359,9 @@ private fun HomeView(
             if (showGpsDetail && ui.gps?.available == true) {
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Accuracy ± ${ui.gps?.accuracyMeters?.roundToInt() ?: "—"} m", fontSize = 12.5.sp, color = c.textSecondary)
+                    Text(stringResource(R.string.myatt_accuracy, (ui.gps?.accuracyMeters?.roundToInt() ?: "—").toString()), fontSize = 12.5.sp, color = c.textSecondary)
                     Text("•", color = c.divider)
-                    Text("${fmtDistance(ui.gps?.distanceMeters)} from school", fontSize = 12.5.sp, color = c.textSecondary)
+                    Text(stringResource(R.string.myatt_from_school, fmtDistance(ui.gps?.distanceMeters)), fontSize = 12.5.sp, color = c.textSecondary)
                 }
             }
 
@@ -407,12 +411,20 @@ private fun HomeView(
                 OnLeaveBanner(leaveType = onLeaveType, untilLabel = leaveUntilLabel)
                 Spacer(Modifier.height(16.dp))
             }
+            // The title takes the remaining width and the status pill keeps its
+            // intrinsic size. Under SpaceBetween with both unconstrained, a long
+            // translated pill ("குறிக்கப்படவில்லை") overlapped the heading —
+            // "Not marked" is short enough in English to hide it. Caught on device.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Today's Attendance", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
+                Text(
+                    stringResource(R.string.myatt_today_title),
+                    modifier = Modifier.weight(1f),
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.textPrimary
+                )
                 // Don't show a guessed status until today's data has loaded —
                 // otherwise the pill flashes "V" before settling on the real state.
                 when {
@@ -421,11 +433,11 @@ private fun HomeView(
                 }
             }
             Spacer(Modifier.height(20.dp))
-            InfoRow("Check-in", fmtHM(checkInMs), loading = firstLoading)
+            InfoRow(stringResource(R.string.myatt_check_in), fmtHM(checkInMs), loading = firstLoading)
             Spacer(Modifier.height(12.dp))
-            InfoRow("Check-out", fmtHM(checkOutMs), loading = firstLoading)
+            InfoRow(stringResource(R.string.myatt_check_out), fmtHM(checkOutMs), loading = firstLoading)
             Spacer(Modifier.height(12.dp))
-            InfoRow("Working duration", fmtDuration(checkInMs, checkOutMs, now), loading = firstLoading)
+            InfoRow(stringResource(R.string.myatt_working_duration), fmtDuration(checkInMs, checkOutMs, now), loading = firstLoading)
 
             // Separator before the notices + action. (A weight(1f) spacer can't
             // be used here — the card body is now vertically scrollable, where a
@@ -441,33 +453,33 @@ private fun HomeView(
             val stateCard = resolveStateCard(permGranted, permanentlyDenied, ui.gpsError)
             stateCard?.let { sc ->
                 StatePrompt(
-                    title = sc.title,
-                    body = sc.body,
-                    actionLabel = sc.actionLabel,
+                    title = stringResource(sc.title),
+                    body = stringResource(sc.body),
+                    actionLabel = stringResource(sc.actionLabel),
                     onAction = when (sc.action) {
                         PromptAction.GRANT -> onRequestPermission
                         PromptAction.APP_SETTINGS -> onOpenAppSettings
                         PromptAction.LOCATION_SETTINGS -> onOpenLocationSettings
                         PromptAction.RETRY -> ({ vm.refreshGpsStatus() })
                     },
-                    secondaryLabel = sc.secondaryLabel,
+                    secondaryLabel = sc.secondaryLabel?.let { stringResource(it) },
                     onSecondary = { vm.refreshGpsStatus() },
                 )
                 Spacer(Modifier.height(12.dp))
             }
             ui.error?.let { e ->
-                InfoLine(text = e.message ?: "Something went wrong.", color = c.error, surface = c.errorSurface, icon = Icons.Filled.WarningAmber)
+                InfoLine(text = e.message ?: stringResource(R.string.common_something_wrong), color = c.error, surface = c.errorSurface, icon = Icons.Filled.WarningAmber)
                 Spacer(Modifier.height(12.dp))
             }
             // Coarse-only location: warn + offer to upgrade BEFORE a punch, instead
             // of letting the server reject it for poor accuracy.
             if (permGranted && coarseOnly) {
                 InfoLine(
-                    text = "Approximate location only — enable Precise location for attendance.",
+                    text = stringResource(R.string.myatt_approx_location),
                     color = c.warning, surface = c.warningSurface, icon = Icons.Filled.WarningAmber,
                 )
                 Spacer(Modifier.height(8.dp))
-                PillButton(label = "Enable Precise", bg = c.warningSurface, content = c.warning) {
+                PillButton(label = stringResource(R.string.myatt_enable_precise), bg = c.warningSurface, content = c.warning) {
                     onEnablePrecise()
                 }
                 Spacer(Modifier.height(12.dp))
@@ -477,22 +489,22 @@ private fun HomeView(
                 // Load failed and we have no data: show an explicit unavailable
                 // state + Retry rather than a misleading "Clock in" button. This
                 // is what a 404 (backend not deployed), 422 (GPS disabled) or 5xx
-                // now surfaces as, instead of a healthy-looking "Not marked".
+                // now surfaces as, instead of a healthy-looking stringResource(R.string.myatt_not_marked).
                 ui.me == null && ui.loadError != null -> {
                     InfoLine(
                         text = ui.loadError?.message?.takeIf { it.isNotBlank() }
-                            ?: "Couldn't load your attendance.",
+                            ?: stringResource(R.string.vm_myatt_load_failed),
                         color = c.error, surface = c.errorSurface, icon = Icons.Filled.WarningAmber,
                     )
                     Spacer(Modifier.height(10.dp))
-                    PillButton(label = "Retry", bg = c.errorSurface, content = c.error) { vm.loadMe() }
+                    PillButton(label = stringResource(R.string.common_retry), bg = c.errorSurface, content = c.error) { vm.loadMe() }
                 }
                 // First load not finished yet: show a shimmer skeleton instead of
                 // guessing the Clock-in state — prevents the "Clock in" button
                 // flashing for an already-clocked-in user before me() resolves.
                 firstLoading -> AttendanceActionSkeleton()
                 done -> InfoLine(
-                    text = "All done for today · ${fmtHM(checkInMs)} — ${fmtHM(checkOutMs)}",
+                    text = stringResource(R.string.myatt_done_times, fmtHM(checkInMs), fmtHM(checkOutMs)),
                     color = c.success, surface = c.successSurface, icon = Icons.Filled.CheckCircle,
                 )
                 // A real check-in punch exists (no checkout yet) → let them clock out.
@@ -507,7 +519,7 @@ private fun HomeView(
                 // recorded; no bare Clock-In. The on-leave banner above covers 'L'.
                 alreadyMarked -> {
                     if (!onLeaveToday) InfoLine(
-                        text = "Attendance already recorded today (${humanStatus(statusU)}).",
+                        text = stringResource(R.string.myatt_recorded_status, humanStatus(LocalContext.current, statusU)),
                         color = c.info, surface = c.infoSurface, icon = Icons.Filled.CheckCircle,
                     )
                 }
@@ -523,23 +535,23 @@ private fun HomeView(
                         if (!isRestDay && ui.scheduleLoaded) {
                             val fullTxt = ui.fullDayHours?.let { h ->
                                 val hs = if (h % 1.0 == 0.0) h.toInt().toString() else h.toString()
-                                " · Full day ${hs}h"
+                                stringResource(R.string.myatt_full_day_suffix, hs)
                             } ?: ""
                             when (hint.window) {
                                 CheckInWindow.BEFORE_OPEN -> InfoLine(
-                                    text = "Check-in opens at ${hint.opensAt}.",
+                                    text = stringResource(R.string.myatt_opens_at, hint.opensAt.orEmpty()),
                                     color = c.textSecondary, surface = c.surfaceCard, icon = Icons.Filled.WarningAmber,
                                 )
                                 CheckInWindow.ON_TIME -> InfoLine(
-                                    text = "On time — clock in by ${hint.onTimeBy}$fullTxt",
+                                    text = stringResource(R.string.myatt_ontime_by, hint.onTimeBy.orEmpty(), fullTxt),
                                     color = c.success, surface = c.successSurface, icon = Icons.Filled.CheckCircle,
                                 )
                                 CheckInWindow.LATE -> InfoLine(
-                                    text = "You'll be marked Late (+${hint.lateMinutes} min)$fullTxt",
+                                    text = stringResource(R.string.myatt_marked_late, hint.lateMinutes, fullTxt),
                                     color = c.warning, surface = c.warningSurface, icon = Icons.Filled.WarningAmber,
                                 )
                                 CheckInWindow.CLOSED -> InfoLine(
-                                    text = "Check-in window closed (after ${hint.closedAt}). File a regularization instead.",
+                                    text = stringResource(R.string.myatt_closed_after, hint.closedAt.orEmpty()),
                                     color = c.error, surface = c.errorSurface, icon = Icons.Filled.WarningAmber,
                                 )
                                 CheckInWindow.UNKNOWN -> Unit
@@ -550,11 +562,13 @@ private fun HomeView(
                         if (permGranted && !locationEligible) {
                             when {
                                 ui.gpsRefreshing || ui.gps == null -> InfoLine(
-                                    text = "Getting your location…",
+                                    text = stringResource(R.string.myatt_getting_location),
                                     color = c.textSecondary, surface = c.surfaceCard, icon = Icons.Filled.Refresh,
                                 )
                                 ui.gps?.available == true && ui.gps?.insideGeofence == false && campuses.isNotEmpty() -> InfoLine(
-                                    text = "You're ${fmtDistance(ui.gps?.distanceMeters)} from ${ui.gps?.nearestCampusName ?: "campus"} — move closer to clock in.",
+                                    text = stringResource(R.string.myatt_outside_geofence,
+                                            fmtDistance(ui.gps?.distanceMeters),
+                                            ui.gps?.nearestCampusName ?: stringResource(R.string.myatt_campus_fallback)),
                                     color = c.warning, surface = c.warningSurface, icon = Icons.Filled.WarningAmber,
                                 )
                                 else -> Unit   // no fix / GPS error → StatePrompt handles it
@@ -594,7 +608,7 @@ private fun HomeView(
             ) {
                 Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = c.accent, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Attendance calendar", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.accent)
+                Text(stringResource(R.string.myatt_calendar), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.accent)
             }
         }
     }
@@ -656,7 +670,7 @@ private fun AttendanceActionSkeleton() {
 }
 
 /**
- * "You are on leave" banner shown at the top of the Today card when today is
+ * stringResource(R.string.myatt_on_leave) banner shown at the top of the Today card when today is
  * covered by an approved leave (or the server stamped 'L'). Uses the same
  * info-blue token as the Leave calendar band/pill so the colour reads coherently.
  */
@@ -681,14 +695,14 @@ private fun OnLeaveBanner(leaveType: String?, untilLabel: String?) {
         }
         Column(Modifier.weight(1f)) {
             Text(
-                if (untilLabel != null) "You are on leave" else "You are on leave today",
+                if (untilLabel != null) stringResource(R.string.myatt_on_leave) else stringResource(R.string.myatt_on_leave_today),
                 fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.info,
             )
             val sub = buildString {
                 if (!leaveType.isNullOrBlank()) append(leaveType)
                 if (untilLabel != null) {
                     if (isNotEmpty()) append(" · ")
-                    append("until $untilLabel")
+                    append(stringResource(R.string.myatt_until, untilLabel))
                 }
             }
             if (sub.isNotBlank()) {
@@ -702,16 +716,25 @@ private fun OnLeaveBanner(leaveType: String?, untilLabel: String?) {
 @Composable
 private fun TodayStatusPill(status: String) {
     val c = LocalAppColors.current
-    val (label, color) = when (status.uppercase()) {
-        "P" -> "Present" to c.attPresent
-        "T" -> "Late" to c.attTardy
-        "M" -> "Half-day" to c.attLeave
-        "A" -> "Absent" to c.attAbsent
-        "L" -> "Leave" to c.info
-        "H" -> "Holiday" to c.attHoliday
-        "O" -> "Weekly-off" to c.textTertiary
-        "W" -> "Extra day" to c.attVacation
-        else -> "Not marked" to c.textTertiary
+    // The code -> colour mapping stays here; the code -> LABEL mapping is
+    // humanStatus(), which already had every localized key. Duplicating it as
+    // English literals is what shipped "Present / Late / Absent" untranslated.
+    val ctx = LocalContext.current
+    val color = when (status.uppercase()) {
+        "P" -> c.attPresent
+        "T" -> c.attTardy
+        "M" -> c.attLeave
+        "A" -> c.attAbsent
+        "L" -> c.info
+        "H" -> c.attHoliday
+        "O" -> c.textTertiary
+        "W" -> c.attVacation
+        else -> c.textTertiary
+    }
+    val label = when (status.uppercase()) {
+        "W"  -> stringResource(R.string.myatt_extra_day)
+        in setOf("P", "T", "M", "A", "L", "H", "O") -> humanStatus(ctx, status)  // i18n-ignore: wire codes
+        else -> stringResource(R.string.myatt_not_marked)
     }
     Box(
         modifier = Modifier
@@ -733,10 +756,10 @@ private fun GpsChip(
 ) {
     val c = LocalAppColors.current
     val (dot, text, tone) = when {
-        available && inside == true -> Triple(c.success, "On campus", c.success)
+        available && inside == true -> Triple(c.success, stringResource(R.string.myatt_on_campus), c.success)
         available && inside == false -> Triple(c.warning, "${fmtDistance(distance)} away", c.warning)
         available -> Triple(c.success, "Located", c.success)
-        else -> Triple(c.textTertiary, if (locating) "Locating…" else "Location off", c.textSecondary)
+        else -> Triple(c.textTertiary, if (locating) stringResource(R.string.myatt_locating) else stringResource(R.string.myatt_location_off), c.textSecondary)
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -755,7 +778,7 @@ private fun GpsChip(
         if (locating) {
             CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 1.6.dp, color = c.textTertiary)
         } else {
-            Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = c.textTertiary, modifier = Modifier.size(14.dp))
+            Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = c.textTertiary, modifier = Modifier.size(14.dp))
         }
     }
 }
@@ -770,7 +793,7 @@ private fun ClockInButton(busy: Boolean, enabled: Boolean = true, onClick: () ->
         enabled = enabled && !busy,
     ) {
         BigIconBox(tint = c.textOnAccent) { Icon(Icons.Filled.HowToReg, contentDescription = null, tint = c.textOnAccent, modifier = Modifier.size(24.dp)) }
-        Text(if (busy) "Clocking in…" else "Clock in", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = c.textOnAccent)
+        Text(if (busy) stringResource(R.string.myatt_clocking_in) else stringResource(R.string.myatt_clock_in), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = c.textOnAccent)
     }
 }
 
@@ -784,7 +807,7 @@ private fun ClockOutButton(busy: Boolean, onClick: () -> Unit) {
         enabled = !busy,
     ) {
         BigIconBox(tint = Color.White) { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp)) }
-        Text(if (busy) "Clocking out…" else "Clock out", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(if (busy) stringResource(R.string.myatt_clocking_out) else stringResource(R.string.myatt_clock_out), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
     }
 }
 
@@ -810,7 +833,7 @@ private fun RunningCard(sinceMs: Long, now: Long) {
     ) {
         Box(Modifier.size(14.dp).clip(CircleShape).background(c.textOnAccent.copy(alpha = alpha)))
         Column(Modifier.weight(1f)) {
-            Text("Working since ${fmtHM(sinceMs)}", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = c.textOnAccent.copy(alpha = 0.85f))
+            Text(stringResource(R.string.myatt_working_since_fmt, fmtHM(sinceMs)), fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = c.textOnAccent.copy(alpha = 0.85f))
             Spacer(Modifier.height(2.dp))
             Text(fmtElapsed(now - sinceMs), fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = c.textOnAccent, letterSpacing = (-0.5).sp)
         }
@@ -833,7 +856,7 @@ private fun DoneCard(inMs: Long?, outMs: Long?) {
     ) {
         Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = c.success, modifier = Modifier.size(26.dp))
         Column {
-            Text("All done for today", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
+            Text(stringResource(R.string.myatt_all_done), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
             Spacer(Modifier.height(3.dp))
             Text("${fmtHM(inMs)} — ${fmtHM(outMs)}", fontSize = 14.sp, color = c.textSecondary)
         }
@@ -1047,7 +1070,7 @@ private fun CalendarView(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SquareIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
+                SquareIconButton(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.common_back), onBack)
                 // Re-read attendance so a fresh admin approval (Absent→Present) shows
                 // without leaving the screen. Spins while me() reloads.
                 Box(
@@ -1063,21 +1086,21 @@ private fun CalendarView(
                     if (refreshing) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = c.accent)
                     } else {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = c.textPrimary, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = c.textPrimary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SquareIconButton(Icons.Filled.ChevronLeft, "Previous month", { shift(-1) }, small = true)
+                SquareIconButton(Icons.Filled.ChevronLeft, stringResource(R.string.att_prev_month), { shift(-1) }, small = true)
                 Text(
-                    "${MONTHS[month]} $year",
+                    "${monthLabels()[month]} $year",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = c.textPrimary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.widthIn(min = 150.dp),
                 )
-                SquareIconButton(Icons.Filled.ChevronRight, "Next month", { shift(1) }, small = true)
+                SquareIconButton(Icons.Filled.ChevronRight, stringResource(R.string.att_next_month), { shift(1) }, small = true)
             }
             if (!isThisMonth) {
                 Box(
@@ -1088,7 +1111,7 @@ private fun CalendarView(
                         .clickable { year = nowCal.get(Calendar.YEAR); month = nowCal.get(Calendar.MONTH) }
                         .padding(horizontal = 14.dp, vertical = 9.dp),
                 ) {
-                    Text("Today", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.accent)
+                    Text(stringResource(R.string.common_today), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.accent)
                 }
             } else {
                 Spacer(Modifier.width(56.dp))
@@ -1113,8 +1136,8 @@ private fun CalendarView(
         ) {
             Icon(Icons.Filled.EditCalendar, contentDescription = null, tint = c.accent, modifier = Modifier.size(18.dp))
             Column(Modifier.weight(1f)) {
-                Text("Regularize Attendance", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.accent)
-                Text("Request a correction for absent or missed days", fontSize = 11.5.sp, color = c.textSecondary)
+                Text(stringResource(R.string.myatt_regularize), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.accent)
+                Text(stringResource(R.string.myatt_regularize_sub), fontSize = 11.5.sp, color = c.textSecondary)
             }
             Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = c.accent, modifier = Modifier.size(18.dp))
         }
@@ -1123,7 +1146,7 @@ private fun CalendarView(
 
         // Weekday header (Mon-first)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            WEEKDAYS.forEach { w ->
+            weekdayLabels().forEach { w ->
                 Text(
                     w,
                     fontSize = 11.sp,
@@ -1195,13 +1218,13 @@ private fun DayCell(
     // Build a merged contentDescription so the day, its status and its in/out
     // times are read aloud as one node.
     val cellDesc = run {
-        val statusLabel = band?.label ?: if (weekend) "Weekly-off" else "Not marked"
+        val statusLabel = band?.label ?: if (weekend) "Weekly-off" else stringResource(R.string.myatt_not_marked)
         val ci = parseIso(checkInAt)?.let { fmtClockOnly(it) }
         val co = parseIso(checkOutAt)?.let { fmtClockOnly(it) }
         buildString {
             append("$day, $statusLabel")
             if (ci != null) append(", in $ci")
-            if (co != null) append(", out $co")
+            if (co != null) append(stringResource(R.string.myatt_out_at, co))
         }
     }
     val edge = when {
@@ -1249,19 +1272,30 @@ private fun DayCell(
 private fun CalendarLegend() {
     val c = LocalAppColors.current
     val items = listOf(
-        "Present" to c.attPresent,
-        "Late" to c.attTardy,
-        "Half" to c.attLeave,
-        "Absent" to c.attAbsent,
-        "Leave" to c.info,
-        "Holiday" to c.attHoliday,
-        "Extra" to c.attVacation,
+        stringResource(R.string.attendance_status_present) to c.attPresent,
+        stringResource(R.string.attendance_status_late) to c.attTardy,
+        stringResource(R.string.myatt_status_halfday) to c.attLeave,
+        stringResource(R.string.attendance_status_absent) to c.attAbsent,
+        stringResource(R.string.myatt_on_leave_short) to c.info,
+        stringResource(R.string.attendance_status_holiday) to c.attHoliday,
+        stringResource(R.string.myatt_extra_work) to c.attVacation,
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+    // FlowRow, not Row: seven labels fit one line as English words ("Present",
+    // "Late", "Half"), but each is 2-3x longer in every Indic script and the
+    // last one wrapped INSIDE its own cell and clipped. Wrapping to a second
+    // line is the correct behaviour; `maxLines = 1` on each label keeps a
+    // single item from breaking mid-word.
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         items.forEach { (label, color) ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(11.dp).clip(RoundedCornerShape(4.dp)).background(color.copy(alpha = 0.35f)))
-                Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = c.textSecondary)
+                Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = c.textSecondary,
+                     maxLines = 1)
             }
         }
     }
@@ -1312,12 +1346,15 @@ private fun statusBand(status: String?, weekend: Boolean): Band? {
 }
 
 private enum class PromptAction { GRANT, APP_SETTINGS, LOCATION_SETTINGS, RETRY }
+// @StringRes throughout, not String: resolveStateCard() is a plain function,
+// so a String here would have to be resolved by its caller anyway — and holding
+// one would freeze the launch language. Resolved at the render site below.
 private data class StateCardSpec(
-    val title: String,
-    val body: String,
-    val actionLabel: String,
+    @StringRes val title: Int,
+    @StringRes val body: Int,
+    @StringRes val actionLabel: Int,
     val action: PromptAction,
-    val secondaryLabel: String? = null,
+    @StringRes val secondaryLabel: Int? = null,
 )
 
 private fun resolveStateCard(
@@ -1327,36 +1364,35 @@ private fun resolveStateCard(
 ): StateCardSpec? {
     if (!permGranted) {
         return if (permanentlyDenied) StateCardSpec(
-            title = "Location permission blocked",
-            body = "Enable Location for this app in system Settings to mark attendance.",
-            actionLabel = "Open Settings",
+            title = R.string.myatt_perm_blocked,
+            body = R.string.myatt_perm_blocked_body,
+            actionLabel = R.string.myatt_open_settings,
             action = PromptAction.APP_SETTINGS,
         ) else StateCardSpec(
-            title = "Location permission needed",
-            body = "Attendance needs your location to confirm you are on campus.",
-            actionLabel = "Grant Permission",
+            title = R.string.myatt_perm_needed,
+            body = R.string.myatt_perm_needed_body,
+            actionLabel = R.string.myatt_grant_permission,
             action = PromptAction.GRANT,
         )
     }
     return when (gpsError) {
         LocationError.LOCATION_SERVICES_OFF -> StateCardSpec(
-            title = "Location is turned off",
-            body = "Turn on device location (GPS), then retry.",
-            actionLabel = "Open Location Settings",
+            title = R.string.myatt_location_off,
+            body = R.string.myatt_location_off_body,
+            actionLabel = R.string.myatt_open_location_settings,
             action = PromptAction.LOCATION_SETTINGS,
-            secondaryLabel = "Retry",
+            secondaryLabel = R.string.common_retry,
         )
         LocationError.TIMEOUT, LocationError.UNAVAILABLE -> StateCardSpec(
-            title = "Weak GPS signal",
-            body = "Couldn't get an accurate fix. Move to an open area and retry. " +
-                "If location is set to Approximate, enable Precise location for this app.",
-            actionLabel = "Retry",
+            title = R.string.myatt_weak_gps,
+            body = R.string.myatt_weak_gps_body,
+            actionLabel = R.string.common_retry,
             action = PromptAction.RETRY,
         )
         LocationError.PERMISSION_DENIED -> StateCardSpec(
-            title = "Permission required",
-            body = "Grant location permission to continue.",
-            actionLabel = "Grant Permission",
+            title = R.string.myatt_perm_required,
+            body = R.string.myatt_perm_required_body,
+            actionLabel = R.string.myatt_grant_permission,
             action = PromptAction.GRANT,
         )
         null -> null
@@ -1397,16 +1433,16 @@ private fun leaveUntilLabel(todayKey: String, leaveDates: Map<String, String>): 
 }
 
 /** Map a server status letter → human words for the "already recorded" line. */
-private fun humanStatus(status: String): String = when (status.uppercase()) {
-    "P" -> "Present"
-    "T" -> "Late"
-    "M" -> "Half-day"
-    "A" -> "Absent"
-    "L" -> "On leave"
-    "H" -> "Holiday"
-    "O" -> "Weekly-off"
-    "W" -> "Extra work"
-    else -> "Recorded"
+private fun humanStatus(ctx: android.content.Context, status: String): String = when (status.uppercase()) {
+    "P" -> ctx.localizedString(R.string.attendance_status_present)
+    "T" -> ctx.localizedString(R.string.attendance_status_late)
+    "M" -> ctx.localizedString(R.string.myatt_status_halfday)
+    "A" -> ctx.localizedString(R.string.attendance_status_absent)
+    "L" -> ctx.localizedString(R.string.myatt_on_leave_short)
+    "H" -> ctx.localizedString(R.string.attendance_status_holiday)
+    "O" -> ctx.localizedString(R.string.myatt_status_weeklyoff)
+    "W" -> ctx.localizedString(R.string.myatt_extra_work)
+    else -> ctx.localizedString(R.string.myatt_status_recorded)
 }
 
 private fun fmtHM(ms: Long?): String = ms?.let { HM.format(Date(it)) } ?: "—"
@@ -1430,7 +1466,7 @@ private fun clock12(cal: Calendar): String {
 private fun amPm(cal: Calendar): String = if (cal.get(Calendar.AM_PM) == Calendar.PM) "PM" else "AM"
 
 private fun dateLine(ms: Long): String =
-    SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(ms))
+    SimpleDateFormat("EEEE, d MMMM"  /* i18n-ignore: date pattern */, Locale.getDefault()).format(Date(ms))
 
 private fun fmtElapsed(ms: Long): String {
     val s = (ms.coerceAtLeast(0L) / 1000L)
@@ -1449,8 +1485,21 @@ private fun openAppSettings(context: Context) {
     context.startActivity(intent)
 }
 
-private val WEEKDAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-private val MONTHS = listOf(
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-)
+// Weekday and month names come from the platform, not a hardcoded list.
+// A top-level `val` is initialised once at class-load, so it would freeze in
+// whatever language the process started in and survive the recreate() that a
+// language change triggers — the same trap that bit the notification channels.
+// DateFormatSymbols reads Locale.getDefault(), which LocaleManager.wrap() sets,
+// so these follow the app language for free and need no strings.xml entries.
+private fun weekdayLabels(): List<String> {
+    // shortWeekdays is 1-indexed with Calendar.SUNDAY == 1; the grid is Mon-first.
+    val s = java.text.DateFormatSymbols.getInstance().shortWeekdays
+    return listOf(
+        java.util.Calendar.MONDAY, java.util.Calendar.TUESDAY, java.util.Calendar.WEDNESDAY,
+        java.util.Calendar.THURSDAY, java.util.Calendar.FRIDAY, java.util.Calendar.SATURDAY,
+        java.util.Calendar.SUNDAY,
+    ).map { s[it] }
+}
+
+private fun monthLabels(): List<String> =
+    java.text.DateFormatSymbols.getInstance().months.take(12)

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-existing keys from strings.xml that had never been translated. -->
+<resources>
+    <string name="action_cancel">ரத்து</string>
+    <string name="action_change">மாற்று</string>
+    <string name="action_close">மூடு</string>
+    <string name="action_delete">நீக்கு</string>
+    <string name="action_refresh">புதுப்பி</string>
+    <string name="action_retry">மீண்டும் முயற்சி</string>
+    <string name="action_send">அனுப்பு</string>
+    <string name="action_sending">அனுப்புகிறது…</string>
+    <string name="cd_back">பின்</string>
+    <string name="cd_delete_chat">அரட்டையை நீக்கு</string>
+    <string name="cd_notifications">அறிவிப்புகள்</string>
+    <string name="cd_send">அனுப்பு</string>
+    <string name="dashboard_class_teacher_many">வகுப்பு ஆசிரியர் · %1$s</string>
+    <string name="dashboard_class_teacher_one">வகுப்பு ஆசிரியர் · %1$s</string>
+    <string name="dashboard_greeting">வணக்கம், %1$s</string>
+    <string name="dashboard_no_classes_today">இன்று வகுப்புகள் இல்லை</string>
+    <string name="dashboard_no_recent_activity">சமீபத்திய செயல்பாடு இல்லை</string>
+    <string name="dashboard_period_label">வ%1$d</string>
+    <string name="dashboard_recent_activity">சமீபத்திய செயல்பாடு</string>
+    <string name="dashboard_title">டாஷ்போர்டு</string>
+    <string name="dashboard_today_schedule">இன்றைய அட்டவணை</string>
+    <string name="messages_class_label">வகுப்பு %1$s</string>
+    <string name="messages_class_section">வகுப்பு %1$s %2$s</string>
+    <string name="messages_compose_to">%1$s க்கு செய்தி</string>
+    <string name="messages_delete_chat">அரட்டையை நீக்கு</string>
+    <string name="messages_delete_confirm">%1$s உடனான இந்த உரையாடலை நீக்கவா? இது உங்கள் இன்பாக்ஸிலிருந்து மட்டுமே நீக்கப்படும் — மற்றவருக்கு இது தெரிந்தே இருக்கும்.</string>
+    <string name="messages_delete_default_name">இந்தத் தொடர்பு</string>
+    <string name="messages_input_placeholder">செய்தியை உள்ளிடவும்…</string>
+    <string name="messages_new">புதிய செய்தி</string>
+    <string name="messages_no_conversations">இன்னும் உரையாடல்கள் இல்லை</string>
+    <string name="messages_no_matches">பொருத்தம் இல்லை</string>
+    <string name="messages_no_students">மாணவர்கள் இல்லை</string>
+    <string name="messages_parent_of">%1$s இன் பெற்றோர்</string>
+    <string name="messages_search_placeholder">பெயர் அல்லது வகுப்பால் தேடு</string>
+    <string name="messages_select_conversation">ஓர் உரையாடலைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="messages_select_subtitle">அரட்டையைத் தொடங்க பட்டியலிலிருந்து பெற்றோரைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="messages_title">செய்திகள்</string>
+    <string name="messages_type_your_message">உங்கள் செய்தியை உள்ளிடவும்…</string>
+    <string name="notices_by_author">%1$s அவர்களால்</string>
+    <string name="notices_empty">அறிவிப்புகள் இல்லை</string>
+    <string name="notices_title">அறிவிப்புகள்</string>
+    <string name="notices_unread">படிக்காதவை</string>
+    <string name="stat_active">செயலில்</string>
+    <string name="stat_assigned">ஒதுக்கப்பட்டது</string>
+    <string name="stat_classes">வகுப்புகள்</string>
+    <string name="stat_flags">கொடிகள்</string>
+    <string name="stat_hw_due">பாடம் நிலுவை</string>
+    <string name="stat_periods">வகுப்பு நேரங்கள்</string>
+    <string name="stat_today">இன்று</string>
+    <string name="stat_today_lower">இன்று</string>
+</resources>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 4b: red flags - list, quick-flag sheet, canonical severity/type. -->
+<resources>
+    <string name="rf_new">కొత్త ఫ్లాగ్</string>
+    <string name="rf_loading">ఫ్లాగ్‌లు లోడ్ అవుతున్నాయి...</string>
+    <string name="rf_view_all">అన్నీ చూడండి</string>
+    <string name="rf_add">ఫ్లాగ్ జోడించండి</string>
+    <string name="rf_delete_q">ఈ ఫ్లాగ్ తొలగించాలా?</string>
+    <string name="rf_resolved">పరిష్కరించబడింది</string>
+    <string name="rf_tpl_late_hw">ఆలస్య హోంవర్క్</string>
+    <string name="rf_tpl_behaviour">ప్రవర్తన</string>
+    <string name="rf_tpl_low_perf">తక్కువ పనితీరు</string>
+    <string name="rf_quick_reason">త్వరిత కారణం</string>
+    <string name="common_severity">తీవ్రత</string>
+    <string name="common_message">సందేశం</string>
+    <string name="rf_no_subject_note">ఈ తరగతికి మీకు సబ్జెక్ట్ కేటాయించలేదు — ఈ ఫ్లాగ్ సబ్జెక్ట్ లేకుండా దాఖలు అవుతుంది. మీ సబ్జెక్ట్ కేటాయింపు సెట్ చేయమని అడ్మిన్‌ను అడగండి.</string>
+    <string name="rf_subject_required">ఈ స్క్రీన్‌లో సబ్జెక్ట్ అవసరం.</string>
+    <string name="common_undo">రద్దు చేయి</string>
+    <string name="rf_more_options">▸ మరిన్ని ఎంపికలు</string>
+    <string name="rf_hide_options">▾ ఎంపికలు దాచండి</string>
+    <string name="flag_severity_low">తక్కువ</string>
+    <string name="flag_severity_medium">మధ్యస్థం</string>
+    <string name="flag_severity_high">అధికం</string>
+    <string name="flag_type_homework">హోంవర్క్</string>
+    <string name="flag_type_behavior">ప్రవర్తన</string>
+    <string name="flag_type_performance">పనితీరు</string>
+</resources>

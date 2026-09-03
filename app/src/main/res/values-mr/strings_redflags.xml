@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 4b: red flags - list, quick-flag sheet, canonical severity/type. -->
+<resources>
+    <string name="rf_new">नवीन फ्लॅग</string>
+    <string name="rf_loading">फ्लॅग लोड होत आहेत...</string>
+    <string name="rf_view_all">सर्व पहा</string>
+    <string name="rf_add">फ्लॅग जोडा</string>
+    <string name="rf_delete_q">हा फ्लॅग हटवायचा?</string>
+    <string name="rf_resolved">निराकरण झाले</string>
+    <string name="rf_tpl_late_hw">उशिरा गृहपाठ</string>
+    <string name="rf_tpl_behaviour">वर्तन</string>
+    <string name="rf_tpl_low_perf">कमी कामगिरी</string>
+    <string name="rf_quick_reason">जलद कारण</string>
+    <string name="common_severity">तीव्रता</string>
+    <string name="common_message">संदेश</string>
+    <string name="rf_no_subject_note">या वर्गासाठी तुम्हाला विषय नेमलेला नाही — हा फ्लॅग विषयाशिवाय दाखल होईल. तुमचे विषय वाटप सेट करण्यासाठी प्रशासकाला सांगा.</string>
+    <string name="rf_subject_required">या स्क्रीनवर विषय आवश्यक आहे.</string>
+    <string name="common_undo">पूर्ववत करा</string>
+    <string name="rf_more_options">▸ अधिक पर्याय</string>
+    <string name="rf_hide_options">▾ पर्याय लपवा</string>
+    <string name="flag_severity_low">कमी</string>
+    <string name="flag_severity_medium">मध्यम</string>
+    <string name="flag_severity_high">उच्च</string>
+    <string name="flag_type_homework">गृहपाठ</string>
+    <string name="flag_type_behavior">वर्तन</string>
+    <string name="flag_type_performance">कामगिरी</string>
+</resources>

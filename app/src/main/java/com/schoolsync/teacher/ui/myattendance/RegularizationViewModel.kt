@@ -12,6 +12,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /**
  * RegularizationViewModel — submit + history for the "Regularize Attendance"
@@ -21,6 +25,9 @@ import javax.inject.Inject
 @HiltViewModel
 class RegularizationViewModel @Inject constructor(
     private val repo: AttendanceRegularizationRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(RegularizationUiState())
@@ -35,7 +42,7 @@ class RegularizationViewModel @Inject constructor(
                     // Surface the failure now that "My Requests" renders it — previously
                     // swallowed, which left the list silently empty on a permission /
                     // network error (indistinguishable from "no requests yet").
-                    _ui.update { it.copy(loadingRequests = false, requestsError = e.message ?: "Couldn't load your requests.") }
+                    _ui.update { it.copy(loadingRequests = false, requestsError = e.message ?: appContext.localizedString(R.string.vm_reg_load_failed)) }
                 }
         }
     }
@@ -49,7 +56,7 @@ class RegularizationViewModel @Inject constructor(
                     loadMyRequests()
                 }
                 .onFailure { e ->
-                    _ui.update { it.copy(submitting = false, error = e.message ?: "Could not submit request.") }
+                    _ui.update { it.copy(submitting = false, error = e.message ?: appContext.localizedString(R.string.vm_reg_submit_failed)) }
                 }
         }
     }

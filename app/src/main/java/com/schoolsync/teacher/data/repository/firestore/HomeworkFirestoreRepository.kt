@@ -76,7 +76,7 @@ class HomeworkFirestoreRepository @Inject constructor(
         fun mintHwId(schoolCode: String): String {
             val random = ByteArray(4)
             java.security.SecureRandom().nextBytes(random)
-            val suffix = random.joinToString("") { "%02x".format(it) }
+            val suffix = random.joinToString("") { String.format(java.util.Locale.ROOT, "%02x", it) }
             return "${schoolCode}_${System.currentTimeMillis()}_$suffix"
         }
 

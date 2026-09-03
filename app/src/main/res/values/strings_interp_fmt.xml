@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Interpolated user-facing copy converted to format strings. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="fees_paid_of_total_yearly" tools:ignore="PluralsCandidate">%1$d of %2$d paid · separate yearly billing</string>
+    <string name="common_collapse_fmt">Collapse %1$s</string>
+    <string name="common_expand_fmt">Expand %1$s</string>
+    <string name="hw_created_fmt">Created %1$s</string>
+    <string name="hw_status_incomplete">Incomplete</string>
+    <string name="hw_status_pending">Pending</string>
+    <string name="hw_score_fmt">Score: %1$s</string>
+    <string name="hw_marked_no_submission">Marked (no submission)</string>
+    <string name="hw_current_status_cd">Current status: %1$s, tap to change</string>
+    <string name="hw_review_of">Review — %1$s</string>
+    <string name="leave_remaining_of">Remaining %1$s of %2$s</string>
+    <string name="leave_used_fmt">Used %1$s</string>
+    <string name="leave_half_day_fmt">Half-day (%1$s)</string>
+    <string name="lp_period_time">Period %1$s  •  %2$s</string>
+    <string name="lib_shelf_fmt">Shelf: %1$s</string>
+    <string name="lib_issued_fmt">Issued: %1$s</string>
+    <string name="lib_due_fmt">Due: %1$s</string>
+    <string name="lib_issued">Issued</string>
+    <string name="marks_header_fmt">%1$s - %2$s | Max: %3$s</string>
+    <string name="marks_toggle_absent_cd">Toggle absent for %1$s</string>
+    <string name="myatt_today_is_rest">Today is a %1$s</string>
+    <string name="myatt_distance_from_school">%1$s from school</string>
+    <string name="myatt_all_done_times">All done for today · %1$s — %2$s</string>
+    <string name="myatt_already_recorded">Attendance already recorded today (%1$s).</string>
+    <string name="myatt_checkin_opens">Check-in opens at %1$s.</string>
+    <string name="myatt_on_time_by">On time — clock in by %1$s%2$s</string>
+    <string name="myatt_will_be_late">You\'ll be marked Late (+%1$d min)%2$s</string>
+    <string name="myatt_window_closed">Check-in window closed (after %1$s). File a regularization instead.</string>
+    <string name="myatt_distance_from_campus">You\'re %1$s from %2$s</string>
+    <string name="myatt_until_fmt">until %1$s</string>
+    <string name="myatt_working_since">Working since %1$s</string>
+    <string name="reg_my_requests_count">My Requests (%1$d)</string>
+    <string name="reg_refresh_failed">Couldn\'t refresh: %1$s</string>
+    <string name="reg_applied_fmt">Applied: %1$s</string>
+    <string name="not_notice_cd">Notice: %1$s, %2$s</string>
+    <string name="rec_posted_fmt">Posted %1$s</string>
+    <string name="rf_active_count" tools:ignore="PluralsCandidate">%1$d active</string>
+    <string name="rf_resolved_count" tools:ignore="PluralsCandidate">%1$d resolved</string>
+    <string name="rf_flags_of_student">Flags - %1$s</string>
+    <string name="rf_flag_student_cd">🚩 Flag %1$s</string>
+    <string name="results_header_fmt" tools:ignore="PluralsCandidate">%1$s - %2$s | %3$d students</string>
+    <string name="results_roll_fmt">Roll %1$s</string>
+    <string name="results_result_fmt">Result: %1$s</string>
+    <string name="search_class_fmt">Class %1$s</string>
+    <string name="story_index_of">Story %1$d of %2$d</string>
+    <string name="story_author_photo_cd">%1$s profile photo</string>
+    <string name="story_no_viewer_match">No viewer matches “%1$s”.</string>
+    <string name="stu_roll_fmt">Roll: %1$s</string>
+    <string name="stu_flag_cd">Flag %1$s</string>
+    <string name="stu_call_cd">Call %1$s</string>
+    <string name="stu_class_roll_fmt">%1$s - %2$s | Roll: %3$s</string>
+    <string name="pay_present_days">Present</string>
+    <string name="pay_absent_days">Absent</string>
+</resources>

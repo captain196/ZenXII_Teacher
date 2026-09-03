@@ -42,11 +42,14 @@ import com.schoolsync.teacher.ui.theme.GlassBorder
 import com.schoolsync.teacher.ui.theme.Teal
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.res.pluralStringResource
 
 /**
  * The story tray — Instagram's model, one row.
  *
- * "Your story" is the FIRST tile and doubles as the post entry (a `+` badge on
+ * stringResource(R.string.story_your_story) is the FIRST tile and doubles as the post entry (a `+` badge on
  * your own avatar). Everyone else's stories follow as segmented rings.
  *
  * This replaces a design where a staff member's own story rendered THREE times:
@@ -99,7 +102,7 @@ fun StoriesTray(
 }
 
 /**
- * "Your story" — own avatar, own segmented ring when there's something to
+ * stringResource(R.string.story_your_story) — own avatar, own segmented ring when there's something to
  * show, and a `+` badge that posts. With no active story the tile is purely
  * the post button, which is what makes it a viable replacement for the FAB.
  */
@@ -114,6 +117,12 @@ private fun YourStoryTile(
 ) {
     val hasStories = myGroup != null && myGroup.stories.isNotEmpty()
     val unseenCount = myGroup?.stories?.count { !it.isViewed } ?: 0
+    // Hoisted: Modifier.semantics {} is a plain lambda, not a composable scope.
+    val tileCd = when {
+        !hasStories -> stringResource(R.string.story_add_to_your)
+        unseenCount > 0 -> pluralStringResource(R.plurals.story_cd_unseen, unseenCount, unseenCount)
+        else -> pluralStringResource(R.plurals.story_cd_posted, myGroup?.stories?.size ?: 0, myGroup?.stories?.size ?: 0)
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -124,11 +133,7 @@ private fun YourStoryTile(
             // the action that matters in that state.
             .clickable { if (hasStories) onOpen() else if (canPost) onCreate() }
             .semantics(mergeDescendants = true) {
-                contentDescription = when {
-                    !hasStories -> "Add to your story"
-                    unseenCount > 0 -> "Your story, $unseenCount not yet seen by you"
-                    else -> "Your story, ${myGroup?.stories?.size ?: 0} posted"
-                }
+                contentDescription = tileCd
             }
     ) {
         Box(modifier = Modifier.size(62.dp), contentAlignment = Alignment.Center) {
@@ -176,7 +181,7 @@ private fun YourStoryTile(
                 ) {
                     Icon(
                         Icons.Filled.Add,
-                        contentDescription = "Add to your story",
+                        contentDescription = stringResource(R.string.story_add_to_your),
                         tint = BgStart,
                         modifier = Modifier.size(14.dp)
                     )
@@ -185,7 +190,7 @@ private fun YourStoryTile(
         }
         Spacer(modifier = Modifier.size(4.dp))
         Text(
-            text = "Your story",
+            text = stringResource(R.string.story_your_story),
             style = MaterialTheme.typography.labelSmall,
             color = TextPrimary,
             fontWeight = FontWeight.Medium,
@@ -266,7 +271,7 @@ private fun StoryCircleContent(
 
 /**
  * Labeled tray section: a header + the tray. Used on the Dashboard and the
- * Stories screen so both lead with the same "Your story" tile.
+ * Stories screen so both lead with the same stringResource(R.string.story_your_story) tile.
  */
 @Composable
 fun StoriesSection(
@@ -278,7 +283,7 @@ fun StoriesSection(
     onOpenStory: (authorId: String) -> Unit,
     onCreateStory: () -> Unit,
     modifier: Modifier = Modifier,
-    title: String = "Stories",
+    title: String = stringResource(R.string.nav_stories),
     /** Show a quiet hint instead of nothing when there is nothing at all. */
     showWhenEmpty: Boolean = false
 ) {
@@ -294,7 +299,7 @@ fun StoriesSection(
         )
         if (nothingToShow) {
             Text(
-                text = "No stories in the last 24 hours.",
+                text = stringResource(R.string.story_none_24h),
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 8.dp)

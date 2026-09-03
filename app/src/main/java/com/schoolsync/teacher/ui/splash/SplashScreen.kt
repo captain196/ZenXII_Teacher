@@ -1,5 +1,7 @@
 package com.schoolsync.teacher.ui.splash
 
+import androidx.compose.ui.platform.LocalContext
+import com.schoolsync.teacher.util.LocaleManager
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -23,6 +25,8 @@ import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import androidx.compose.ui.res.stringResource
+import java.util.Locale
 
 // Splash accent — aligned to the "Soft Blue & Cloud" palette accent (#3E5F8A)
 // so the splash matches the (blue) login screen that follows it. Was a legacy
@@ -32,6 +36,7 @@ private val ZenXiiAccent = Color(0xFF3E5F8A)
 @Composable
 fun SplashScreen(
     onNavigateToWalkthrough: () -> Unit,
+    onNavigateToLanguageSetup: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onNavigateToMain: () -> Unit,
     onNavigateToForceChange: () -> Unit,
@@ -39,6 +44,9 @@ fun SplashScreen(
     hasSeenOnboarding: Boolean,
     mustChangePassword: Boolean,
 ) {
+    // Hoisted: the routing decision below runs inside a LaunchedEffect, which
+    // is not a composable scope.
+    val context = LocalContext.current
     var phase by remember { mutableIntStateOf(0) }
 
     // ── Logo animations ──
@@ -96,6 +104,19 @@ fun SplashScreen(
         phase = 3
         delay(1000)
         when {
+            // Language is checked BEFORE isLoggedIn, deliberately.
+            //
+            // Staff are already logged in when they update. If the login branch
+            // ran first, every existing user would go straight to the dashboard
+            // and NEVER be shown the language chooser — the whole existing user
+            // base would miss the feature and only fresh installs would see it.
+            // The choice is one-time and sticky, so that first exposure is the
+            // entire opportunity.
+            //
+            // Fires only while no explicit choice exists: shown once per
+            // install, never on logout or relaunch. Afterwards we route back
+            // through Splash so this decision lives in one place.
+            !LocaleManager.hasExplicitChoice(context) -> onNavigateToLanguageSetup()
             isLoggedIn && mustChangePassword -> onNavigateToForceChange()
             isLoggedIn -> onNavigateToMain()
             !hasSeenOnboarding -> onNavigateToWalkthrough()
@@ -162,19 +183,23 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            // The 4sp tracking is a Latin-caps flourish. Applied to Tamil,
+            // Telugu or Devanagari it prises apart the conjuncts and the word
+            // reads as loose syllables — so it is only used for Latin script.
+            val latinScript = Locale.getDefault().language in setOf("en")
             Text(
-                text = "SCHOOL MANAGEMENT",
+                text = stringResource(R.string.splash_school_management),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = TextSecondary,
-                letterSpacing = 4.sp,
+                letterSpacing = if (latinScript) 4.sp else 0.sp,
                 modifier = Modifier.alpha(subtitleAlpha)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Teacher Portal",
+                text = stringResource(R.string.splash_teacher_portal),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
                 color = ZenXiiAccent,

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3a: homework - list, composer, grading panel. -->
+<resources>
+    <string name="hw_create_new">புதிய வீட்டுப்பாடம் உருவாக்கு</string>
+    <string name="hw_new">புதிய வீட்டுப்பாடம்</string>
+    <string name="hw_delete_q">வீட்டுப்பாடத்தை நீக்கவா?</string>
+    <string name="common_delete">நீக்கு</string>
+    <string name="hw_all_subjects">அனைத்து பாடங்கள்</string>
+    <string name="hw_loading">வீட்டுப்பாடம் ஏற்றப்படுகிறது...</string>
+    <string name="hw_none">வீட்டுப்பாடம் ஒதுக்கப்படவில்லை</string>
+    <string name="hw_none_hint">புதிய வீட்டுப்பாடம் உருவாக்க + ஐத் தட்டவும்</string>
+    <string name="hw_past_due">கெடு முடிந்தது</string>
+    <string name="hw_closed">மூடப்பட்டது</string>
+    <string name="hw_has_attachments">இணைப்புகள் உள்ளன</string>
+    <string name="hw_edit">வீட்டுப்பாடத்தைத் திருத்து</string>
+    <string name="hw_close_stop">வீட்டுப்பாடத்தை மூடு (சமர்ப்பிப்பை நிறுத்து)</string>
+    <string name="hw_close_panel">பலகத்தை மூடு</string>
+    <string name="hw_submitted">சமர்ப்பிக்கப்பட்டது</string>
+    <string name="hw_attachments_hdr">இணைப்புகள்</string>
+    <string name="common_open">திற</string>
+    <string name="hw_student_response">மாணவரின் பதில்:</string>
+    <string name="hw_score">மதிப்பெண்</string>
+    <string name="hw_score_hint">எ.கா. 8</string>
+    <string name="hw_score_range">மதிப்பெண் 0–200 இடையே இருக்க வேண்டும்</string>
+    <string name="hw_remark">குறிப்பு</string>
+    <string name="hw_remark_hint">எ.கா. நல்ல வேலை, தொடருங்கள்!</string>
+    <string name="common_close">மூடு</string>
+    <string name="common_title">தலைப்பு</string>
+    <string name="hw_title_hint">எ.கா. பாடம் 4 — பயிற்சி 3</string>
+    <string name="common_details">விவரங்கள்</string>
+    <string name="hw_details_hint">மாணவர்கள் என்ன செய்ய வேண்டும்?</string>
+    <string name="common_subject">பாடம்</string>
+    <string name="hw_due_date">கெடு தேதி</string>
+    <string name="common_tomorrow">நாளை</string>
+    <string name="hw_in_3_days">3 நாட்களில்</string>
+    <string name="hw_next_week">அடுத்த வாரம்</string>
+    <string name="common_pick_date">தேதியைத் தேர்ந்தெடு</string>
+    <string name="common_dismiss">நிராகரி</string>
+    <string name="hw_remove_attachment">இணைப்பை நீக்கு</string>
+</resources>

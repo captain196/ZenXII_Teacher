@@ -15,6 +15,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 data class ProfileUiState(
     val isLoading: Boolean = true,
@@ -33,6 +37,8 @@ data class ProfileUiState(
     val cachedSchoolName: String = "",
     val cachedProfilePic: String = "",
     // Logout flow (mirrors Parent app): confirm dialog → loading → success.
+    // Language picker expanded (Profile -> Language).
+    val showLanguage: Boolean = false,
     val showLogoutDialog: Boolean = false,
     val isLoggingOut: Boolean = false,
     val logoutSuccess: Boolean = false
@@ -43,7 +49,10 @@ class ProfileViewModel @Inject constructor(
     private val staffRepo: StaffFirestoreRepository,
     private val teacherRepo: TeacherRepository,
     private val tokenManager: TokenManager,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -52,6 +61,25 @@ class ProfileViewModel @Inject constructor(
     init { loadProfile() }
 
     fun refresh() = loadProfile()
+
+    // -- Language ----------------------------------------------------------
+
+    fun toggleLanguage() {
+        _uiState.value = _uiState.value.copy(showLanguage = !_uiState.value.showLanguage)
+    }
+
+    /**
+     * Mirror the chosen language to Firestore so push can be composed in it and
+     * a reinstall can restore it. Deliberately fire-and-forget: the screen has
+     * already persisted the choice locally and is about to call recreate(), and
+     * the UI must never wait on the network to change language.
+     */
+    fun mirrorLanguage(tag: String) {
+        viewModelScope.launch {
+            val deviceId = tokenManager.deviceId.firstOrNull()
+            authRepository.mirrorPreferredLanguage(tag, deviceId)
+        }
+    }
 
     // ── Logout ────────────────────────────────────────────────────────────
     // Same UX as the Parent app: tapping "Log out" opens a confirm dialog;
@@ -75,7 +103,7 @@ class ProfileViewModel @Inject constructor(
             } else {
                 _uiState.value.copy(
                     isLoggingOut = false,
-                    error = result.exceptionOrNull()?.message ?: "Logout failed"
+                    error = result.exceptionOrNull()?.message ?: appContext.localizedString(R.string.vm_logout_failed)
                 )
             }
         }
@@ -101,7 +129,7 @@ class ProfileViewModel @Inject constructor(
             val schoolCode = tokenManager.schoolCode.firstOrNull() ?: ""
             val userId = tokenManager.userId.firstOrNull() ?: ""
             if (schoolCode.isEmpty() || userId.isEmpty()) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = "Not logged in")
+                _uiState.value = _uiState.value.copy(isLoading = false, error = appContext.localizedString(R.string.vm_not_logged_in))
                 return@launch
             }
 

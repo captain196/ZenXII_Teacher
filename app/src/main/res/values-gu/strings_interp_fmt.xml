@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Interpolated user-facing copy converted to format strings. -->
+<resources>
+    <string name="fees_paid_of_total_yearly">%2$d માંથી %1$d એ ચૂકવ્યું · અલગ વાર્ષિક બિલિંગ</string>
+    <string name="common_collapse_fmt">%1$s સંકોચો</string>
+    <string name="common_expand_fmt">%1$s વિસ્તારો</string>
+    <string name="hw_created_fmt">%1$s બનાવ્યું</string>
+    <string name="hw_status_incomplete">અપૂર્ણ</string>
+    <string name="hw_status_pending">બાકી</string>
+    <string name="hw_score_fmt">ગુણ: %1$s</string>
+    <string name="hw_marked_no_submission">ચિહ્નિત (સબમિશન નથી)</string>
+    <string name="hw_current_status_cd">હાલની સ્થિતિ: %1$s, બદલવા ટૅપ કરો</string>
+    <string name="hw_review_of">સમીક્ષા — %1$s</string>
+    <string name="leave_remaining_of">%2$s માંથી %1$s બાકી</string>
+    <string name="leave_used_fmt">%1$s વપરાયું</string>
+    <string name="leave_half_day_fmt">અડધો દિવસ (%1$s)</string>
+    <string name="lp_period_time">પિરિયડ %1$s  •  %2$s</string>
+    <string name="lib_shelf_fmt">શેલ્ફ: %1$s</string>
+    <string name="lib_issued_fmt">આપ્યું: %1$s</string>
+    <string name="lib_due_fmt">બાકી: %1$s</string>
+    <string name="lib_issued">આપ્યું</string>
+    <string name="marks_header_fmt">%1$s - %2$s | મહત્તમ: %3$s</string>
+    <string name="marks_toggle_absent_cd">%1$s માટે ગેરહાજરી બદલો</string>
+    <string name="myatt_today_is_rest">આજે %1$s છે</string>
+    <string name="myatt_distance_from_school">શાળાથી %1$s</string>
+    <string name="myatt_all_done_times">આજ માટે બધું પૂર્ણ · %1$s — %2$s</string>
+    <string name="myatt_already_recorded">આજે હાજરી પહેલેથી નોંધાઈ છે (%1$s).</string>
+    <string name="myatt_checkin_opens">ચેક-ઇન %1$s વાગ્યે ખૂલશે.</string>
+    <string name="myatt_on_time_by">સમયસર — %1$s સુધીમાં ક્લોક ઇન કરો%2$s</string>
+    <string name="myatt_will_be_late">તમે મોડા ચિહ્નિત થશો (+%1$d મિ.)%2$s</string>
+    <string name="myatt_window_closed">ચેક-ઇન સમય પૂરો (%1$s પછી). તેના બદલે નિયમિતીકરણ દાખલ કરો.</string>
+    <string name="myatt_distance_from_campus">તમે %2$s થી %1$s દૂર છો</string>
+    <string name="myatt_until_fmt">%1$s સુધી</string>
+    <string name="myatt_working_since">%1$s થી કાર્યરત</string>
+    <string name="reg_my_requests_count">મારી વિનંતીઓ (%1$d)</string>
+    <string name="reg_refresh_failed">રિફ્રેશ થઈ શક્યું નહીં: %1$s</string>
+    <string name="reg_applied_fmt">અરજી કરી: %1$s</string>
+    <string name="not_notice_cd">સૂચના: %1$s, %2$s</string>
+    <string name="rec_posted_fmt">%1$s ના રોજ પ્રકાશિત</string>
+    <string name="rf_active_count">%1$d સક્રિય</string>
+    <string name="rf_resolved_count">%1$d ઉકેલાયા</string>
+    <string name="rf_flags_of_student">ફ્લેગ - %1$s</string>
+    <string name="rf_flag_student_cd">🚩 %1$s ને ફ્લેગ કરો</string>
+    <string name="results_header_fmt">%1$s - %2$s | %3$d વિદ્યાર્થી</string>
+    <string name="results_roll_fmt">રોલ %1$s</string>
+    <string name="results_result_fmt">પરિણામ: %1$s</string>
+    <string name="search_class_fmt">વર્ગ %1$s</string>
+    <string name="story_index_of">સ્ટોરી %1$d / %2$d</string>
+    <string name="story_author_photo_cd">%1$s નો પ્રોફાઇલ ફોટો</string>
+    <string name="story_no_viewer_match">“%1$s” સાથે મેળ ખાતો દર્શક નથી.</string>
+    <string name="stu_roll_fmt">રોલ: %1$s</string>
+    <string name="stu_flag_cd">%1$s ને ફ્લેગ કરો</string>
+    <string name="stu_call_cd">%1$s ને કૉલ કરો</string>
+    <string name="stu_class_roll_fmt">%1$s - %2$s | રોલ: %3$s</string>
+    <string name="pay_present_days">હાજર</string>
+    <string name="pay_absent_days">ગેરહાજર</string>
+</resources>

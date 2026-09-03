@@ -47,6 +47,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.schoolsync.teacher.ui.theme.LocalAppColors
 import com.schoolsync.teacher.ui.theme.glassCard
 import com.schoolsync.teacher.ui.theme.gradientBackground
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 @Composable
 fun SearchScreen(
@@ -80,7 +82,7 @@ fun SearchScreen(
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.common_back),
                         tint = c.textPrimary,
                         modifier = Modifier.size(22.dp)
                     )
@@ -154,7 +156,7 @@ fun SearchScreen(
                     if (query.isEmpty()) {
                         item("hint") {
                             Text(
-                                "Find a student, class, homework, notice or event — or jump to any section.",
+                                stringResource(R.string.search_hint_long),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = c.textTertiary,
                                 modifier = Modifier.padding(vertical = 10.dp)
@@ -163,7 +165,7 @@ fun SearchScreen(
                     }
                     sections.forEach { (category, rows) ->
                         item("h_${category.name}") {
-                            SectionHeader(category.label.uppercase())
+                            SectionHeader(stringResource(category.labelRes).uppercase())
                         }
                         items(rows.size, key = { rows[it].id }) { idx ->
                             val r = rows[idx]
@@ -246,14 +248,14 @@ private fun EmptyState(query: String) {
         Text("🔍", fontSize = 40.sp)
         Spacer(Modifier.height(12.dp))
         Text(
-            "No results for \"$query\"",
+            stringResource(R.string.search_no_results_for_fmt, query),
             style = MaterialTheme.typography.titleMedium,
             color = c.textSecondary,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            "Try a student name, roll number, subject, or a section.",
+            stringResource(R.string.search_try_hint),
             style = MaterialTheme.typography.bodySmall,
             color = c.textTertiary
         )

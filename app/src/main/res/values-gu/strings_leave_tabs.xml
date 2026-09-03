@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Leave tabs and allotment labels. -->
+<resources>
+    <string name="leave_tab_my">મારી રજા</string>
+    <string name="leave_tab_student">વિદ્યાર્થી રજા</string>
+    <string name="leave_allotted">ફાળવેલ %1$s</string>
+    <string name="leave_allotted_carried">ફાળવેલ %1$s + %2$s આગળ લાવેલ</string>
+</resources>

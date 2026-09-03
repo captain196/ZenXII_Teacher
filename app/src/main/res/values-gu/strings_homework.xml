@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3a: homework - list, composer, grading panel. -->
+<resources>
+    <string name="hw_create_new">નવું ગૃહકાર્ય બનાવો</string>
+    <string name="hw_new">નવું ગૃહકાર્ય</string>
+    <string name="hw_delete_q">ગૃહકાર્ય કાઢી નાખવું?</string>
+    <string name="common_delete">કાઢી નાખો</string>
+    <string name="hw_all_subjects">બધા વિષયો</string>
+    <string name="hw_loading">ગૃહકાર્ય લોડ થઈ રહ્યું છે...</string>
+    <string name="hw_none">કોઈ ગૃહકાર્ય સોંપાયું નથી</string>
+    <string name="hw_none_hint">નવું ગૃહકાર્ય બનાવવા + દબાવો</string>
+    <string name="hw_past_due">નિયત તારીખ વીતી ગઈ</string>
+    <string name="hw_closed">બંધ</string>
+    <string name="hw_has_attachments">જોડાણો છે</string>
+    <string name="hw_edit">ગૃહકાર્ય સંપાદિત કરો</string>
+    <string name="hw_close_stop">ગૃહકાર્ય બંધ કરો (સબમિશન રોકો)</string>
+    <string name="hw_close_panel">પેનલ બંધ કરો</string>
+    <string name="hw_submitted">સબમિટ કર્યું</string>
+    <string name="hw_attachments_hdr">જોડાણો</string>
+    <string name="common_open">ખોલો</string>
+    <string name="hw_student_response">વિદ્યાર્થીનો જવાબ:</string>
+    <string name="hw_score">ગુણ</string>
+    <string name="hw_score_hint">દા.ત. 8</string>
+    <string name="hw_score_range">ગુણ 0–200 વચ્ચે હોવા જોઈએ</string>
+    <string name="hw_remark">ટિપ્પણી</string>
+    <string name="hw_remark_hint">દા.ત. સરસ કામ, આમ જ ચાલુ રાખો!</string>
+    <string name="common_close">બંધ કરો</string>
+    <string name="common_title">શીર્ષક</string>
+    <string name="hw_title_hint">દા.ત. પ્રકરણ 4 — કસરત 3</string>
+    <string name="common_details">વિગતો</string>
+    <string name="hw_details_hint">વિદ્યાર્થીઓએ શું કરવું?</string>
+    <string name="common_subject">વિષય</string>
+    <string name="hw_due_date">નિયત તારીખ</string>
+    <string name="common_tomorrow">આવતીકાલે</string>
+    <string name="hw_in_3_days">3 દિવસમાં</string>
+    <string name="hw_next_week">આવતા અઠવાડિયે</string>
+    <string name="common_pick_date">તારીખ પસંદ કરો</string>
+    <string name="common_dismiss">બરતરફ કરો</string>
+    <string name="hw_remove_attachment">જોડાણ દૂર કરો</string>
+</resources>

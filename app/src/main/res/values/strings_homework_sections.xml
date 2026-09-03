@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3a (cont.): homework list section headers. -->
+<resources>
+    <string name="hw_section_active">Active</string>
+</resources>

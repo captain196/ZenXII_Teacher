@@ -100,6 +100,9 @@ import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.glassCard
 import java.text.NumberFormat
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.res.pluralStringResource
 
 @Composable
 fun FeesTeacherScreen(viewModel: FeesTeacherViewModel = hiltViewModel()) {
@@ -160,7 +163,7 @@ private fun LoadingState() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = Teal)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Loading fee data...", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            Text(stringResource(R.string.fees_loading), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
     }
 }
@@ -169,11 +172,11 @@ private fun LoadingState() {
 private fun EmptyState(noClasses: Boolean) {
     com.schoolsync.teacher.ui.components.EmptyStatePro(
         icon = Icons.Filled.CurrencyRupee,
-        title = if (noClasses) "No classes assigned" else "Select a class",
+        title = if (noClasses) stringResource(R.string.att_no_classes) else stringResource(R.string.fees_select_class),
         description = if (noClasses)
-            "Contact admin to assign classes."
+            stringResource(R.string.fees_contact_admin)
         else
-            "Choose a class from the dropdown above to view fee status."
+            stringResource(R.string.fees_choose_hint)
     )
 }
 
@@ -181,9 +184,9 @@ private fun EmptyState(noClasses: Boolean) {
 private fun ErrorDialog(error: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Error", color = TextPrimary) },
+        title = { Text(stringResource(R.string.common_error), color = TextPrimary) },
         text = { Text(error, color = TextSecondary) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("OK", color = Teal) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok), color = Teal) } },
         containerColor = SurfaceDark, shape = RoundedCornerShape(16.dp)
     )
 }
@@ -210,7 +213,7 @@ private fun FeesTopBar(
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Text(
-                    state.selectedClass?.displayName ?: "Select Class",
+                    state.selectedClass?.displayName ?: stringResource(R.string.att_select_class),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -265,7 +268,7 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit) {
                 Box {
                     if (query.isEmpty()) {
                         Text(
-                            "Search student name or roll...",
+                            stringResource(R.string.fees_search_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextTertiary
                         )
@@ -276,7 +279,7 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit) {
         )
         if (query.isNotEmpty()) {
             IconButton(onClick = { onQuery("") }, modifier = Modifier.size(20.dp)) {
-                Icon(Icons.Filled.Close, "Clear", tint = TextTertiary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Close, stringResource(R.string.fees_clear), tint = TextTertiary, modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -337,7 +340,7 @@ private fun MainContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "No students match the filter",
+                        stringResource(R.string.fees_no_match),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextTertiary
                     )
@@ -421,7 +424,7 @@ private fun CollapsibleCard(
             Icon(
                 imageVector = if (expanded) Icons.Filled.KeyboardArrowUp
                               else Icons.Filled.KeyboardArrowDown,
-                contentDescription = if (expanded) "Collapse" else "Expand",
+                contentDescription = if (expanded) stringResource(R.string.common_collapse) else stringResource(R.string.common_expand),
                 tint = TextSecondary,
                 modifier = Modifier.size(22.dp)
             )
@@ -448,8 +451,8 @@ private fun CollapsibleCard(
 private fun ClassSnapshotCard(o: ClassFeeOverview) {
     CollapsibleCard(
         saveKey = "class-snapshot",
-        title = "Class Snapshot",
-        subtitle = "${o.paidCount} of ${o.totalStudents} cleared · ${formatRs(o.totalPending)} pending",
+        title = stringResource(R.string.fees_class_snapshot),
+        subtitle = stringResource(R.string.fees_cleared_pending, o.paidCount, o.totalStudents, formatRs(o.totalPending)),
         defaultExpanded = true
     ) {
         val pctColor = collectionTint(o.collectionPercent)
@@ -507,7 +510,8 @@ private fun ClassSnapshotCard(o: ClassFeeOverview) {
                 if (o.examBlockedCount > 0) {
                     RestrictionPill(
                         icon = Icons.Filled.EventBusy,
-                        label = "${o.examBlockedCount} exam blocked",
+                        label = pluralStringResource(
+                            R.plurals.fees_exam_blocked_count, o.examBlockedCount, o.examBlockedCount),
                         color = ErrorRed,
                         bg = ErrorRedSurface
                     )
@@ -515,7 +519,8 @@ private fun ClassSnapshotCard(o: ClassFeeOverview) {
                 if (o.resultWithheldCount > 0) {
                     RestrictionPill(
                         icon = Icons.Filled.Block,
-                        label = "${o.resultWithheldCount} result held",
+                        label = pluralStringResource(
+                            R.plurals.fees_result_held_count, o.resultWithheldCount, o.resultWithheldCount),
                         color = WarningAmber,
                         bg = WarningAmberSurface
                     )
@@ -582,8 +587,8 @@ private fun MonthlyCollectionCard(items: List<MonthlyClassBreakdown>) {
     val avgPct = if (totalDemands > 0) (totalPaid * 100) / totalDemands else 0
     CollapsibleCard(
         saveKey = "monthly-collection",
-        title = "Monthly Collection",
-        subtitle = "$avgPct% across ${items.size} ${if (items.size == 1) "month" else "months"}",
+        title = stringResource(R.string.fees_monthly_collection),
+        subtitle = stringResource(R.string.fees_avg_across, avgPct, pluralStringResource(R.plurals.fees_months_count, items.size, items.size)),
         leadingIcon = Icons.Filled.CalendarMonth,
         leadingTint = Teal,
         defaultExpanded = true
@@ -660,8 +665,8 @@ private fun AnnualFeeCard(
     val statusById = remember(studentStatuses) { studentStatuses.associateBy { it.studentId } }
     CollapsibleCard(
         saveKey = "annual-fee",
-        title = "Annual Fee",
-        subtitle = "${info.paidStudents} of ${info.totalStudents} paid · separate yearly billing",
+        title = stringResource(R.string.fees_annual),
+        subtitle = stringResource(R.string.fees_paid_of_total_yearly, info.paidStudents, info.totalStudents),
         leadingIcon = Icons.Filled.Star,
         leadingTint = WarningAmber,
         defaultExpanded = false
@@ -703,7 +708,7 @@ private fun AnnualFeeStudentRow(
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                name.ifBlank { "Unknown student" },
+                name.ifBlank { stringResource(R.string.fees_unknown_student) },
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextPrimary,
                 fontWeight = FontWeight.Medium,
@@ -778,19 +783,19 @@ private fun StudentsSectionHeader(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.horizontalScroll(rememberScrollState())
         ) {
-            FilterPill("All", total, selectedFilter == StudentFilter.ALL, Teal) {
+            FilterPill(stringResource(R.string.common_all), total, selectedFilter == StudentFilter.ALL, Teal) {
                 onFilter(StudentFilter.ALL)
             }
-            FilterPill("Clear", clear, selectedFilter == StudentFilter.CLEAR, SuccessGreen) {
+            FilterPill(stringResource(R.string.fees_clear), clear, selectedFilter == StudentFilter.CLEAR, SuccessGreen) {
                 onFilter(StudentFilter.CLEAR)
             }
-            FilterPill("Dues", dues, selectedFilter == StudentFilter.DUES, ErrorRed) {
+            FilterPill(stringResource(R.string.fees_dues), dues, selectedFilter == StudentFilter.DUES, ErrorRed) {
                 onFilter(StudentFilter.DUES)
             }
             // Blocked filter only shown when the class actually has any
             // — clutters the row otherwise.
             if (blocked > 0) {
-                FilterPill("Blocked", blocked, selectedFilter == StudentFilter.BLOCKED, WarningAmber) {
+                FilterPill(stringResource(R.string.fees_blocked), blocked, selectedFilter == StudentFilter.BLOCKED, WarningAmber) {
                     onFilter(StudentFilter.BLOCKED)
                 }
             }
@@ -869,8 +874,14 @@ private fun StudentRow(
 
     val statusColor = if (s.isDefaulter) ErrorRed else SuccessGreen
     val statusBg    = if (s.isDefaulter) ErrorRedSurface else SuccessGreenSurface
-    val statusLabel = if (s.totalPending > 0) formatRs(s.totalPending) else "Clear"
-    val reminderLabel = remember(lastReminderIso) { formatReminderAge(lastReminderIso) }
+    val statusLabel = if (s.totalPending > 0) formatRs(s.totalPending) else stringResource(R.string.fees_clear)
+    // Context resolved outside remember(): a composable call is not allowed in
+    // its calculation lambda. Keyed on the locale too, so a language change
+    // recomputes the label instead of serving the previous language's string.
+    val reminderCtx = LocalContext.current
+    val reminderLabel = remember(lastReminderIso, reminderCtx) {
+        formatReminderAge(reminderCtx, lastReminderIso)
+    }
 
     Column(
         modifier = Modifier
@@ -899,7 +910,7 @@ private fun StudentRow(
                     )
                     if (s.examBlocked) {
                         Spacer(Modifier.width(6.dp))
-                        SmallBadge("Blocked", ErrorRed, ErrorRedSurface)
+                        SmallBadge(stringResource(R.string.fees_blocked), ErrorRed, ErrorRedSurface)
                     }
                     if (reminderLabel != null) {
                         Spacer(Modifier.width(6.dp))
@@ -934,7 +945,7 @@ private fun StudentRow(
             Icon(
                 imageVector = if (expanded) Icons.Filled.KeyboardArrowUp
                               else Icons.Filled.KeyboardArrowDown,
-                contentDescription = if (expanded) "Collapse" else "Expand",
+                contentDescription = if (expanded) stringResource(R.string.common_collapse) else stringResource(R.string.common_expand),
                 tint = TextTertiary,
                 modifier = Modifier.size(20.dp).padding(start = 4.dp)
             )
@@ -946,11 +957,11 @@ private fun StudentRow(
                 // Restriction badges.
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     when {
-                        s.examBlocked -> SmallBadge("Exam Blocked", ErrorRed, ErrorRedSurface)
-                        else -> SmallBadge("Exam Eligible", SuccessGreen, SuccessGreenSurface)
+                        s.examBlocked -> SmallBadge(stringResource(R.string.fees_exam_blocked), ErrorRed, ErrorRedSurface)
+                        else -> SmallBadge(stringResource(R.string.fees_exam_eligible), SuccessGreen, SuccessGreenSurface)
                     }
                     if (s.resultWithheld) {
-                        SmallBadge("Result Held", WarningAmber, WarningAmberSurface)
+                        SmallBadge(stringResource(R.string.fees_result_held), WarningAmber, WarningAmberSurface)
                     }
                 }
 
@@ -1063,7 +1074,7 @@ private fun StudentRow(
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Last payment:",
+                            stringResource(R.string.fees_last_payment),
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary
                         )
@@ -1151,14 +1162,15 @@ private fun formatRs(amount: Double): String {
  * render stale history badges. Accepts either "YYYY-MM-DD HH:mm:ss"
  * (Fee_management::send_reminder's $now) or ISO-8601 (deliveredAt).
  */
-private fun formatReminderAge(sentIso: String?): String? {
+private fun formatReminderAge(ctx: android.content.Context, sentIso: String?): String? {
     if (sentIso.isNullOrBlank()) return null
     val ts = try {
         when {
             sentIso.contains('T') ->
                 java.time.OffsetDateTime.parse(sentIso).toInstant().toEpochMilli()
             else ->
-                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                // machine parser — reads a server-written timestamp; must stay Locale.ROOT.
+                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
                     .apply { timeZone = java.util.TimeZone.getDefault() }
                     .parse(sentIso)?.time ?: return null
         }
@@ -1168,10 +1180,10 @@ private fun formatReminderAge(sentIso: String?): String? {
     if (ageMin < 0) return null
     if (ageMin > 60 * 24 * 7) return null
     return when {
-        ageMin < 1     -> "Just reminded"
-        ageMin < 60    -> "Reminded ${ageMin}m"
-        ageMin < 60*24 -> "Reminded ${ageMin / 60}h"
-        else           -> "Reminded ${ageMin / (60 * 24)}d"
+        ageMin < 1     -> ctx.getString(R.string.fees_just_reminded)
+        ageMin < 60    -> ctx.getString(R.string.fees_reminded_min, ageMin.toInt())
+        ageMin < 60*24 -> ctx.getString(R.string.fees_reminded_hour, (ageMin / 60).toInt())
+        else           -> ctx.getString(R.string.fees_reminded_day, (ageMin / (60 * 24)).toInt())
     }
 }
 

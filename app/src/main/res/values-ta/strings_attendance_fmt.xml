@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Interpolated attendance/dashboard copy converted to format strings. -->
+<resources>
+    <string name="att_marked_of_total">%2$d இல் %1$d குறிக்கப்பட்டது</string>
+    <string name="att_remaining_fmt">%1$d மீதம்</string>
+    <string name="att_roll_fmt">எண் %1$s</string>
+    <string name="att_no_students_in">%1$s இல் மாணவர்கள் இல்லை</string>
+    <string name="att_reason_count">%1$d / 10+</string>
+    <string name="dash_substitute_covering">உங்கள் வகுப்புகளுக்கு மாற்று: %1$s</string>
+</resources>

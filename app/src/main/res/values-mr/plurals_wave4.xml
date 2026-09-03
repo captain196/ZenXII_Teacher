@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PluralsCandidate conversions. Several of these had a wrong
+     form before: Tamil stu_count_fmt read a singular noun for
+     every count. -->
+<resources>
+    <plurals name="hw_del_submissions">
+        <item quantity="one">%1$d सबमिशन</item>
+        <item quantity="other">%1$d सबमिशन</item>
+    </plurals>
+    <plurals name="hw_del_marks">
+        <item quantity="one">%1$d गुण</item>
+        <item quantity="other">%1$d गुण</item>
+    </plurals>
+    <plurals name="gal_items_count">
+        <item quantity="one">%1$d आयटम</item>
+        <item quantity="other">%1$d आयटम</item>
+    </plurals>
+    <plurals name="lib_days_left">
+        <item quantity="one">%1$d दिवस शिल्लक</item>
+        <item quantity="other">%1$d दिवस शिल्लक</item>
+    </plurals>
+    <plurals name="lib_fines_count">
+        <item quantity="one">%1$d दंड</item>
+        <item quantity="other">%1$d दंड</item>
+    </plurals>
+    <plurals name="stu_count_fmt">
+        <item quantity="one">%1$d विद्यार्थी</item>
+        <item quantity="other">%1$d विद्यार्थी</item>
+    </plurals>
+    <plurals name="results_class_students">
+        <item quantity="one">%1$s - %2$s | %3$d विद्यार्थी</item>
+        <item quantity="other">%1$s - %2$s | %3$d विद्यार्थी</item>
+    </plurals>
+    <plurals name="fees_exam_blocked_count">
+        <item quantity="one">%1$d परीक्षा अवरोधित</item>
+        <item quantity="other">%1$d परीक्षा अवरोधित</item>
+    </plurals>
+    <plurals name="fees_result_held_count">
+        <item quantity="one">%1$d निकाल रोखला</item>
+        <item quantity="other">%1$d निकाल रोखले</item>
+    </plurals>
+    <plurals name="leave_applying_range_fmt">
+        <item quantity="one">%2$s ते %3$s पर्यंत %1$s साठी अर्ज (%4$d दिवस)</item>
+        <item quantity="other">%2$s ते %3$s पर्यंत %1$s साठी अर्ज (%4$d दिवस)</item>
+    </plurals>
+</resources>

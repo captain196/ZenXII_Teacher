@@ -76,6 +76,8 @@ import com.schoolsync.teacher.ui.components.bouncyClickable
 import com.schoolsync.teacher.util.AttachmentUrlValidator
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 @Composable
 fun EventsTeacherScreen(
@@ -95,7 +97,7 @@ fun EventsTeacherScreen(
 
         when {
             state.isLoading && state.events.isEmpty() -> LoadingState()
-            state.error != null && state.events.isEmpty() -> ErrorState(state.error ?: "Failed to load events")
+            state.error != null && state.events.isEmpty() -> ErrorState(state.error ?: stringResource(R.string.ev_load_failed))
             state.events.isEmpty() -> EmptyState(onRefresh = viewModel::refresh)
             else -> EventsList(state.events, onEventClick = { selectedEventId = it.id })
         }
@@ -128,7 +130,7 @@ private fun EventsHeader(onRefresh: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Events",
+            text = stringResource(R.string.nav_events),
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -137,7 +139,7 @@ private fun EventsHeader(onRefresh: () -> Unit) {
         IconButton(onClick = onRefresh) {
             Icon(
                 imageVector = Icons.Filled.Refresh,
-                contentDescription = "Refresh",
+                contentDescription = stringResource(R.string.common_refresh),
                 tint = MaterialTheme.colorScheme.onBackground
             )
         }
@@ -184,7 +186,7 @@ private fun EventCard(evt: EventDoc, onClick: () -> Unit) {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = evt.title.ifBlank { "Untitled event" },
+                    text = evt.title.ifBlank { stringResource(R.string.ev_untitled_event) },
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -264,9 +266,9 @@ private fun LoadingState() {
 private fun EmptyState(onRefresh: () -> Unit = {}) {
     com.schoolsync.teacher.ui.components.EmptyStatePro(
         icon = Icons.Filled.Event,
-        title = "No events scheduled",
-        description = "Upcoming PTMs, sports days and assemblies will appear here.",
-        actionLabel = "Refresh",
+        title = stringResource(R.string.ev_none),
+        description = stringResource(R.string.ev_none_hint),
+        actionLabel = stringResource(R.string.common_refresh),
         onAction = onRefresh,
     )
 }
@@ -481,7 +483,7 @@ private fun EventCoverPane(
             StatusPill(event.status)
             Spacer(Modifier.height(8.dp))
             Text(
-                text = event.title.ifBlank { "Untitled event" },
+                text = event.title.ifBlank { stringResource(R.string.ev_untitled_event) },
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -569,7 +571,7 @@ private fun EventFooter(
             Icon(Icons.Filled.PhotoLibrary, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                text = if (count > 0) "View all photos ($count)" else "View gallery",
+                text = if (count > 0) stringResource(R.string.ev_view_all_photos, count) else stringResource(R.string.ev_view_gallery),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -610,7 +612,7 @@ private fun EventMediaGrid(
     val extra = (totalCount - shown.size).coerceAtLeast(0)
 
     Text(
-        text = "Photos",
+        text = stringResource(R.string.ev_photos),
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         color = scheme.onSurfaceVariant
@@ -637,7 +639,7 @@ private fun EventMediaGrid(
                     EventMediaThumb(
                         url = url,
                         context = context,
-                        contentDescription = "Event photo",
+                        contentDescription = stringResource(R.string.ev_photo),
                         modifier = Modifier.fillMaxSize()
                     )
                     if (isLastShown && extra > 0) {
@@ -663,7 +665,8 @@ private fun EventMediaGrid(
 private fun formatDate(raw: String): String {
     if (raw.isBlank()) return "—"
     return try {
-        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        // machine parser — reads a server-written date; must stay Locale.ROOT.
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
         val formatter = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
         parser.parse(raw)?.let { formatter.format(it) } ?: raw
     } catch (e: Exception) {

@@ -12,6 +12,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /**
  * Drives the forced password-change screen shown to a teacher whose
@@ -39,6 +43,9 @@ sealed class ForceChangePasswordEvent {
 @HiltViewModel
 class ForceChangePasswordViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ForceChangePasswordUiState())
@@ -80,7 +87,7 @@ class ForceChangePasswordViewModel @Inject constructor(
                 },
                 onFailure = { e ->
                     _uiState.update {
-                        it.copy(isSubmitting = false, errorMessage = e.message ?: "Reset failed.")
+                        it.copy(isSubmitting = false, errorMessage = e.message ?: appContext.localizedString(R.string.vm_reset_failed))
                     }
                 },
             )
@@ -96,11 +103,11 @@ class ForceChangePasswordViewModel @Inject constructor(
 
     private fun validate(new: String, confirm: String): String? {
         // Mirrors the server-side policy in Auth_api::clear_must_change.
-        if (new.length < 8 || new.length > 72) return "Password must be 8–72 characters."
-        if (!new.any { it.isUpperCase() })       return "Must include an uppercase letter."
-        if (!new.any { it.isLowerCase() })       return "Must include a lowercase letter."
-        if (!new.any { it.isDigit() })           return "Must include a digit."
-        if (new != confirm)                      return "Passwords do not match."
+        if (new.length < 8 || new.length > 72) return appContext.localizedString(R.string.vm_pw_length)
+        if (!new.any { it.isUpperCase() })       return appContext.localizedString(R.string.vm_pw_upper)
+        if (!new.any { it.isLowerCase() })       return appContext.localizedString(R.string.vm_pw_lower)
+        if (!new.any { it.isDigit() })           return appContext.localizedString(R.string.vm_pw_digit)
+        if (new != confirm)                      return appContext.localizedString(R.string.vm_pw_mismatch)
         return null
     }
 }

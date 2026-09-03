@@ -102,6 +102,10 @@ import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.glassCard
 import kotlinx.coroutines.delay
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.CanonicalLabels
+import androidx.compose.ui.res.pluralStringResource
 
 @Composable
 fun StudentsScreen(
@@ -183,7 +187,7 @@ fun StudentsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "No students found",
+                                    text = stringResource(R.string.att_no_students),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = TextSecondary
                                 )
@@ -293,7 +297,7 @@ private fun StudentsHeader(
     ) {
         // Title
         Text(
-            text = "Students",
+            text = stringResource(R.string.nav_students),
             style = MaterialTheme.typography.headlineMedium,
             color = TextPrimary,
             fontWeight = FontWeight.Bold
@@ -316,7 +320,8 @@ private fun StudentsHeader(
                 ) {
                     Text(
                         text = if (state.selectedClassName.isNotEmpty())
-                            "${state.selectedClassName}-${state.selectedSection}" else "Class",
+                            "${state.selectedClassName}-${state.selectedSection}"
+                        else stringResource(R.string.students_class_fallback),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp
@@ -350,7 +355,7 @@ private fun StudentsHeader(
             OutlinedTextField(
                 value = state.searchQuery,
                 onValueChange = onSearchChanged,
-                placeholder = { Text("Search...", fontSize = 12.sp) },
+                placeholder = { Text(stringResource(R.string.common_search_hint), fontSize = 12.sp) },
                 leadingIcon = {
                     Icon(Icons.Filled.Search, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(18.dp))
                 },
@@ -371,7 +376,9 @@ private fun StudentsHeader(
 
             // Count badge
             Text(
-                text = "${state.filteredStudents.size} students",
+                text = pluralStringResource(
+                    R.plurals.stu_count_fmt,
+                    state.filteredStudents.size, state.filteredStudents.size),
                 style = MaterialTheme.typography.labelMedium,
                 color = TextTertiary
             )
@@ -391,8 +398,12 @@ private fun StudentsHeader(
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Text(
-                    text = if (state.isClassTeacher) "Class Teacher"
-                    else "Subject: ${state.assignedSubjects.joinToString(", ").ifEmpty { "Assigned" }}",
+                    text = if (state.isClassTeacher) stringResource(R.string.search_class_teacher)
+                    else stringResource(
+                        R.string.students_subject_fmt,
+                        state.assignedSubjects.joinToString(", ")
+                            .ifEmpty { stringResource(R.string.students_assigned) }
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (state.isClassTeacher) Teal else InfoBlue,
                     fontWeight = FontWeight.SemiBold,
@@ -403,7 +414,7 @@ private fun StudentsHeader(
             }
 
             IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
             }
         }
     }
@@ -468,14 +479,14 @@ private fun StudentCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Roll: ${student.rollNo}",
+                    text = stringResource(R.string.stu_roll_fmt, student.rollNo),
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary,
                     fontSize = 10.sp
                 )
                 if (student.fatherName.isNotEmpty()) {
                     Text(
-                        text = "F: ${student.fatherName}",
+                        text = stringResource(R.string.students_father_fmt, student.fatherName),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         fontSize = 10.sp,
@@ -495,7 +506,7 @@ private fun StudentCard(
             ) {
                 Icon(
                     Icons.Filled.Flag,
-                    contentDescription = "Flag ${student.name}",
+                    contentDescription = stringResource(R.string.stu_flag_cd, student.name),
                     tint = ErrorRed,
                     modifier = Modifier.size(20.dp)
                 )
@@ -516,7 +527,7 @@ private fun StudentCard(
                 ) {
                     Icon(
                         Icons.Filled.Call,
-                        contentDescription = "Call ${student.name}",
+                        contentDescription = stringResource(R.string.stu_call_cd, student.name),
                         tint = Teal,
                         modifier = Modifier.size(20.dp)
                     )
@@ -545,10 +556,10 @@ private fun StudentDetailPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Close", tint = TextSecondary)
+                Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.common_close), tint = TextSecondary)
             }
             Text(
-                text = "Student Profile",
+                text = stringResource(R.string.stu_profile),
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold
@@ -598,7 +609,7 @@ private fun StudentDetailPanel(
         )
 
         Text(
-            text = "${student.className} - ${student.section} | Roll: ${student.rollNo}",
+            text = stringResource(R.string.stu_class_roll_fmt, student.className, student.section, student.rollNo),
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -610,15 +621,15 @@ private fun StudentDetailPanel(
         Spacer(modifier = Modifier.height(12.dp))
 
         // Detail rows
-        ProfileDetailRow("Student ID", student.studentId)
-        ProfileDetailRow("Father's Name", student.fatherName)
-        ProfileDetailRow("Mother's Name", student.motherName)
-        ProfileDetailRow("Date of Birth", student.dob)
-        ProfileDetailRow("Gender", student.gender)
-        ProfileDetailRow("Phone", student.phone)
-        ProfileDetailRow("Email", student.email)
-        ProfileDetailRow("Address", student.address)
-        ProfileDetailRow("Admission Date", student.admissionDate)
+        ProfileDetailRow(stringResource(R.string.stu_id), student.studentId)
+        ProfileDetailRow(stringResource(R.string.stu_father), student.fatherName)
+        ProfileDetailRow(stringResource(R.string.stu_mother), student.motherName)
+        ProfileDetailRow(stringResource(R.string.stu_dob), student.dob)
+        ProfileDetailRow(stringResource(R.string.stu_gender), student.gender)
+        ProfileDetailRow(stringResource(R.string.common_phone), student.phone)
+        ProfileDetailRow(stringResource(R.string.common_email), student.email)
+        ProfileDetailRow(stringResource(R.string.profile_card_address), student.address)
+        ProfileDetailRow(stringResource(R.string.stu_admission_date), student.admissionDate)
 
         // ── Fees snapshot: per-month paid chips ──
         // Data comes from the canonical Firestore collections that the
@@ -640,7 +651,7 @@ private fun StudentDetailPanel(
 private fun FeeSnapshotCard(monthFee: Map<String, Int>) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "FEES",
+            text = stringResource(R.string.stu_fees_hdr),
             style = MaterialTheme.typography.labelMedium,
             color = TextTertiary,
             fontWeight = FontWeight.Bold
@@ -658,7 +669,7 @@ private fun FeeSnapshotCard(monthFee: Map<String, Int>) {
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Monthly Status",
+                    text = stringResource(R.string.stu_monthly_status),
                     style = MaterialTheme.typography.labelMedium,
                     color = TextSecondary,
                     fontWeight = FontWeight.Medium
@@ -692,7 +703,9 @@ private fun FeeSnapshotCard(monthFee: Map<String, Int>) {
 private fun MonthChip(month: String, isPaid: Boolean) {
     val bg  = if (isPaid) SuccessGreenSurface else WarningAmberSurface
     val fg  = if (isPaid) SuccessGreen        else WarningAmber
-    val label = if (month == "Yearly Fees") "Yearly" else month.take(3)
+    // `month` is the WIRE value ("Yearly Fees" / "April"); only the label localizes.
+    val label = if (month == "Yearly Fees")  /* i18n-ignore: wire value */ stringResource(R.string.fees_yearly_short)
+                else CanonicalLabels.monthShort(LocalContext.current, month)
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(50))

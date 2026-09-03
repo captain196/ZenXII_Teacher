@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Login branding-panel feature bullets (wide layout only). -->
+<resources>
+    <string name="login_feature_attendance">सेकंडों में उपस्थिति लें</string>
+    <string name="login_feature_marks">स्वतः गणना के साथ अंक अपलोड करें</string>
+    <string name="login_feature_communicate">अभिभावकों से तुरंत संवाद करें</string>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Three-letter month labels. month.take(3) on the server's English name renders Latin in every locale. -->
+<resources>
+    <string name="month_short_january">Jan</string>
+    <string name="month_short_february">Feb</string>
+    <string name="month_short_march">Mar</string>
+    <string name="month_short_april">Apr</string>
+    <string name="month_short_may">May</string>
+    <string name="month_short_june">Jun</string>
+    <string name="month_short_july">Jul</string>
+    <string name="month_short_august">Aug</string>
+    <string name="month_short_september">Sep</string>
+    <string name="month_short_october">Oct</string>
+    <string name="month_short_november">Nov</string>
+    <string name="month_short_december">Dec</string>
+</resources>

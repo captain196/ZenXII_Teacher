@@ -115,6 +115,8 @@ import com.schoolsync.teacher.ui.theme.glassCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.pluralStringResource
+import com.schoolsync.teacher.util.DisplayFormat
 
 @Composable
 fun DashboardScreen(
@@ -216,7 +218,7 @@ fun DashboardScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Substitute covering your classes: $subInfo",
+                            text = stringResource(R.string.dash_substitute_covering, subInfo),
                             style = MaterialTheme.typography.labelMedium,
                             color = TextPrimary,
                             fontWeight = FontWeight.Medium,
@@ -246,7 +248,7 @@ fun DashboardScreen(
                         // `+` just takes them there rather than hoisting the
                         // whole upload dialog onto the dashboard.
                         onCreateStory = onCreateStory,
-                        title = "Stories",
+                        title = stringResource(R.string.nav_stories),
                         showWhenEmpty = false
                     )
                 } else if (storiesLoading) {
@@ -285,17 +287,17 @@ fun DashboardScreen(
                 }
 
                 // ── Quick actions (horizontal rail) ──
-                DashSectionHeader(title = "Quick actions", onViewAll = { onNavigate(Route.More.route) })
+                DashSectionHeader(title = stringResource(R.string.dash_quick_actions), onViewAll = { onNavigate(Route.More.route) })
                 QuickActionsRail(onNavigate = onNavigate, canAccess = canAccess)
 
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // ── Upcoming events (horizontal rail) ──
-                DashSectionHeader(title = "Upcoming events", onViewAll = { onNavigate(Route.Events.route) })
+                DashSectionHeader(title = stringResource(R.string.dash_upcoming_events), onViewAll = { onNavigate(Route.Events.route) })
                 if (state.upcomingEvents.isEmpty() && state.eventsLoading) {
                     // Shimmer while the (separately-launched) events fetch is
                     // still in flight, so the rail fades in instead of showing
-                    // "No upcoming events" then popping to real cards.
+                    // stringResource(R.string.dash_no_upcoming_events) then popping to real cards.
                     EventsRailShimmer()
                 } else {
                     UpcomingEventsRail(
@@ -307,7 +309,7 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // ── All modules ──
-                DashSectionHeader(title = "All modules", onViewAll = null)
+                DashSectionHeader(title = stringResource(R.string.dash_all_modules), onViewAll = null)
                 ModulesGrid(onNavigate = onNavigate, canAccess = canAccess)
             }
         }
@@ -346,8 +348,9 @@ private fun DashboardHeader(
     onSearchClick: () -> Unit = {}
 ) {
     val c = LocalAppColors.current
-    val dateFormat = SimpleDateFormat("EEEE, dd MMM yyyy", Locale.getDefault())
-    val today = dateFormat.format(Date())
+    // Via DisplayFormat so digits stay Latin and the formatter is rebuilt per
+    // call rather than captured.
+    val today = DisplayFormat.pattern(Date(), "EEEE, dd MMM yyyy")
 
     Box(
         modifier = Modifier
@@ -436,7 +439,7 @@ private fun HeaderSearchBox(onClick: () -> Unit) {
         Icon(Icons.Filled.Search, null, tint = TextTertiary, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(9.dp))
         Text(
-            text = "Search",
+            text = stringResource(R.string.common_search),
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
             maxLines = 1,
@@ -482,7 +485,7 @@ private fun NextClassPill(schedule: List<PeriodItem>) {
         Spacer(Modifier.width(7.dp))
         Text(
             text = buildString {
-                append(if (isNow) "Now: " else "Next: ")
+                append(stringResource(if (isNow) R.string.dash_now_prefix else R.string.dash_next_prefix))
                 append(target.subject)
                 append(" · ")
                 append(classSec)
@@ -577,7 +580,7 @@ private fun ScheduleAgendaTile(
                 val done = classPeriods.count { it.status == PeriodStatus.DONE }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = stringResource(R.string.dashboard_periods_count, classPeriods.size),
+                        text = pluralStringResource(R.plurals.dashboard_periods_count, classPeriods.size, classPeriods.size),
                         style = MaterialTheme.typography.labelMedium,
                         color = TextTertiary
                     )
@@ -591,7 +594,7 @@ private fun ScheduleAgendaTile(
                 }
             } else {
                 Text(
-                    text = stringResource(R.string.dashboard_periods_count, schedule.size),
+                    text = pluralStringResource(R.plurals.dashboard_periods_count, schedule.size, schedule.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = TextTertiary
                 )
@@ -620,7 +623,7 @@ private fun ScheduleAgendaTile(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Couldn't load your schedule",
+                        text = stringResource(R.string.dash_schedule_error),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextPrimary,
                         fontWeight = FontWeight.Medium
@@ -642,7 +645,7 @@ private fun ScheduleAgendaTile(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Retry",
+                            text = stringResource(R.string.common_retry),
                             style = MaterialTheme.typography.labelLarge,
                             color = Teal,
                             fontWeight = FontWeight.SemiBold
@@ -746,7 +749,7 @@ private fun PeriodFlatRow(period: PeriodItem) {
  * The period currently in session. Its whole row lifts off the list into a
  * raised card — elevation (a soft drop-shadow in light, a lighter elevated
  * surface in dark) plus an accent tint, a bold accent bar, and a pulsing
- * "In class now" cue. Elevation, not just color, makes "you are here" read at
+ * stringResource(R.string.dash_in_class_now) cue. Elevation, not just color, makes "you are here" read at
  * a glance. Rendered only when a class is actually live.
  */
 @Composable
@@ -792,7 +795,7 @@ private fun PeriodLiveRow(period: PeriodItem) {
                     PulsingDot(Teal)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "In class now",
+                        text = stringResource(R.string.dash_in_class_now),
                         style = OverlineLabel,
                         color = Teal,
                         fontSize = 9.sp
@@ -819,7 +822,7 @@ private fun PeriodBreakRow(period: PeriodItem) {
         horizontalArrangement = Arrangement.Center
     ) {
         Text(
-            text = period.subject.ifBlank { "Break" }.uppercase(),
+            text = period.subject.ifBlank { stringResource(R.string.tt_break) }.uppercase(),
             style = OverlineLabel,
             color = TextTertiary
         )
@@ -867,7 +870,7 @@ private fun ClassChip(period: PeriodItem, filled: Boolean) {
             append(" ")
             append(sec)
         }
-        append(" · P")
+        append(stringResource(R.string.dash_period_prefix))
         append(period.periodNumber)
     }
     val chipMod = if (filled) {
@@ -928,7 +931,7 @@ private data class DashItem(
     val bg: androidx.compose.ui.graphics.Color
 )
 
-/** Section header with an optional "View all ›" affordance. */
+/** Section header with an optional stringResource(R.string.dash_view_all_arrow) affordance. */
 @Composable
 private fun DashSectionHeader(title: String, onViewAll: (() -> Unit)?) {
     Row(
@@ -953,7 +956,7 @@ private fun DashSectionHeader(title: String, onViewAll: (() -> Unit)?) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "View all",
+                    text = stringResource(R.string.common_view_all),
                     style = MaterialTheme.typography.labelMedium,
                     color = Teal,
                     fontWeight = FontWeight.SemiBold
@@ -964,7 +967,7 @@ private fun DashSectionHeader(title: String, onViewAll: (() -> Unit)?) {
     }
 }
 
-/** 2×2 "Today at a glance" KPI grid (no fabricated trend deltas). */
+/** 2×2 stringResource(R.string.dash_today_glance) KPI grid (no fabricated trend deltas). */
 @Composable
 private fun GlanceKpiGrid(stats: List<QuickStat>, modifier: Modifier = Modifier) {
     val dash = stringResource(R.string.stat_dash)
@@ -1042,14 +1045,14 @@ private fun GlanceKpiCard(
 @Composable
 private fun QuickActionsRail(onNavigate: (String) -> Unit, canAccess: (String) -> Boolean = { true }) {
     val actions = listOf(
-        DashItem("Take Attendance", Icons.Filled.HowToReg, Route.Attendance.route, SuccessGreen, SuccessGreenSurface),
-        DashItem("Add Homework", Icons.Filled.MenuBook, Route.Homework.route, WarningAmber, WarningAmberSurface),
-        DashItem("Enter Marks", Icons.Filled.Grade, Route.Marks.route, Teal, TealSurface),
-        DashItem("Post Notice", Icons.Filled.Campaign, Route.Notices.route, InfoBlue, InfoBlueSurface),
-        DashItem("Chat", Icons.AutoMirrored.Filled.Chat, Route.Messages.route, InfoBlue, InfoBlueSurface),
-        DashItem("Clock In", Icons.Filled.Fingerprint, Route.MyAttendance.route, Teal, TealSurface),
-        DashItem("Red Flags", Icons.Filled.Flag, Route.RedFlags.route, ErrorRed, ErrorRedSurface),
-        DashItem("Apply Leave", Icons.Filled.EventNote, Route.Leave.route, InfoBlue, InfoBlueSurface)
+        DashItem(stringResource(R.string.dash_take_attendance), Icons.Filled.HowToReg, Route.Attendance.route, SuccessGreen, SuccessGreenSurface),
+        DashItem(stringResource(R.string.dash_add_homework), Icons.Filled.MenuBook, Route.Homework.route, WarningAmber, WarningAmberSurface),
+        DashItem(stringResource(R.string.dash_enter_marks), Icons.Filled.Grade, Route.Marks.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.dash_post_notice), Icons.Filled.Campaign, Route.Notices.route, InfoBlue, InfoBlueSurface),
+        DashItem(stringResource(R.string.nav_chat), Icons.AutoMirrored.Filled.Chat, Route.Messages.route, InfoBlue, InfoBlueSurface),
+        DashItem(stringResource(R.string.dash_clock_in), Icons.Filled.Fingerprint, Route.MyAttendance.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.dash_red_flags), Icons.Filled.Flag, Route.RedFlags.route, ErrorRed, ErrorRedSurface),
+        DashItem(stringResource(R.string.dash_apply_leave), Icons.Filled.EventNote, Route.Leave.route, InfoBlue, InfoBlueSurface)
     ).filter { canAccess(it.route) }
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
@@ -1178,7 +1181,7 @@ private fun UpcomingEventsRail(events: List<EventDoc>, onClick: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "No upcoming events",
+                text = stringResource(R.string.dash_no_upcoming_events),
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextTertiary
             )
@@ -1282,8 +1285,10 @@ private fun EventRailCard(event: EventDoc, onClick: () -> Unit) {
 private fun parseEventDate(iso: String): Pair<String, String> {
     return try {
         val p = iso.split("-")
-        val months = arrayOf("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
-        p[2].padStart(2, '0') to months[p[1].toInt() - 1]
+        // Localized short month name rather than a hardcoded English array —
+        // DateFormatSymbols follows Locale.getDefault(), which LocaleManager sets.
+        val months = java.text.DateFormatSymbols.getInstance().shortMonths
+        p[2].padStart(2, '0') to months[p[1].toInt() - 1].uppercase()
     } catch (_: Exception) {
         "" to ""
     }
@@ -1294,23 +1299,23 @@ private fun parseEventDate(iso: String): Pair<String, String> {
 @Composable
 private fun ModulesGrid(onNavigate: (String) -> Unit, canAccess: (String) -> Boolean = { true }) {
     val modules = listOf(
-        DashItem("Attendance", Icons.Filled.HowToReg, Route.Attendance.route, Teal, TealSurface),
-        DashItem("Marks", Icons.Filled.Grade, Route.Marks.route, Teal, TealSurface),
-        DashItem("Results", Icons.Filled.Leaderboard, Route.Results.route, Teal, TealSurface),
-        DashItem("Homework", Icons.Filled.MenuBook, Route.Homework.route, Teal, TealSurface),
-        DashItem("Timetable", Icons.Filled.Schedule, Route.Timetable.route, Teal, TealSurface),
-        DashItem("Students", Icons.Filled.People, Route.Students.route, Teal, TealSurface),
-        DashItem("Chat", Icons.AutoMirrored.Filled.Chat, Route.Messages.route, Teal, TealSurface),
-        DashItem("Notices", Icons.Filled.Campaign, Route.Notices.route, Teal, TealSurface),
-        DashItem("Leave", Icons.Filled.EventNote, Route.Leave.route, Teal, TealSurface),
-        DashItem("Red Flags", Icons.Filled.Flag, Route.RedFlags.route, Teal, TealSurface),
-        DashItem("My Attendance", Icons.Filled.Fingerprint, Route.MyAttendance.route, Teal, TealSurface),
-        DashItem("Gallery", Icons.Filled.Image, Route.Gallery.route, Teal, TealSurface),
-        DashItem("Events", Icons.Filled.Event, Route.Events.route, Teal, TealSurface),
-        DashItem("Lesson Plan", Icons.Filled.Description, Route.LessonPlan.route, Teal, TealSurface),
-        DashItem("Library", Icons.Filled.LocalLibrary, Route.Library.route, Teal, TealSurface),
-        DashItem("PTM", Icons.Filled.Groups, Route.Ptm.route, Teal, TealSurface),
-        DashItem("Payslips", Icons.Filled.Payments, Route.Payslips.route, Teal, TealSurface)
+        DashItem(stringResource(R.string.mod_attendance), Icons.Filled.HowToReg, Route.Attendance.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_marks), Icons.Filled.Grade, Route.Marks.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_results), Icons.Filled.Leaderboard, Route.Results.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.mod_homework), Icons.Filled.MenuBook, Route.Homework.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.mod_timetable), Icons.Filled.Schedule, Route.Timetable.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_students), Icons.Filled.People, Route.Students.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_chat), Icons.AutoMirrored.Filled.Chat, Route.Messages.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_notices), Icons.Filled.Campaign, Route.Notices.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_leave), Icons.Filled.EventNote, Route.Leave.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.dash_red_flags), Icons.Filled.Flag, Route.RedFlags.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.mod_my_attendance), Icons.Filled.Fingerprint, Route.MyAttendance.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_gallery), Icons.Filled.Image, Route.Gallery.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_events), Icons.Filled.Event, Route.Events.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.mod_lesson_plan), Icons.Filled.Description, Route.LessonPlan.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_library), Icons.Filled.LocalLibrary, Route.Library.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.nav_ptm), Icons.Filled.Groups, Route.Ptm.route, Teal, TealSurface),
+        DashItem(stringResource(R.string.mod_payslips), Icons.Filled.Payments, Route.Payslips.route, Teal, TealSurface)
     ).filter { canAccess(it.route) }
     FlowRow(
         modifier = Modifier
@@ -1484,7 +1489,7 @@ private fun TodayAttendanceWidget(att: TodayAttendanceSummary) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Today's Attendance",
+                stringResource(R.string.dash_todays_attendance),
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -1564,10 +1569,10 @@ private fun TodayAttendanceWidget(att: TodayAttendanceSummary) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            AttDot(color = SuccessGreen, count = att.present + att.tardy, label = "Present")
-            AttDot(color = ErrorRed, count = att.absent, label = "Absent")
-            AttDot(color = WarningAmber, count = att.leave, label = "Leave")
-            AttDot(color = TextTertiary, count = att.unmarked, label = "Unmarked")
+            AttDot(color = SuccessGreen, count = att.present + att.tardy, label = stringResource(R.string.attendance_status_present))
+            AttDot(color = ErrorRed, count = att.absent, label = stringResource(R.string.attendance_status_absent))
+            AttDot(color = WarningAmber, count = att.leave, label = stringResource(R.string.attendance_status_leave))
+            AttDot(color = TextTertiary, count = att.unmarked, label = stringResource(R.string.att_unmarked))
         }
     }
 }

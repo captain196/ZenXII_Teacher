@@ -83,6 +83,10 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.CanonicalLabels
 
 /**
  * Phase 7 — Teacher's "Today" lesson planner.
@@ -102,13 +106,14 @@ fun TodayLessonsScreen(
     val scope = rememberCoroutineScope()
 
     // Surface ViewModel events via Snackbar
+    val ctx = LocalContext.current
     LaunchedEffect(Unit) {
         viewModel.events.collect { ev ->
             when (ev) {
-                is LessonPlanEvent.Saved    -> snackbarHostState.showSnackbar(ev.message)
+                is LessonPlanEvent.Saved    -> snackbarHostState.showSnackbar(ctx.getString(ev.messageRes))
                 is LessonPlanEvent.Error    -> snackbarHostState.showSnackbar(ev.message)
                 LessonPlanEvent.Conflict    -> snackbarHostState.showSnackbar(
-                    "Plan was modified elsewhere. Reloading…"
+                    ctx.getString(R.string.lp_conflict)
                 )
             }
         }
@@ -128,7 +133,7 @@ fun TodayLessonsScreen(
                         Icon(Icons.Filled.EventNote, null, tint = Teal, modifier = Modifier.size(24.dp))
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text("Lesson Planner", color = TextPrimary,
+                            Text(stringResource(R.string.lp_title), color = TextPrimary,
                                 fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                             Text(state.dayLabel, color = TextSecondary, fontSize = 12.sp)
                         }
@@ -149,7 +154,7 @@ fun TodayLessonsScreen(
                             Icon(Icons.Filled.EventNote, null, tint = TextTertiary,
                                 modifier = Modifier.size(40.dp))
                             Spacer(Modifier.height(8.dp))
-                            Text("No periods scheduled today", color = TextSecondary, fontSize = 13.sp)
+                            Text(stringResource(R.string.lp_no_periods), color = TextSecondary, fontSize = 13.sp)
                         }
                     }
                     else -> LazyColumn(
@@ -252,7 +257,7 @@ private fun SlotCard(
             // Topic snippet
             val topicLabel = plan?.topicTitle?.takeIf { it.isNotBlank() }
                 ?: plan?.notes?.takeIf { it.isNotBlank() }
-                ?: "No topic set — tap to edit"
+                ?: stringResource(R.string.lp_no_topic_set)
             Spacer(Modifier.height(6.dp))
             Text(topicLabel, color = TextSecondary, fontSize = 12.sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -267,7 +272,7 @@ private fun SlotCard(
                 ) {
                     Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Done", fontSize = 11.sp)
+                    Text(stringResource(R.string.lp_done), fontSize = 11.sp)
                 }
                 OutlinedButton(
                     onClick = onSkip, enabled = !saving && status != "skipped",
@@ -276,7 +281,7 @@ private fun SlotCard(
                 ) {
                     Icon(Icons.Filled.SkipNext, null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Skip", fontSize = 11.sp)
+                    Text(stringResource(R.string.lp_skip), fontSize = 11.sp)
                 }
                 Spacer(Modifier.weight(1f))
                 TextButton(
@@ -286,7 +291,7 @@ private fun SlotCard(
                 ) {
                     Icon(Icons.Filled.Edit, null, modifier = Modifier.size(14.dp), tint = Teal)
                     Spacer(Modifier.width(4.dp))
-                    Text("Edit", fontSize = 11.sp, color = Teal)
+                    Text(stringResource(R.string.common_edit), fontSize = 11.sp, color = Teal)
                 }
             }
         }
@@ -351,7 +356,7 @@ private fun EditSheetContent(
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
             Text("${slot.entry.subject} · ${slot.entry.className}/${slot.entry.section}",
                 color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text("Period ${slot.entry.periodNumber}  •  ${slot.entry.timeSlot}",
+            Text(stringResource(R.string.lp_period_time, slot.entry.periodNumber.toString(), slot.entry.timeSlot),
                 color = TextSecondary, fontSize = 12.sp)
         }
 
@@ -365,10 +370,10 @@ private fun EditSheetContent(
             // ── Topic dropdown ──
             ExposedDropdownMenuBox(expanded = topicOpen, onExpandedChange = { topicOpen = !topicOpen }) {
                 OutlinedTextField(
-                    value = if (topicTitle.isNotBlank()) topicTitle else if (topicsLoading) "Loading topics…" else "— No topic —",
+                    value = if (topicTitle.isNotBlank()) topicTitle else if (topicsLoading) "Loading topics…" else stringResource(R.string.lp_no_topic),
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Topic") },
+                    label = { Text(stringResource(R.string.lp_topic)) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = topicOpen) },
                     modifier = Modifier.fillMaxWidth().menuAnchor()
                 )
@@ -376,7 +381,7 @@ private fun EditSheetContent(
                     expanded = topicOpen, onDismissRequest = { topicOpen = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("— No topic —") },
+                        text = { Text(stringResource(R.string.lp_no_topic)) },
                         onClick = { topicId = ""; topicTitle = ""; topicOpen = false }
                     )
                     topics.forEach { t ->
@@ -393,7 +398,7 @@ private fun EditSheetContent(
                     }
                     if (topics.isEmpty() && !topicsLoading) {
                         DropdownMenuItem(
-                            text = { Text("No topics found in curriculum", color = TextTertiary, fontSize = 11.sp) },
+                            text = { Text(stringResource(R.string.lp_no_topics_curriculum), color = TextTertiary, fontSize = 11.sp) },
                             onClick = {}, enabled = false
                         )
                     }
@@ -406,8 +411,8 @@ private fun EditSheetContent(
             OutlinedTextField(
                 value = notes,
                 onValueChange = { if (it.length <= 2000) notes = it },
-                label = { Text("Notes") },
-                placeholder = { Text("Anything to remember about this period…", fontSize = 12.sp) },
+                label = { Text(stringResource(R.string.lp_notes)) },
+                placeholder = { Text(stringResource(R.string.lp_notes_hint), fontSize = 12.sp) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 200.dp),
                 maxLines = 4
             )
@@ -417,10 +422,14 @@ private fun EditSheetContent(
             // ── Status dropdown ──
             ExposedDropdownMenuBox(expanded = statusOpen, onExpandedChange = { statusOpen = !statusOpen }) {
                 OutlinedTextField(
-                    value = status,
+                    // `status` is the WIRE value (planned/completed/skipped/
+                    // rescheduled) and is what gets written back. Only the
+                    // rendering is localized; the variable is never reassigned
+                    // from a translated label.
+                    value = CanonicalLabels.lessonStatus(LocalContext.current, status),
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Status") },
+                    label = { Text(stringResource(R.string.common_status)) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusOpen) },
                     modifier = Modifier.fillMaxWidth().menuAnchor()
                 )
@@ -428,7 +437,10 @@ private fun EditSheetContent(
                     expanded = statusOpen, onDismissRequest = { statusOpen = false }
                 ) {
                     listOf("planned", "completed", "skipped", "rescheduled").forEach { s ->
-                        DropdownMenuItem(text = { Text(s) }, onClick = { status = s; statusOpen = false })
+                        DropdownMenuItem(
+                            text = { Text(CanonicalLabels.lessonStatus(LocalContext.current, s)) },
+                            onClick = { status = s; statusOpen = false }
+                        )
                     }
                 }
             }
@@ -440,14 +452,14 @@ private fun EditSheetContent(
                     OutlinedTextField(
                         value = rsDate,
                         onValueChange = { rsDate = it },
-                        label = { Text("Reschedule to (YYYY-MM-DD)") },
+                        label = { Text(stringResource(R.string.lp_reschedule_to)) },
                         placeholder = { Text("2026-05-15", fontSize = 12.sp) },
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
                         value = rsP,
                         onValueChange = { rsP = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("Period #") },
+                        label = { Text(stringResource(R.string.lp_period_no)) },
                         modifier = Modifier.width(110.dp)
                     )
                 }
@@ -467,11 +479,11 @@ private fun EditSheetContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(onClick = onCancel, enabled = !isSaving) { Text("Cancel") }
+            OutlinedButton(onClick = onCancel, enabled = !isSaving) { Text(stringResource(R.string.common_cancel)) }
             Spacer(Modifier.weight(1f))
             Button(
                 onClick = {
-                    val rsTo = if (status == "rescheduled") "${rsDate}_P${rsP.ifBlank { "0" }}" else ""
+                    val rsTo = if (status == "rescheduled") "${rsDate}_P${rsP.ifBlank { "0" }}" else ""  // i18n-ignore: Firestore doc key
                     onSave(topicId, topicTitle, notes, status, rsTo)
                 },
                 enabled = !isSaving,
@@ -482,7 +494,7 @@ private fun EditSheetContent(
                         color = Color.White)
                     Spacer(Modifier.width(6.dp))
                 }
-                Text("Save")
+                Text(stringResource(R.string.common_save))
             }
         }
     }

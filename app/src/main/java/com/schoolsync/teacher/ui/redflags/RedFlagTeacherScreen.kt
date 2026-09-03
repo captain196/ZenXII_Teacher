@@ -85,6 +85,8 @@ import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.glassCard
 import com.schoolsync.teacher.util.toRelativeTime
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 @Composable
 fun RedFlagTeacherScreen(
@@ -93,6 +95,8 @@ fun RedFlagTeacherScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    // Hoisted: consumed inside an onClick lambda, which is not a composable scope.
+    val tapFlagHint = stringResource(R.string.rf_tap_hint)
     var lastEventWasError by remember { mutableStateOf(false) }
 
     // Phase 6A — bottom-sheet state for the 1-tap quick flag flow.
@@ -189,9 +193,7 @@ fun RedFlagTeacherScreen(
                                 subjectsForClass = state.subjectsForClass
                             )
                         } else {
-                            viewModel.showHint(
-                                "Tap the 🚩 next to a student to raise a flag"
-                            )
+                            viewModel.showHint(tapFlagHint)
                         }
                     },
                     containerColor = ErrorRed,
@@ -200,7 +202,7 @@ fun RedFlagTeacherScreen(
                 ) {
                     Icon(Icons.Filled.Flag, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("New Flag", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.rf_new), fontWeight = FontWeight.SemiBold)
                 }
                 }
             }
@@ -222,7 +224,7 @@ fun RedFlagTeacherScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = Teal)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Loading flags...", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.rf_loading), color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 } else {
@@ -366,11 +368,11 @@ fun RedFlagTeacherScreen(
         state.error?.let { error ->
             AlertDialog(
                 onDismissRequest = viewModel::clearError,
-                title = { Text("Error", color = TextPrimary) },
+                title = { Text(stringResource(R.string.common_error), color = TextPrimary) },
                 text = { Text(error, color = TextSecondary) },
                 confirmButton = {
                     TextButton(onClick = viewModel::clearError) {
-                        Text("OK", color = Teal)
+                        Text(stringResource(R.string.common_ok), color = Teal)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -413,7 +415,7 @@ private fun RedFlagTopBar(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Red Flags",
+                text = stringResource(R.string.dash_red_flags),
                 style = MaterialTheme.typography.headlineSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -428,7 +430,7 @@ private fun RedFlagTopBar(
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "$totalActive active" + if (totalHigh > 0) " ($totalHigh high)" else "",
+                        text = stringResource(R.string.rf_active_count, totalActive) + if (totalHigh > 0) " ($totalHigh high)" else "",
                         style = MaterialTheme.typography.labelSmall,
                         color = ErrorRed,
                         fontWeight = FontWeight.SemiBold,
@@ -453,7 +455,7 @@ private fun RedFlagTopBar(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
-                        text = state.selectedClass?.displayName ?: "Select Class",
+                        text = state.selectedClass?.displayName ?: stringResource(R.string.att_select_class),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -487,7 +489,7 @@ private fun RedFlagTopBar(
             }
 
             IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
             }
         }
     }
@@ -521,7 +523,7 @@ private fun StudentFlagList(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Students",
+                    text = stringResource(R.string.nav_students),
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimary,
                     fontWeight = FontWeight.SemiBold
@@ -530,7 +532,7 @@ private fun StudentFlagList(
             // "All" button to clear selection
             if (selectedStudentId != null) {
                 TextButton(onClick = { onStudentSelected(null) }) {
-                    Text("View All", color = Teal, fontSize = 11.sp)
+                    Text(stringResource(R.string.rf_view_all), color = Teal, fontSize = 11.sp)
                 }
             }
         }
@@ -544,7 +546,7 @@ private fun StudentFlagList(
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No students found", color = TextTertiary, style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.att_no_students), color = TextTertiary, style = MaterialTheme.typography.bodyMedium)
             }
         } else {
             LazyColumn(
@@ -663,7 +665,7 @@ private fun StudentFlagRow(
         IconButton(onClick = onAddFlag, modifier = Modifier.size(24.dp)) {
             Icon(
                 Icons.Filled.Flag,
-                contentDescription = "Add flag",
+                contentDescription = stringResource(R.string.rf_add),
                 tint = TextTertiary,
                 modifier = Modifier.size(14.dp)
             )
@@ -722,7 +724,7 @@ private fun FlagDetailPanel(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (selectedStudent != null) "Flags - ${selectedStudent.displayName}" else "All Flags",
+                    text = if (selectedStudent != null) stringResource(R.string.rf_flags_of_student, selectedStudent.displayName) else stringResource(R.string.rf_all_flags),
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimary,
                     fontWeight = FontWeight.SemiBold,
@@ -736,10 +738,10 @@ private fun FlagDetailPanel(
                 val activeCount = displayFlags.count { it.second.status == "active" }
                 val resolvedCount = displayFlags.count { it.second.status == "resolved" }
                 if (activeCount > 0) {
-                    MiniChip("$activeCount active", ErrorRed, ErrorRedSurface)
+                    MiniChip(stringResource(R.string.rf_active_count, activeCount), ErrorRed, ErrorRedSurface)
                 }
                 if (resolvedCount > 0) {
-                    MiniChip("$resolvedCount resolved", SuccessGreen, SuccessGreenSurface)
+                    MiniChip(stringResource(R.string.rf_resolved_count, resolvedCount), SuccessGreen, SuccessGreenSurface)
                 }
             }
         }
@@ -762,7 +764,7 @@ private fun FlagDetailPanel(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (selectedStudentId != null) "No flags for this student" else "No flags in this class",
+                        text = if (selectedStudentId != null) stringResource(R.string.rf_none_student) else stringResource(R.string.rf_none_class),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextTertiary
                     )
@@ -825,11 +827,10 @@ private fun FlagCard(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete this flag?", color = TextPrimary) },
+            title = { Text(stringResource(R.string.rf_delete_q), color = TextPrimary) },
             text = {
                 Text(
-                    "The flag will be hidden from your list and the parent's app. " +
-                    "Only an admin can bring it back.",
+                    stringResource(R.string.rf_delete_body),
                     color = TextSecondary
                 )
             },
@@ -840,12 +841,12 @@ private fun FlagCard(
                         onDelete()
                     }
                 ) {
-                    Text("Delete", color = ErrorRed, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.common_delete), color = ErrorRed, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text(stringResource(R.string.common_cancel), color = TextSecondary)
                 }
             },
             containerColor = SurfaceDark,
@@ -897,7 +898,10 @@ private fun FlagCard(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = flag.type.replaceFirstChar { it.uppercase() },
+                        // Display label only; flag.type stays the wire value
+                        // ("homework"), which is compared and written elsewhere.
+                        text = com.schoolsync.teacher.util.CanonicalLabels
+                            .flagType(androidx.compose.ui.platform.LocalContext.current, flag.type),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary,
                         fontSize = 9.sp,
@@ -913,7 +917,10 @@ private fun FlagCard(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = flag.severity.uppercase(),
+                        // .uppercase() would be wrong here anyway: Indic scripts
+                        // have no case, and it is a wire value besides.
+                        text = com.schoolsync.teacher.util.CanonicalLabels
+                            .flagSeverity(androidx.compose.ui.platform.LocalContext.current, flag.severity),
                         style = MaterialTheme.typography.labelSmall,
                         color = severityColor,
                         fontSize = 9.sp,
@@ -929,7 +936,7 @@ private fun FlagCard(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = "RESOLVED",
+                            text = stringResource(R.string.rf_resolved),
                             style = MaterialTheme.typography.labelSmall,
                             color = SuccessGreen,
                             fontSize = 9.sp,
@@ -995,7 +1002,7 @@ private fun FlagCard(
                 }
                 if (flag.teacherName.isNotBlank()) {
                     Text(
-                        text = "by ${flag.teacherName}",
+                        text = stringResource(R.string.flag_by_fmt, flag.teacherName),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         fontSize = 9.sp
@@ -1050,7 +1057,7 @@ private fun FlagCard(
                             Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
                         }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (isBusy) "Deleting…" else "Delete", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (isBusy) "Deleting…" else stringResource(R.string.common_delete), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

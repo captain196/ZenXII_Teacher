@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings hidden from the audit by the escape-sequence / conditional detector holes. -->
+<resources>
+    <string name="att_all_marked">அனைத்தும் குறிக்கப்பட்டது ✓</string>
+    <string name="login_tagline">உங்கள் வகுப்புகள், வருகை, மதிப்பெண்கள்\nஅனைத்தையும் ஒரே இடத்தில் நிர்வகிக்கவும்.</string>
+    <string name="common_hide">மறை</string>
+    <string name="common_show">காட்டு</string>
+    <string name="ev_view_gallery">கேலரியைக் காண</string>
+    <string name="fees_select_class">வகுப்பைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="common_collapse">சுருக்கு</string>
+    <string name="common_expand">விரிவாக்கு</string>
+    <string name="gal_cancel_upload">பதிவேற்றத்தை ரத்து செய்</string>
+    <string name="file_type_image">படம்</string>
+    <string name="file_type_document">ஆவணம்</string>
+    <string name="leave_no_balances">விடுப்பு இருப்பு இன்னும் அமைக்கப்படவில்லை.\nவிடுப்பு வகைகளை அமைக்க நிர்வாகியைத் தொடர்பு கொள்ளவும்.</string>
+    <string name="lib_due_today">இன்று கெடு</string>
+    <string name="reg_clock_in_time">வருகை பதிவு நேரம்</string>
+    <string name="reg_clock_out_time">வெளியேற்றப் பதிவு நேரம்</string>
+    <string name="reg_switch_clock">கடிகாரத்திற்கு மாறு</string>
+    <string name="reg_switch_keyboard">விசைப்பலகை உள்ளீட்டிற்கு மாறு</string>
+    <string name="profile_class_teacher_prefix">வகுப்பு ஆசிரியர்  ·  %1$s</string>
+    <string name="rf_all_flags">அனைத்துக் கொடிகள்</string>
+    <string name="rf_none_student">இந்த மாணவருக்குக் கொடிகள் இல்லை</string>
+    <string name="rf_none_class">இந்த வகுப்பில் கொடிகள் இல்லை</string>
+    <string name="results_no_rank">தரவரிசை இல்லை</string>
+    <string name="results_collapse_subjects">பாடங்களைச் சுருக்கு</string>
+    <string name="results_expand_subjects">பாடங்களை விரிவாக்கு</string>
+    <string name="wt_desc_attendance">ஒரே தட்டலில் டிஜிட்டல் வருகை எடுங்கள்.\nபோக்குகளைக் கண்காணித்து எளிதாக அறிக்கை உருவாக்குங்கள்.</string>
+    <string name="wt_desc_marks">மதிப்பெண்களைப் பதிவேற்றி, தரங்களைத் தானாகக் கணக்கிட்டு,\nமுடிவுகளை உடனே பெற்றோருடன் பகிருங்கள்.</string>
+    <string name="wt_desc_connected">பெற்றோருடன் தொடர்பு கொள்ளுங்கள், அறிவிப்புகளைப் பகிருங்கள்,\nவிடுப்புக் கோரிக்கைகளை ஒரே இடத்தில் நிர்வகிக்கவும்.</string>
+    <string name="wt_get_started">தொடங்கு</string>
+    <string name="wt_next">அடுத்து</string>
+    <string name="story_unmute">ஒலியை இயக்கு</string>
+    <string name="story_mute">ஒலியை அணை</string>
+    <string name="story_none_active">செயலில் ஸ்டோரிகள் இல்லை</string>
+    <string name="story_none_yet">இன்னும் ஸ்டோரிகள் இல்லை</string>
+    <string name="story_past_in_archive">உங்கள் பழைய ஸ்டோரிகள் மேலே காப்பகத்தில் உள்ளன.</string>
+    <string name="tt_lunch">மதிய உணவு</string>
+    <string name="tt_break">இடைவேளை</string>
+    <string name="fees_yearly_short">ஆண்டு</string>
+</resources>

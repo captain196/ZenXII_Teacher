@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 4b: red flags - list, quick-flag sheet, canonical severity/type. -->
+<resources>
+    <string name="rf_new">புதிய கொடி</string>
+    <string name="rf_loading">கொடிகள் ஏற்றப்படுகின்றன...</string>
+    <string name="rf_view_all">அனைத்தையும் காண</string>
+    <string name="rf_add">கொடி சேர்</string>
+    <string name="rf_delete_q">இந்தக் கொடியை நீக்கவா?</string>
+    <string name="rf_resolved">தீர்க்கப்பட்டது</string>
+    <string name="rf_tpl_late_hw">தாமத பாடம்</string>
+    <string name="rf_tpl_behaviour">நடத்தை</string>
+    <string name="rf_tpl_low_perf">குறைந்த செயல்திறன்</string>
+    <string name="rf_quick_reason">விரைவு காரணம்</string>
+    <string name="common_severity">தீவிரம்</string>
+    <string name="common_message">செய்தி</string>
+    <string name="rf_no_subject_note">இந்த வகுப்புக்கு உங்களுக்குப் பாடம் ஒதுக்கப்படவில்லை — இந்தக் கொடி பாடம் இல்லாமல் தாக்கல் செய்யப்படும். உங்கள் பாட ஒதுக்கீட்டை அமைக்க நிர்வாகியிடம் கேளுங்கள்.</string>
+    <string name="rf_subject_required">இந்தத் திரையில் பாடம் தேவை.</string>
+    <string name="common_undo">செயல்தவிர்</string>
+    <string name="rf_more_options">▸ மேலும் விருப்பங்கள்</string>
+    <string name="rf_hide_options">▾ விருப்பங்களை மறை</string>
+    <string name="flag_severity_low">குறைவு</string>
+    <string name="flag_severity_medium">நடுத்தரம்</string>
+    <string name="flag_severity_high">அதிகம்</string>
+    <string name="flag_type_homework">வீட்டுப்பாடம்</string>
+    <string name="flag_type_behavior">நடத்தை</string>
+    <string name="flag_type_performance">செயல்திறன்</string>
+</resources>

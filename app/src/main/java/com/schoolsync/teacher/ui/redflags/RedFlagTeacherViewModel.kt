@@ -25,6 +25,10 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 data class FlagClassSection(
     val className: String,
@@ -65,7 +69,10 @@ class RedFlagTeacherViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
     private val studentRepository: StudentRepository,
     private val tokenManager: TokenManager,
-    private val firebaseAuth: FirebaseAuth
+    private val firebaseAuth: FirebaseAuth,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object {
@@ -201,7 +208,7 @@ class RedFlagTeacherViewModel @Inject constructor(
                 val students = studentsResult.getOrElse { e ->
                     Log.e(TAG, "Failed to load students for class", e)
                     _uiState.update {
-                        it.copy(isLoading = false, error = e.message ?: "Couldn't load students. Pull to retry.")
+                        it.copy(isLoading = false, error = e.message ?: appContext.localizedString(R.string.vm_students_load_failed))
                     }
                     return@launch
                 }
@@ -271,19 +278,19 @@ class RedFlagTeacherViewModel @Inject constructor(
                         // open for a retry.
                         _uiState.update { it.copy(lastCreatedFlagId = flagId) }
                         _events.emit(RedFlagEvent.Success(
-                            "Flag raised for ${flag.studentName}"
+                            appContext.localizedString(R.string.flag_raised_for_fmt, flag.studentName)
                         ))
                     },
                     onFailure = { e ->
                         Log.e(TAG, "Quick flag create failed", e)
                         _events.emit(RedFlagEvent.Error(
-                            e.message ?: "Failed to raise flag"
+                            e.message ?: appContext.localizedString(R.string.vm_flag_failed)
                         ))
                     }
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "submitQuickFlag failed", e)
-                _events.emit(RedFlagEvent.Error(e.message ?: "Failed to raise flag"))
+                _events.emit(RedFlagEvent.Error(e.message ?: appContext.localizedString(R.string.vm_flag_failed)))
             } finally {
                 _uiState.update { it.copy(savingFlag = false) }
             }
@@ -301,11 +308,11 @@ class RedFlagTeacherViewModel @Inject constructor(
             redFlagRepository.softDeleteFlag(flagId).fold(
                 onSuccess = {
                     _uiState.update { it.copy(lastCreatedFlagId = null) }
-                    _events.emit(RedFlagEvent.Success("Flag undone"))
+                    _events.emit(RedFlagEvent.Success(appContext.localizedString(R.string.vm_flag_undone)))
                 },
                 onFailure = { e ->
-                    Log.e(TAG, "Undo failed", e)
-                    _events.emit(RedFlagEvent.Error(e.message ?: "Undo failed"))
+                    Log.e(TAG, appContext.localizedString(R.string.vm_undo_failed), e)
+                    _events.emit(RedFlagEvent.Error(e.message ?: appContext.localizedString(R.string.vm_undo_failed)))
                 }
             )
         }
@@ -336,15 +343,15 @@ class RedFlagTeacherViewModel @Inject constructor(
             try {
                 redFlagRepository.softDeleteFlag(flagId).fold(
                     onSuccess = {
-                        _events.emit(RedFlagEvent.Success("Flag deleted"))
+                        _events.emit(RedFlagEvent.Success(appContext.localizedString(R.string.vm_flag_deleted)))
                         // Live listener reflects the soft-delete; no reload.
                     },
                     onFailure = { e ->
-                        _events.emit(RedFlagEvent.Error(e.message ?: "Failed to delete"))
+                        _events.emit(RedFlagEvent.Error(e.message ?: appContext.localizedString(R.string.vm_delete_failed)))
                     }
                 )
             } catch (e: Exception) {
-                _events.emit(RedFlagEvent.Error(e.message ?: "Failed to delete"))
+                _events.emit(RedFlagEvent.Error(e.message ?: appContext.localizedString(R.string.vm_delete_failed)))
             } finally {
                 _uiState.update { it.copy(busyFlagIds = it.busyFlagIds - flagId) }
             }
@@ -358,17 +365,17 @@ class RedFlagTeacherViewModel @Inject constructor(
             try {
                 redFlagRepository.resolveFlag(flagId).fold(
                     onSuccess = {
-                        _events.emit(RedFlagEvent.Success("Flag resolved"))
+                        _events.emit(RedFlagEvent.Success(appContext.localizedString(R.string.vm_flag_resolved)))
                         // Live listener reflects the resolve; no reload.
                     },
                     onFailure = { e ->
                         // Most common case: Firestore rule denies a teacher
                         // resolving someone else's flag.
-                        _events.emit(RedFlagEvent.Error(e.message ?: "Failed to resolve"))
+                        _events.emit(RedFlagEvent.Error(e.message ?: appContext.localizedString(R.string.vm_resolve_failed)))
                     }
                 )
             } catch (e: Exception) {
-                _events.emit(RedFlagEvent.Error(e.message ?: "Failed to resolve"))
+                _events.emit(RedFlagEvent.Error(e.message ?: appContext.localizedString(R.string.vm_resolve_failed)))
             } finally {
                 _uiState.update { it.copy(busyFlagIds = it.busyFlagIds - flagId) }
             }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c (cont.): GPS/permission state-prompt cards. -->
+<resources>
+    <string name="myatt_perm_blocked_body">હાજરી નોંધવા માટે સિસ્ટમ સેટિંગ્સમાં આ ઍપ માટે સ્થાન ચાલુ કરો.</string>
+    <string name="myatt_open_settings">સેટિંગ્સ ખોલો</string>
+    <string name="myatt_perm_needed_body">તમે કેમ્પસમાં છો તેની ખાતરી માટે હાજરીને તમારું સ્થાન જોઈએ.</string>
+    <string name="myatt_grant_permission">પરવાનગી આપો</string>
+    <string name="myatt_location_off_body">ડિવાઇસ સ્થાન (GPS) ચાલુ કરો, પછી ફરી પ્રયાસ કરો.</string>
+    <string name="myatt_open_location_settings">સ્થાન સેટિંગ્સ ખોલો</string>
+    <string name="myatt_weak_gps_body">ચોક્કસ સ્થાન મળ્યું નહીં. ખુલ્લી જગ્યાએ જાઓ અને ફરી પ્રયાસ કરો. સ્થાન અંદાજિત પર સેટ હોય તો આ ઍપ માટે ચોક્કસ સ્થાન ચાલુ કરો.</string>
+    <string name="myatt_perm_required_body">ચાલુ રાખવા માટે સ્થાન પરવાનગી આપો.</string>
+    <string name="common_something_wrong">કંઈક ખોટું થયું.</string>
+</resources>

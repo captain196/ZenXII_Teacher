@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transport-layer failures, in the staff member's language. -->
+<resources>
+    <string name="err_no_internet">ఇంటర్నెట్ కనెక్షన్ లేదు. దయచేసి మళ్లీ కనెక్ట్ చేసి ప్రయత్నించండి.</string>
+    <string name="err_server_timeout">పాఠశాల సర్వర్ స్పందించడానికి ఎక్కువ సమయం తీసుకుంది. దయచేసి కొద్దిసేపటి తర్వాత ప్రయత్నించండి.</string>
+    <string name="err_session_expired">మీ సెషన్ గడువు ముగిసింది. దయచేసి లాగ్ అవుట్ చేసి మళ్లీ లాగ్ ఇన్ చేయండి.</string>
+    <string name="err_not_found">దాన్ని సర్వర్‌లో కనుగొనలేకపోయాము. దయచేసి రిఫ్రెష్ చేసి ప్రయత్నించండి.</string>
+    <string name="err_server_unavailable">పాఠశాల సర్వర్ తాత్కాలికంగా అందుబాటులో లేదు. దయచేసి కొద్దిసేపట్లో మళ్లీ ప్రయత్నించండి.</string>
+    <string name="err_action_paused">పాఠశాల ఈ చర్యను తాత్కాలికంగా నిలిపివేసింది (సంవత్సరాంతపు మూసివేత లేదా పీరియడ్ లాక్). దయచేసి కొద్దిసేపట్లో మళ్లీ ప్రయత్నించండి లేదా పాఠశాల కార్యాలయాన్ని సంప్రదించండి.</string>
+    <string name="err_cannot_reach_server">పాఠశాల సర్వర్‌ను చేరుకోలేకపోయాము. దయచేసి మీ కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.</string>
+</resources>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-existing keys from strings.xml that had never been translated. -->
+<resources>
+    <string name="action_cancel">रद्द करें</string>
+    <string name="action_change">बदलें</string>
+    <string name="action_close">बंद करें</string>
+    <string name="action_delete">हटाएँ</string>
+    <string name="action_refresh">रीफ़्रेश</string>
+    <string name="action_retry">पुनः प्रयास</string>
+    <string name="action_send">भेजें</string>
+    <string name="action_sending">भेजा जा रहा है…</string>
+    <string name="cd_back">वापस</string>
+    <string name="cd_delete_chat">चैट हटाएँ</string>
+    <string name="cd_notifications">सूचनाएँ</string>
+    <string name="cd_send">भेजें</string>
+    <string name="dashboard_class_teacher_many">कक्षा शिक्षक · %1$s</string>
+    <string name="dashboard_class_teacher_one">कक्षा शिक्षक · %1$s</string>
+    <string name="dashboard_greeting">नमस्ते, %1$s</string>
+    <string name="dashboard_no_classes_today">आज कोई कक्षा निर्धारित नहीं</string>
+    <string name="dashboard_no_recent_activity">कोई हालिया गतिविधि नहीं</string>
+    <string name="dashboard_period_label">क%1$d</string>
+    <string name="dashboard_recent_activity">हालिया गतिविधि</string>
+    <string name="dashboard_title">डैशबोर्ड</string>
+    <string name="dashboard_today_schedule">आज की समय-सारणी</string>
+    <string name="messages_class_label">कक्षा %1$s</string>
+    <string name="messages_class_section">कक्षा %1$s %2$s</string>
+    <string name="messages_compose_to">%1$s को संदेश</string>
+    <string name="messages_delete_chat">चैट हटाएँ</string>
+    <string name="messages_delete_confirm">%1$s के साथ यह बातचीत हटाएँ? यह केवल आपके इनबॉक्स से हटेगी — सामने वाले को यह दिखती रहेगी।</string>
+    <string name="messages_delete_default_name">यह संपर्क</string>
+    <string name="messages_input_placeholder">संदेश लिखें…</string>
+    <string name="messages_new">नया संदेश</string>
+    <string name="messages_no_conversations">अभी कोई बातचीत नहीं</string>
+    <string name="messages_no_matches">कोई मेल नहीं</string>
+    <string name="messages_no_students">कोई छात्र नहीं मिला</string>
+    <string name="messages_parent_of">%1$s के अभिभावक</string>
+    <string name="messages_search_placeholder">नाम या कक्षा से खोजें</string>
+    <string name="messages_select_conversation">एक बातचीत चुनें</string>
+    <string name="messages_select_subtitle">बातचीत शुरू करने हेतु सूची से अभिभावक चुनें</string>
+    <string name="messages_title">संदेश</string>
+    <string name="messages_type_your_message">अपना संदेश लिखें…</string>
+    <string name="notices_by_author">%1$s द्वारा</string>
+    <string name="notices_empty">कोई सूचना नहीं</string>
+    <string name="notices_title">सूचनाएँ</string>
+    <string name="notices_unread">अपठित</string>
+    <string name="stat_active">सक्रिय</string>
+    <string name="stat_assigned">नियत</string>
+    <string name="stat_classes">कक्षाएँ</string>
+    <string name="stat_flags">फ्लैग</string>
+    <string name="stat_hw_due">गृहकार्य देय</string>
+    <string name="stat_periods">कालांश</string>
+    <string name="stat_today">आज</string>
+    <string name="stat_today_lower">आज</string>
+</resources>

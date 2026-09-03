@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two-word UI copy the 3-word prose threshold used to hide. -->
+<resources>
+    <string name="common_submitting_ellipsis">சமர்ப்பிக்கிறது…</string>
+    <string name="att_submit_request">கோரிக்கையைச் சமர்ப்பி</string>
+    <string name="att_correction_pending">திருத்தம் நிலுவையில்</string>
+    <string name="ptm_meetings_title">பெற்றோர்-ஆசிரியர் கூட்டங்கள்</string>
+    <string name="ptm_meeting_single">பெற்றோர்-ஆசிரியர் கூட்டம்</string>
+    <string name="fees_unknown_student">அறியப்படாத மாணவர்</string>
+    <string name="fees_last_payment">கடைசி செலுத்துதல்:</string>
+    <string name="fees_just_reminded">இப்போதுதான் நினைவூட்டப்பட்டது</string>
+    <string name="marks_select_exam">தேர்வைத் தேர்ந்தெடு</string>
+    <string name="marks_select_subject">பாடத்தைத் தேர்ந்தெடு</string>
+    <string name="marks_col_roll_no">எண்</string>
+    <string name="marks_col_student_id">மாணவர் (ID)</string>
+    <string name="myatt_extra_day">கூடுதல் நாள்</string>
+    <string name="myatt_not_marked">குறிக்கப்படவில்லை</string>
+    <string name="myatt_on_campus">வளாகத்தில்</string>
+    <string name="myatt_locating">இருப்பிடம் தேடுகிறது…</string>
+    <string name="myatt_clocking_in">வருகை பதிவாகிறது…</string>
+    <string name="myatt_clock_in">வருகை பதிவு</string>
+    <string name="myatt_clocking_out">வெளியேற்றம் பதிவாகிறது…</string>
+    <string name="myatt_clock_out">வெளியேற்றப் பதிவு</string>
+    <string name="myatt_on_leave_short">விடுப்பில்</string>
+    <string name="myatt_extra_work">கூடுதல் வேலை</string>
+    <string name="reg_set_time">நேரத்தை அமை</string>
+    <string name="login_hide_password">கடவுச்சொல்லை மறை</string>
+    <string name="login_show_password">கடவுச்சொல்லைக் காட்டு</string>
+    <string name="fp_your_school">உங்கள் பள்ளி</string>
+    <string name="gal_upload_media">ஊடகத்தைப் பதிவேற்று</string>
+    <string name="lib_loading">நூலகம் ஏற்றப்படுகிறது...</string>
+    <string name="lib_unknown_author">அறியப்படாத ஆசிரியர்</string>
+    <string name="lib_unknown_book">அறியப்படாத புத்தகம்</string>
+    <string name="dash_todays_attendance">இன்றைய வருகை</string>
+    <string name="story_just_now">இப்போதுதான்</string>
+    <string name="story_search_viewers">பார்வையாளர்களைத் தேடு</string>
+    <string name="story_new_story">புதிய ஸ்டோரி</string>
+    <string name="story_loading">ஸ்டோரிகள் ஏற்றப்படுகின்றன...</string>
+    <string name="story_preparing_preview">முன்னோட்டம் தயாராகிறது…</string>
+    <string name="story_share">ஸ்டோரியைப் பகிர்</string>
+    <string name="profile_marital_status">திருமண நிலை</string>
+    <string name="profile_fathers_name">தந்தையின் பெயர்</string>
+    <string name="profile_alt_phone">மாற்று தொலைபேசி</string>
+    <string name="profile_my_assignments">என் ஒதுக்கீடுகள்</string>
+    <string name="hw_submit_review">மதிப்பாய்வைச் சமர்ப்பி</string>
+    <string name="hw_edit_assignment">பணியைத் திருத்து</string>
+    <string name="hw_new_assignment">புதிய பணி</string>
+    <string name="hw_save_changes">மாற்றங்களைச் சேமி</string>
+    <string name="hw_create_assignment">பணியை உருவாக்கு</string>
+    <string name="ev_untitled_event">தலைப்பில்லா நிகழ்வு</string>
+    <string name="leave_type_label">விடுப்பு வகை</string>
+    <string name="rf_submit_flag">கொடியைச் சமர்ப்பி</string>
+</resources>

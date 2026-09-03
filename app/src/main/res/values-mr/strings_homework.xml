@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3a: homework - list, composer, grading panel. -->
+<resources>
+    <string name="hw_create_new">नवीन गृहपाठ तयार करा</string>
+    <string name="hw_new">नवीन गृहपाठ</string>
+    <string name="hw_delete_q">गृहपाठ हटवायचा?</string>
+    <string name="common_delete">हटवा</string>
+    <string name="hw_all_subjects">सर्व विषय</string>
+    <string name="hw_loading">गृहपाठ लोड होत आहे...</string>
+    <string name="hw_none">गृहपाठ दिलेला नाही</string>
+    <string name="hw_none_hint">नवीन गृहपाठ तयार करण्यासाठी + दाबा</string>
+    <string name="hw_past_due">मुदत संपली</string>
+    <string name="hw_closed">बंद</string>
+    <string name="hw_has_attachments">संलग्नके आहेत</string>
+    <string name="hw_edit">गृहपाठ संपादित करा</string>
+    <string name="hw_close_stop">गृहपाठ बंद करा (सबमिशन थांबवा)</string>
+    <string name="hw_close_panel">पॅनेल बंद करा</string>
+    <string name="hw_submitted">सादर केले</string>
+    <string name="hw_attachments_hdr">संलग्नके</string>
+    <string name="common_open">उघडा</string>
+    <string name="hw_student_response">विद्यार्थ्याचे उत्तर:</string>
+    <string name="hw_score">गुण</string>
+    <string name="hw_score_hint">उदा. 8</string>
+    <string name="hw_score_range">गुण 0–200 दरम्यान असावेत</string>
+    <string name="hw_remark">शेरा</string>
+    <string name="hw_remark_hint">उदा. छान काम, असेच सुरू ठेवा!</string>
+    <string name="common_close">बंद करा</string>
+    <string name="common_title">शीर्षक</string>
+    <string name="hw_title_hint">उदा. धडा 4 — सराव 3</string>
+    <string name="common_details">तपशील</string>
+    <string name="hw_details_hint">विद्यार्थ्यांनी काय करावे?</string>
+    <string name="common_subject">विषय</string>
+    <string name="hw_due_date">मुदत तारीख</string>
+    <string name="common_tomorrow">उद्या</string>
+    <string name="hw_in_3_days">3 दिवसांत</string>
+    <string name="hw_next_week">पुढील आठवड्यात</string>
+    <string name="common_pick_date">तारीख निवडा</string>
+    <string name="common_dismiss">बंद करा</string>
+    <string name="hw_remove_attachment">संलग्नक काढा</string>
+</resources>

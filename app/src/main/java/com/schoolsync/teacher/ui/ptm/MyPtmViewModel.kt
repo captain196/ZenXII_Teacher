@@ -13,6 +13,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
+import com.schoolsync.teacher.util.localizedPlural
 
 data class MyPtmState(
     val isLoading: Boolean = true,
@@ -25,7 +30,10 @@ data class MyPtmState(
 
 @HiltViewModel
 class MyPtmViewModel @Inject constructor(
-    private val ptmRepo: PtmFirestoreRepository
+    private val ptmRepo: PtmFirestoreRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MyPtmState())
@@ -37,7 +45,7 @@ class MyPtmViewModel @Inject constructor(
             try {
                 val ptms = ptmRepo.getMyPtms().getOrElse {
                     Log.w("MyPtmVM", "getMyPtms failed", it)
-                    _state.update { s -> s.copy(isLoading = false, error = it.message ?: "Failed to load.") }
+                    _state.update { s -> s.copy(isLoading = false, error = it.message ?: appContext.localizedString(R.string.vm_ptm_load_failed)) }
                     return@launch
                 }
                 val byPtm = mutableMapOf<String, List<TeacherStudentView>>()
@@ -49,7 +57,7 @@ class MyPtmViewModel @Inject constructor(
                 _state.update { it.copy(isLoading = false, ptms = ptms, rowsByPtm = byPtm) }
             } catch (e: Exception) {
                 Log.e("MyPtmVM", "load exception", e)
-                _state.update { it.copy(isLoading = false, error = e.message ?: "Failed to load.") }
+                _state.update { it.copy(isLoading = false, error = e.message ?: appContext.localizedString(R.string.vm_ptm_load_failed)) }
             }
         }
     }
@@ -62,7 +70,7 @@ class MyPtmViewModel @Inject constructor(
             val res = ptmRepo.markDelivered(ptmEventId, studentId, "delivered")
             if (res.isFailure) {
                 Log.w("MyPtmVM", "markDelivered failed", res.exceptionOrNull())
-                _state.update { it.copy(toast = "Couldn't mark delivered — refreshing.") }
+                _state.update { it.copy(toast = appContext.localizedString(R.string.vm_ptm_mark_failed)) }
                 load()
             }
         }
@@ -75,7 +83,7 @@ class MyPtmViewModel @Inject constructor(
             val res = ptmRepo.markDelivered(ptmEventId, studentId, "no-show")
             if (res.isFailure) {
                 Log.w("MyPtmVM", "markNoShow failed", res.exceptionOrNull())
-                _state.update { it.copy(toast = "Couldn't update — refreshing.") }
+                _state.update { it.copy(toast = appContext.localizedString(R.string.vm_ptm_update_failed)) }
                 load()
             }
         }
@@ -87,7 +95,7 @@ class MyPtmViewModel @Inject constructor(
             val current = _state.value.rowsByPtm[ptmEventId].orEmpty()
             val toFlip = current.filter { it.status == "applied" }
             if (toFlip.isEmpty()) {
-                _state.update { it.copy(toast = "Nothing to mark — list is already settled.") }
+                _state.update { it.copy(toast = appContext.localizedString(R.string.vm_ptm_nothing)) }
                 return@launch
             }
             // Optimistic flip-all
@@ -99,11 +107,11 @@ class MyPtmViewModel @Inject constructor(
             val res = ptmRepo.markAllDelivered(ptmEventId)
             res.fold(
                 onSuccess = { count ->
-                    _state.update { it.copy(toast = "Marked $count student${if (count == 1) "" else "s"} delivered.") }
+                    _state.update { it.copy(toast = appContext.localizedPlural(R.plurals.ptm_marked_delivered, count, count)) }
                 },
                 onFailure = { err ->
                     Log.w("MyPtmVM", "markAllDelivered failed", err)
-                    _state.update { it.copy(toast = "Bulk update failed — refreshing.") }
+                    _state.update { it.copy(toast = appContext.localizedString(R.string.vm_ptm_bulk_failed)) }
                     load()
                 }
             )

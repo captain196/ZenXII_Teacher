@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Interpolated attendance/dashboard copy converted to format strings. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="att_marked_of_total" tools:ignore="PluralsCandidate">%1$d of %2$d marked</string>
+    <string name="att_remaining_fmt" tools:ignore="PluralsCandidate">%1$d remaining</string>
+    <string name="att_roll_fmt">Roll %1$s</string>
+    <string name="att_no_students_in">No students in %1$s</string>
+    <string name="att_reason_count">%1$d / 10+</string>
+    <string name="dash_substitute_covering">Substitute covering your classes: %1$s</string>
+</resources>

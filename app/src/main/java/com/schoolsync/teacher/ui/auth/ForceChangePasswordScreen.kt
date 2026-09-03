@@ -66,6 +66,8 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.glassCard
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 /**
  * Force-change-password screen. Shown when a teacher logs in with a password
@@ -126,7 +128,7 @@ fun ForceChangePasswordScreen(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Logout,
-                    contentDescription = "Sign out",
+                    contentDescription = stringResource(R.string.common_sign_out),
                     tint = TextSecondary,
                 )
             }
@@ -169,7 +171,7 @@ fun ForceChangePasswordScreen(
                         Spacer(Modifier.height(sectionGap))
 
                         Text(
-                            text = "Set a new password",
+                            text = stringResource(R.string.fcp_title),
                             color = TextPrimary,
                             fontSize = titleSize,
                             fontWeight = FontWeight.Bold,
@@ -179,8 +181,7 @@ fun ForceChangePasswordScreen(
                         Spacer(Modifier.height(8.dp))
 
                         Text(
-                            text = "Your password was reset by an administrator. " +
-                                   "Choose a new password to continue.",
+                            text = stringResource(R.string.fcp_reset_by_admin),
                             color = TextSecondary,
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
@@ -192,7 +193,7 @@ fun ForceChangePasswordScreen(
                         OutlinedTextField(
                             value = state.newPassword,
                             onValueChange = viewModel::onNewPasswordChange,
-                            label = { Text("New password") },
+                            label = { Text(stringResource(R.string.fcp_new_password)) },
                             singleLine = true,
                             visualTransformation = if (state.newVisible) {
                                 VisualTransformation.None
@@ -214,7 +215,7 @@ fun ForceChangePasswordScreen(
                                         } else {
                                             Icons.Filled.Visibility
                                         },
-                                        contentDescription = if (state.newVisible) "Hide" else "Show",
+                                        contentDescription = if (state.newVisible) stringResource(R.string.common_hide) else stringResource(R.string.common_show),
                                         tint = TextTertiary,
                                     )
                                 }
@@ -234,7 +235,7 @@ fun ForceChangePasswordScreen(
                         OutlinedTextField(
                             value = state.confirmPassword,
                             onValueChange = viewModel::onConfirmPasswordChange,
-                            label = { Text("Confirm new password") },
+                            label = { Text(stringResource(R.string.fcp_confirm_new_password)) },
                             singleLine = true,
                             visualTransformation = if (state.confirmVisible) {
                                 VisualTransformation.None
@@ -259,7 +260,7 @@ fun ForceChangePasswordScreen(
                                         } else {
                                             Icons.Filled.Visibility
                                         },
-                                        contentDescription = if (state.confirmVisible) "Hide" else "Show",
+                                        contentDescription = if (state.confirmVisible) stringResource(R.string.common_hide) else stringResource(R.string.common_show),
                                         tint = TextTertiary,
                                     )
                                 }
@@ -277,7 +278,7 @@ fun ForceChangePasswordScreen(
                         Spacer(Modifier.height(10.dp))
 
                         Text(
-                            text = "Use 8–72 characters with an uppercase letter, a lowercase letter, and a digit.",
+                            text = stringResource(R.string.fcp_password_rule),
                             color = TextTertiary,
                             fontSize = 11.sp,
                             lineHeight = 15.sp,
@@ -327,7 +328,7 @@ fun ForceChangePasswordScreen(
                                 )
                             } else {
                                 Text(
-                                    text = "Save and continue",
+                                    text = stringResource(R.string.fcp_save_continue),
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -341,7 +342,7 @@ fun ForceChangePasswordScreen(
                             enabled = !state.isSubmitting,
                         ) {
                             Text(
-                                text = "Sign out instead",
+                                text = stringResource(R.string.fcp_sign_out_instead),
                                 fontSize = 13.sp,
                                 color = TextSecondary,
                             )

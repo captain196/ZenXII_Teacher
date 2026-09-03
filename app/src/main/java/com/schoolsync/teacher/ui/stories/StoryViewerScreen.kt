@@ -107,6 +107,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.res.pluralStringResource
 
 private const val IMAGE_DURATION_MS = 6000L
 /**
@@ -260,14 +263,13 @@ fun StoryViewerScreen(
         pendingDeleteStoryId?.let { storyId ->
             AlertDialog(
                 onDismissRequest = { pendingDeleteStoryId = null },
-                title = { Text("Delete this story?", color = TextPrimary) },
+                title = { Text(stringResource(R.string.story_delete_q), color = TextPrimary) },
                 text = {
                     // Capped + scrollable per the app's dialog rule, so the
                     // body can't clip in landscape on a short viewport. No
                     // input field here, so imePadding isn't applicable.
                     Text(
-                        "It disappears for everyone immediately, and its views and " +
-                        "reactions go with it. This can't be undone.",
+                        stringResource(R.string.story_delete_body),
                         color = TextSecondary,
                         modifier = Modifier
                             .heightIn(max = 220.dp)
@@ -278,11 +280,11 @@ fun StoryViewerScreen(
                     TextButton(onClick = {
                         pendingDeleteStoryId = null
                         viewModel.deleteStory(storyId)
-                    }) { Text("Delete", color = ErrorRed, fontWeight = FontWeight.SemiBold) }
+                    }) { Text(stringResource(R.string.common_delete), color = ErrorRed, fontWeight = FontWeight.SemiBold) }
                 },
                 dismissButton = {
                     TextButton(onClick = { pendingDeleteStoryId = null }) {
-                        Text("Cancel", color = TextSecondary)
+                        Text(stringResource(R.string.common_cancel), color = TextSecondary)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -365,14 +367,14 @@ private fun StoryViewerSeenBySheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (count == 1) "1 view" else "$count views",
+                        text = pluralStringResource(R.plurals.story_views_count, count, count),
                         style = MaterialTheme.typography.titleMedium,
                         color = TextPrimary,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.size(34.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary)
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_close), tint = TextSecondary)
                     }
                 }
                 // Stats live in the SAME sheet as the list, so the ⋮ → Insights
@@ -384,10 +386,10 @@ private fun StoryViewerSeenBySheet(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        SeenByStat("Views", insights.displayViewCount.toString(), Modifier.weight(1f))
-                        SeenByStat("Watched", insights.completedCount.toString(), Modifier.weight(1f))
+                        SeenByStat(stringResource(R.string.story_views), insights.displayViewCount.toString(), Modifier.weight(1f))
+                        SeenByStat(stringResource(R.string.story_watched), insights.completedCount.toString(), Modifier.weight(1f))
                         SeenByStat(
-                            "Reactions",
+                            stringResource(R.string.story_reactions),
                             insights.reactionCounts.values.sum().toString(),
                             Modifier.weight(1f)
                         )
@@ -398,7 +400,7 @@ private fun StoryViewerSeenBySheet(
                     if (insights.displayViewCount == 0) {
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Your own views aren't counted — this shows people who opened it.",
+                            text = stringResource(R.string.story_own_views_note),
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary
                         )
@@ -540,6 +542,7 @@ private fun AuthorStoryPage(
     onGroupFinished: () -> Unit
 ) {
     val stories = group.stories
+    val storyByFallback = stringResource(R.string.story_by_fmt, group.authorName)
     if (stories.isEmpty()) return
     // Only the story's own author (the uploader) sees the view count in the
     // viewer chrome; everyone else's chrome hides it. Full "who viewed" list
@@ -737,7 +740,7 @@ private fun AuthorStoryPage(
                 } else {
                     coil.compose.AsyncImage(
                         model = story.mediaUrl,
-                        contentDescription = story.caption.ifBlank { "Story by ${group.authorName}" },
+                        contentDescription = story.caption.ifBlank { storyByFallback },
                         contentScale = ContentScale.Fit,
                         onSuccess = { imageDisplayed = true },
                         onError = { imageFailed = true },
@@ -747,7 +750,7 @@ private fun AuthorStoryPage(
             }
             if (!isVideo && imageFailed) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Couldn't load this story", color = Color.White)
+                    Text(stringResource(R.string.story_load_error), color = Color.White)
                 }
             } else if (!isVideo && !imageDisplayed) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -976,6 +979,8 @@ private fun TopChrome(
         Column(
             modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
+            // Hoisted: Modifier.semantics {} is not a composable scope.
+            val storyIndexCd = stringResource(R.string.story_index_of, currentIndex + 1, storyCount)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -983,7 +988,7 @@ private fun TopChrome(
                     // summary for TalkBack instead of reading each bar's raw
                     // progress percentage.
                     .clearAndSetSemantics {
-                        contentDescription = "Story ${currentIndex + 1} of $storyCount"
+                        contentDescription = storyIndexCd
                     },
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
@@ -1011,7 +1016,7 @@ private fun TopChrome(
                     if (authorPic.isNotBlank()) {
                         coil.compose.AsyncImage(
                             model = authorPic,
-                            contentDescription = "$authorName profile photo",
+                            contentDescription = stringResource(R.string.story_author_photo_cd, authorName),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.size(36.dp).clip(CircleShape)
                         )
@@ -1030,7 +1035,7 @@ private fun TopChrome(
                     Column {
                         Text(authorName, style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(formatStoryTime(createdAt), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
+                            Text(formatStoryTime(LocalContext.current, createdAt), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
                             val reactionTotal = reactionCounts.values.sum()
                             // View count is author-only; reaction total is shown to all.
                             val analytics = buildString {
@@ -1046,7 +1051,7 @@ private fun TopChrome(
                         IconButton(onClick = onToggleMute) {
                             Icon(
                                 imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                                contentDescription = if (isMuted) "Unmute" else "Mute",
+                                contentDescription = if (isMuted) stringResource(R.string.story_unmute) else stringResource(R.string.story_mute),
                                 tint = Color.White,
                                 modifier = Modifier.size(22.dp)
                             )
@@ -1061,7 +1066,7 @@ private fun TopChrome(
                             IconButton(onClick = { menuOpen = true }) {
                                 Icon(
                                     Icons.Filled.MoreVert,
-                                    contentDescription = "Story options",
+                                    contentDescription = stringResource(R.string.story_options),
                                     tint = Color.White,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -1071,7 +1076,7 @@ private fun TopChrome(
                                 onDismissRequest = { menuOpen = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Insights") },
+                                    text = { Text(stringResource(R.string.story_insights)) },
                                     leadingIcon = {
                                         Icon(Icons.Filled.Visibility, contentDescription = null)
                                     },
@@ -1079,7 +1084,7 @@ private fun TopChrome(
                                 )
                                 if (canDelete) {
                                     DropdownMenuItem(
-                                        text = { Text("Delete story") },
+                                        text = { Text(stringResource(R.string.story_delete)) },
                                         leadingIcon = {
                                             Icon(Icons.Filled.Delete, contentDescription = null)
                                         },
@@ -1090,7 +1095,7 @@ private fun TopChrome(
                         }
                     }
                     IconButton(onClick = onClose) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_close), tint = Color.White, modifier = Modifier.size(24.dp))
                     }
                 }
             }
@@ -1226,7 +1231,7 @@ private fun VideoStoryPlayer(
 
     if (videoFailed) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Couldn't load this story", color = Color.White)
+            Text(stringResource(R.string.story_load_error), color = Color.White)
         }
     } else if (isBuffering) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1235,15 +1240,15 @@ private fun VideoStoryPlayer(
     }
 }
 
-private fun formatStoryTime(timestamp: Long): String {
+private fun formatStoryTime(ctx: android.content.Context, timestamp: Long): String {
     if (timestamp <= 0) return ""
     val diff = System.currentTimeMillis() - timestamp
     val minutes = diff / (1000 * 60)
     val hours = diff / (1000 * 60 * 60)
     return when {
-        minutes < 1 -> "Just now"
-        minutes < 60 -> "${minutes}m ago"
-        hours < 24 -> "${hours}h ago"
+        minutes < 1 -> ctx.getString(R.string.story_just_now)
+        minutes < 60 -> ctx.getString(R.string.story_minutes_ago, minutes.toInt())
+        hours < 24 -> ctx.getString(R.string.story_hours_ago, hours.toInt())
         else -> try { SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(timestamp)) } catch (_: Exception) { "" }
     }
 }

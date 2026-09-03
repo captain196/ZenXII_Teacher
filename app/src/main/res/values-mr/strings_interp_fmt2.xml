@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remaining interpolated copy (multi-arg / conditional) as format strings. -->
+<resources>
+    <string name="appr_type_reviewer">%1$s • परीक्षक: %2$s</string>
+    <string name="ev_view_all_photos">सर्व छायाचित्रे पहा (%1$d)</string>
+    <string name="fees_cleared_pending">%2$d पैकी %1$d भरले · %3$s थकबाकी</string>
+    <string name="gal_tap_choose_video">व्हिडिओ निवडण्यासाठी टॅप करा</string>
+    <string name="gal_tap_choose_photo">फोटो निवडण्यासाठी टॅप करा</string>
+    <string name="marks_class_max">%1$s - %2$s | कमाल: %3$s</string>
+    <string name="results_row_summary">क्रमांक %1$s · %2$s · %3$s</string>
+    <string name="myatt_today_is">आज %1$s आहे</string>
+    <string name="myatt_accuracy">अचूकता ± %1$s मी</string>
+    <string name="myatt_from_school">शाळेपासून %1$s</string>
+    <string name="myatt_done_times">आजसाठी सर्व पूर्ण · %1$s — %2$s</string>
+    <string name="myatt_recorded_status">आज उपस्थिती आधीच नोंदवली आहे (%1$s).</string>
+    <string name="myatt_opens_at">चेक-इन %1$s वाजता उघडेल.</string>
+    <string name="myatt_ontime_by">वेळेवर — %1$s पर्यंत क्लॉक इन करा%2$s</string>
+    <string name="myatt_marked_late">तुम्ही उशिरा नोंदवले जाल (+%1$d मि.)%2$s</string>
+    <string name="myatt_closed_after">चेक-इन कालावधी संपला (%1$s नंतर). त्याऐवजी नियमितीकरण दाखल करा.</string>
+    <string name="myatt_campus_fallback">परिसर</string>
+    <string name="myatt_until">%1$s पर्यंत</string>
+    <string name="myatt_working_since_fmt">%1$s पासून कार्यरत</string>
+    <string name="myatt_out_at">, बाहेर %1$s</string>
+    <string name="reg_my_requests_n">माझ्या विनंत्या (%1$d)</string>
+    <string name="reg_couldnt_refresh">रिफ्रेश होऊ शकले नाही: %1$s</string>
+    <string name="reg_applied_label">अर्ज केले: %1$s</string>
+    <string name="myatt_full_day_suffix"> · पूर्ण दिवस %1$s ता.</string>
+</resources>

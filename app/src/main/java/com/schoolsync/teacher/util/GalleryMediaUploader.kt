@@ -198,7 +198,7 @@ object GalleryMediaUploader {
         val totalSec = (ms / 1000L).toInt()
         val m = totalSec / 60
         val s = totalSec % 60
-        return "%d:%02d".format(m, s)
+        return String.format(java.util.Locale.ROOT, "%d:%02d", m, s)
     }
 
     /**

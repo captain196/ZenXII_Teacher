@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two-word UI copy the 3-word prose threshold used to hide. -->
+<resources>
+    <string name="common_submitting_ellipsis">సమర్పిస్తోంది…</string>
+    <string name="att_submit_request">అభ్యర్థన సమర్పించండి</string>
+    <string name="att_correction_pending">సవరణ పెండింగ్</string>
+    <string name="ptm_meetings_title">తల్లిదండ్రుల-ఉపాధ్యాయ సమావేశాలు</string>
+    <string name="ptm_meeting_single">తల్లిదండ్రుల-ఉపాధ్యాయ సమావేశం</string>
+    <string name="fees_unknown_student">తెలియని విద్యార్థి</string>
+    <string name="fees_last_payment">చివరి చెల్లింపు:</string>
+    <string name="fees_just_reminded">ఇప్పుడే గుర్తు చేశారు</string>
+    <string name="marks_select_exam">పరీక్షను ఎంచుకోండి</string>
+    <string name="marks_select_subject">సబ్జెక్ట్ ఎంచుకోండి</string>
+    <string name="marks_col_roll_no">రోల్ నం</string>
+    <string name="marks_col_student_id">విద్యార్థి (ID)</string>
+    <string name="myatt_extra_day">అదనపు రోజు</string>
+    <string name="myatt_not_marked">గుర్తించలేదు</string>
+    <string name="myatt_on_campus">క్యాంపస్‌లో</string>
+    <string name="myatt_locating">స్థానం కనుగొంటోంది…</string>
+    <string name="myatt_clocking_in">క్లాక్ ఇన్ అవుతోంది…</string>
+    <string name="myatt_clock_in">క్లాక్ ఇన్</string>
+    <string name="myatt_clocking_out">క్లాక్ అవుట్ అవుతోంది…</string>
+    <string name="myatt_clock_out">క్లాక్ అవుట్</string>
+    <string name="myatt_on_leave_short">సెలవులో</string>
+    <string name="myatt_extra_work">అదనపు పని</string>
+    <string name="reg_set_time">సమయం సెట్ చేయండి</string>
+    <string name="login_hide_password">పాస్‌వర్డ్ దాచు</string>
+    <string name="login_show_password">పాస్‌వర్డ్ చూపించు</string>
+    <string name="fp_your_school">మీ పాఠశాల</string>
+    <string name="gal_upload_media">మీడియా అప్‌లోడ్ చేయండి</string>
+    <string name="lib_loading">గ్రంథాలయం లోడ్ అవుతోంది...</string>
+    <string name="lib_unknown_author">తెలియని రచయిత</string>
+    <string name="lib_unknown_book">తెలియని పుస్తకం</string>
+    <string name="dash_todays_attendance">ఈరోజు హాజరు</string>
+    <string name="story_just_now">ఇప్పుడే</string>
+    <string name="story_search_viewers">వీక్షకులను వెతకండి</string>
+    <string name="story_new_story">కొత్త స్టోరీ</string>
+    <string name="story_loading">స్టోరీలు లోడ్ అవుతున్నాయి...</string>
+    <string name="story_preparing_preview">ప్రివ్యూ సిద్ధమవుతోంది…</string>
+    <string name="story_share">స్టోరీ షేర్ చేయండి</string>
+    <string name="profile_marital_status">వైవాహిక స్థితి</string>
+    <string name="profile_fathers_name">తండ్రి పేరు</string>
+    <string name="profile_alt_phone">ప్రత్యామ్నాయ ఫోన్</string>
+    <string name="profile_my_assignments">నా కేటాయింపులు</string>
+    <string name="hw_submit_review">సమీక్ష సమర్పించండి</string>
+    <string name="hw_edit_assignment">అసైన్‌మెంట్ సవరించండి</string>
+    <string name="hw_new_assignment">కొత్త అసైన్‌మెంట్</string>
+    <string name="hw_save_changes">మార్పులు సేవ్ చేయండి</string>
+    <string name="hw_create_assignment">అసైన్‌మెంట్ సృష్టించండి</string>
+    <string name="ev_untitled_event">శీర్షిక లేని ఈవెంట్</string>
+    <string name="leave_type_label">సెలవు రకం</string>
+    <string name="rf_submit_flag">ఫ్లాగ్ సమర్పించండి</string>
+</resources>

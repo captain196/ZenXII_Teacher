@@ -4,6 +4,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import androidx.annotation.StringRes
+import com.schoolsync.teacher.R
 
 /**
  * Canonical notification-channel registry for the Teacher app.
@@ -36,24 +38,32 @@ object NotificationChannels {
     const val GALLERY = "ch_gallery"
     const val STORIES = "ch_stories"
 
-    private data class Def(val id: String, val name: String, val description: String)
+    // Name/description are held as @StringRes, never as String. A String captured
+    // at object-init time would freeze whatever language the process launched in
+    // and survive recreate() — the single most repeated i18n bug in this codebase.
+    // They are resolved inside ensureChannels(), against the caller's Context.
+    private data class Def(val id: String, @StringRes val name: Int, @StringRes val description: Int)
 
     private val CHANNELS = listOf(
-        Def(GENERAL, "General", "General notifications from ZenXii"),
-        Def(NOTICES, "Notices & Circulars", "New notices and circulars"),
-        Def(MESSAGES, "Messages", "Chat messages"),
-        Def(ATTENDANCE, "Attendance", "Attendance reminders and updates"),
-        Def(LEAVE, "Leave", "Leave request updates"),
-        Def(EVENTS, "Events", "School events"),
-        Def(TIMETABLE, "Timetable", "Substitute assignments and timetable changes"),
-        Def(GALLERY, "Gallery", "New photos and albums"),
-        Def(STORIES, "Stories", "New school stories"),
+        Def(GENERAL, R.string.nch_general, R.string.nch_general_desc),
+        Def(NOTICES, R.string.nch_notices, R.string.nch_notices_desc),
+        Def(MESSAGES, R.string.nch_messages, R.string.nch_messages_desc),
+        Def(ATTENDANCE, R.string.nch_attendance, R.string.nch_attendance_desc),
+        Def(LEAVE, R.string.nch_leave, R.string.nch_leave_desc),
+        Def(EVENTS, R.string.nch_events, R.string.nch_events_desc),
+        Def(TIMETABLE, R.string.nch_timetable, R.string.nch_timetable_desc),
+        Def(GALLERY, R.string.nch_gallery, R.string.nch_gallery_desc),
+        Def(STORIES, R.string.nch_stories, R.string.nch_stories_desc),
     )
 
     /**
      * Create every channel (idempotent — re-creating an existing channel with
      * the same id is a no-op that only refreshes name/description). Safe to call
      * on every service/app start.
+     *
+     * Also call this right after a language change: the OS caches channel
+     * names at creation time, so the tray keeps showing the old language until
+     * the channel is re-created. [context] must be the locale-wrapped one.
      */
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -61,10 +71,10 @@ object NotificationChannels {
         CHANNELS.forEach { def ->
             val channel = NotificationChannel(
                 def.id,
-                def.name,
+                context.getString(def.name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = def.description
+                description = context.getString(def.description)
                 enableLights(true)
                 enableVibration(true)
             }

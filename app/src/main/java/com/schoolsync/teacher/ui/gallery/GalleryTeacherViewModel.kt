@@ -26,6 +26,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 data class GalleryUiState(
     val albums: List<GalleryAlbum> = emptyList(),
@@ -56,7 +59,10 @@ sealed class GalleryEvent {
 @HiltViewModel
 class GalleryTeacherViewModel @Inject constructor(
     private val galleryRepository: GalleryFirestoreRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object {
@@ -107,14 +113,14 @@ class GalleryTeacherViewModel @Inject constructor(
                         onFailure = { e ->
                             Log.e(TAG, "Failed to load albums: ${e.message}", e)
                             _uiState.update {
-                                it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums")
+                                it.copy(isLoadingAlbums = false, albumsError = e.message ?: appContext.localizedString(R.string.vm_gal_albums_failed))
                             }
                         }
                     )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load albums", e)
-                _uiState.update { it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums") }
+                _uiState.update { it.copy(isLoadingAlbums = false, albumsError = e.message ?: appContext.localizedString(R.string.vm_gal_albums_failed)) }
             }
         }
     }
@@ -139,7 +145,7 @@ class GalleryTeacherViewModel @Inject constructor(
                 },
                 onFailure = { e ->
                     Log.e(TAG, "openAlbumById failed: ${e.message}", e)
-                    _uiState.update { it.copy(isLoadingAlbums = false, albumsError = e.message ?: "Couldn't load albums") }
+                    _uiState.update { it.copy(isLoadingAlbums = false, albumsError = e.message ?: appContext.localizedString(R.string.vm_gal_albums_failed)) }
                 }
             )
         }
@@ -173,13 +179,13 @@ class GalleryTeacherViewModel @Inject constructor(
                         },
                         onFailure = { e ->
                             Log.e(TAG, "Failed to load media: ${e.message}", e)
-                            _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: "Couldn't load photos") }
+                            _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: appContext.localizedString(R.string.vm_gal_photos_failed)) }
                         }
                     )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load media", e)
-                _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: "Couldn't load photos") }
+                _uiState.update { it.copy(isLoadingMedia = false, mediaError = e.message ?: appContext.localizedString(R.string.vm_gal_photos_failed)) }
             }
         }
     }
@@ -195,7 +201,7 @@ class GalleryTeacherViewModel @Inject constructor(
     fun createAlbum(title: String, description: String, category: String) {
         if (title.isBlank()) {
             viewModelScope.launch {
-                _events.emit(GalleryEvent.Error("Album title cannot be empty"))
+                _events.emit(GalleryEvent.Error(appContext.localizedString(R.string.vm_gal_title_empty)))
             }
             return
         }
@@ -211,19 +217,19 @@ class GalleryTeacherViewModel @Inject constructor(
                     onSuccess = { albumId ->
                         Log.d(TAG, "Created album: $albumId")
                         _uiState.update { it.copy(isCreatingAlbum = false, showCreateAlbumDialog = false) }
-                        _events.emit(GalleryEvent.Success("Album created successfully"))
+                        _events.emit(GalleryEvent.Success(appContext.localizedString(R.string.vm_gal_created)))
                         // The real-time observeAlbums listener surfaces the new album.
                     },
                     onFailure = { e ->
                         Log.e(TAG, "Failed to create album: ${e.message}", e)
                         _uiState.update { it.copy(isCreatingAlbum = false) }
-                        _events.emit(GalleryEvent.Error(e.message ?: "Failed to create album"))
+                        _events.emit(GalleryEvent.Error(e.message ?: appContext.localizedString(R.string.vm_gal_create_failed)))
                     }
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to create album", e)
+                Log.e(TAG, appContext.localizedString(R.string.vm_gal_create_failed), e)
                 _uiState.update { it.copy(isCreatingAlbum = false) }
-                _events.emit(GalleryEvent.Error(e.message ?: "Failed to create album"))
+                _events.emit(GalleryEvent.Error(e.message ?: appContext.localizedString(R.string.vm_gal_create_failed)))
             }
         }
     }
@@ -243,7 +249,7 @@ class GalleryTeacherViewModel @Inject constructor(
      */
     fun uploadMediaFile(context: Context, uri: Uri, declaredType: String, caption: String) {
         val album = _uiState.value.selectedAlbum ?: run {
-            viewModelScope.launch { _events.emit(GalleryEvent.Error("No album selected")) }
+            viewModelScope.launch { _events.emit(GalleryEvent.Error(appContext.localizedString(R.string.vm_gal_no_album))) }
             return
         }
 
@@ -272,7 +278,7 @@ class GalleryTeacherViewModel @Inject constructor(
                 if (quota.isFailure) {
                     Log.d(TAG, "uploadMediaFile: blocked by quota: ${quota.exceptionOrNull()?.message}")
                     _uiState.update { it.copy(isUploading = false) }
-                    _events.emit(GalleryEvent.Error(quota.exceptionOrNull()?.message ?: "Upload limit reached"))
+                    _events.emit(GalleryEvent.Error(quota.exceptionOrNull()?.message ?: appContext.localizedString(R.string.vm_gal_limit)))
                     return@launch
                 }
 
@@ -280,7 +286,7 @@ class GalleryTeacherViewModel @Inject constructor(
                 // login; `schoolCode` is a fallback for older sessions.
                 val schoolId = tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
                     ?: tokenManager.schoolCode.firstOrNull()?.takeIf { it.isNotBlank() }
-                    ?: throw Exception("School ID not available")
+                    ?: throw Exception(appContext.localizedString(R.string.vm_no_school_id))
 
                 // Videos: transcode to ~720p/2Mbps BEFORE the size check, exactly
                 // as Stories does. Without this the raw clip goes straight at the
@@ -346,7 +352,7 @@ class GalleryTeacherViewModel @Inject constructor(
                         onSuccess = { mediaId ->
                             Log.d(TAG, "uploadMediaFile: firestore write OK mediaId=$mediaId")
                             _uiState.update { it.copy(isUploading = false, showUploadMediaDialog = false) }
-                            _events.emit(GalleryEvent.Success("Media uploaded successfully"))
+                            _events.emit(GalleryEvent.Success(appContext.localizedString(R.string.vm_gal_uploaded)))
                             // Real-time listeners (observeAlbumMedia / observeAlbums)
                             // pick up the new media row + mediaCount bump on their own,
                             // so no manual reload is needed here.
@@ -359,7 +365,7 @@ class GalleryTeacherViewModel @Inject constructor(
                             if (!deleted) Log.w(TAG, "uploadMediaFile: orphan rollback failed for uploaded object")
                             poster?.storagePath?.let { GalleryMediaUploader.deleteByPath(it) }
                             _uiState.update { it.copy(isUploading = false) }
-                            _events.emit(GalleryEvent.Error(e.message ?: "Failed to save media"))
+                            _events.emit(GalleryEvent.Error(e.message ?: appContext.localizedString(R.string.vm_gal_save_failed)))
                         }
                     )
                 }
@@ -370,7 +376,7 @@ class GalleryTeacherViewModel @Inject constructor(
                 uploadedPath?.let { GalleryMediaUploader.deleteByPath(it) }
                 posterPath?.let { GalleryMediaUploader.deleteByPath(it) }
                 _uiState.update { it.copy(isUploading = false) }
-                _events.emit(GalleryEvent.Error("Upload timed out. Check your connection and try again."))
+                _events.emit(GalleryEvent.Error(appContext.localizedString(R.string.vm_upload_timeout)))
             } catch (cancel: CancellationException) {
                 // User cancelled: the whole coroutine is cancelled, so run the
                 // rollback + snackbar under NonCancellable or they'd be skipped.
@@ -379,7 +385,7 @@ class GalleryTeacherViewModel @Inject constructor(
                 withContext(NonCancellable) {
                     uploadedPath?.let { GalleryMediaUploader.deleteByPath(it) }
                     posterPath?.let { GalleryMediaUploader.deleteByPath(it) }
-                    _events.emit(GalleryEvent.Error("Upload cancelled"))
+                    _events.emit(GalleryEvent.Error(appContext.localizedString(R.string.vm_upload_cancelled)))
                 }
                 throw cancel
             } catch (e: Exception) {
@@ -387,14 +393,14 @@ class GalleryTeacherViewModel @Inject constructor(
                 uploadedPath?.let { GalleryMediaUploader.deleteByPath(it) }
                 posterPath?.let { GalleryMediaUploader.deleteByPath(it) }
                 _uiState.update { it.copy(isUploading = false) }
-                _events.emit(GalleryEvent.Error(e.message ?: "Upload failed"))
+                _events.emit(GalleryEvent.Error(e.message ?: appContext.localizedString(R.string.vm_upload_failed)))
             }
         }
     }
 
     /** Cancel an in-flight upload (user tapped Cancel on the upload dialog). */
     fun cancelUpload() {
-        uploadJob?.cancel(CancellationException("User cancelled upload"))
+        uploadJob?.cancel(CancellationException(appContext.localizedString(R.string.vm_upload_cancelled)))
     }
 
     fun clearError() {

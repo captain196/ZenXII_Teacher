@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2b: class attendance - marking grid, edit windows, correction requests. -->
+<resources>
+    <string name="att_saving">సేవ్ చేస్తోంది…</string>
+    <string name="att_save">హాజరు సేవ్ చేయండి</string>
+    <string name="common_error">లోపం</string>
+    <string name="common_ok">సరే</string>
+    <string name="common_refresh">రిఫ్రెష్</string>
+    <string name="common_today">ఈరోజు</string>
+    <string name="common_loading">లోడ్ అవుతోంది…</string>
+    <string name="att_arrival_time">రాక సమయం</string>
+    <string name="att_request_correction">సవరణ అభ్యర్థన</string>
+    <string name="att_change_to">దీనికి మార్చు:</string>
+    <string name="att_reason_min">కారణం (10+ అక్షరాలు)</string>
+    <string name="att_discard_q">సేవ్ చేయని మార్పులను విస్మరించాలా?</string>
+    <string name="att_discard_reload">విస్మరించి రీలోడ్ చేయండి</string>
+    <string name="att_keep_editing">సవరణ కొనసాగించండి</string>
+    <string name="att_change_class">తరగతి మార్చండి</string>
+    <string name="att_no_classes">తరగతి కేటాయించలేదు</string>
+    <string name="att_history">చరిత్ర</string>
+    <string name="att_my_requests">నా అభ్యర్థనలు</string>
+    <string name="att_all_present">అందరూ హాజరు</string>
+    <string name="att_all_absent">అందరూ గైర్హాజరు</string>
+    <string name="att_tap_to_change">మార్చడానికి నొక్కండి</string>
+    <string name="att_loading">హాజరు లోడ్ అవుతోంది…</string>
+    <string name="att_no_students">విద్యార్థులు కనబడలేదు</string>
+    <string name="att_select_class">హాజరు చూడటానికి తరగతిని ఎంచుకోండి</string>
+    <string name="att_section_empty_pick">ఈ విభాగంలో నమోదైన విద్యార్థులు లేరు. పైన ఉన్న ఎంపిక నుండి మరో తరగతిని ఎంచుకోండి.</string>
+    <string name="att_section_empty">ఈ విభాగంలో ఇంకా నమోదైన విద్యార్థులు లేరు.</string>
+    <string name="att_read_only">తరగతి ఉపాధ్యాయులు మాత్రమే హాజరు నమోదు చేయగలరు. మీరు చదవడానికి-మాత్రమే మోడ్‌లో చూస్తున్నారు.</string>
+    <string name="att_my_corrections_title">నా సవరణ అభ్యర్థనలు</string>
+    <string name="att_my_corrections_sub">మీరు దాఖలు చేసిన అభ్యర్థనలు మరియు వాటి స్థితి</string>
+    <string name="att_no_corrections">ఇంకా సవరణ అభ్యర్థనలు లేవు</string>
+    <string name="att_no_corrections_hint">లాక్ చేసిన లేదా గత రోజు కోసం దాఖలు చేసిన అభ్యర్థనలు ఇక్కడ కనిపిస్తాయి.</string>
+    <string name="att_history_title">హాజరు చరిత్ర</string>
+    <string name="att_window_open">తెరిచి ఉంది</string>
+    <string name="att_window_open_desc">స్వేచ్ఛా సవరణ. కారణం అవసరం లేదు.</string>
+    <string name="att_window_restricted">పరిమితం</string>
+    <string name="att_window_restricted_desc">సవరణకు కారణం అవసరం (10+ అక్షరాలు).</string>
+    <string name="att_window_locked">లాక్ చేయబడింది</string>
+    <string name="att_reason_hint">కారణం (ఉదా. \'బస్సు ఆలస్య సవరణ\')</string>
+    <string name="att_prev_month">మునుపటి నెల</string>
+    <string name="att_all_p">అన్నీ P</string>
+    <string name="att_all_a">అన్నీ A</string>
+    <string name="att_next_month">తదుపరి నెల</string>
+    <string name="att_col_student">విద్యార్థి</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fees average across N months; recruitment vacancy label. -->
+<resources>
+    <string name="fees_avg_across">%2$s मध्ये %1$s%%</string>
+    <string name="rec_vacancies_label">रिक्त जागा</string>
+</resources>

@@ -82,11 +82,16 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.DisplayFormat
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 
 /**
  * RegularizeScreen — the "Attendance Request" surface, now a FULL SCREEN (not a
  * bottom sheet). Two panels:
- *   • LEFT  — timezone, "New Date", and the selectable workday rows (with
+ *   • LEFT  — timezone, stringResource(R.string.reg_new_date), and the selectable workday rows (with
  *             optional claimed Clock-In / Clock-Out times).
  *   • RIGHT — the required reason and the Submit action.
  *
@@ -120,7 +125,7 @@ fun RegularizeScreen(
     // 0 = file a new request, 1 = track my filed requests + admin decisions.
     var tab by remember { mutableStateOf(0) }
 
-    // Load the teacher's own requests when the screen opens so the "My Requests"
+    // Load the teacher's own requests when the screen opens so the stringResource(R.string.att_my_requests)
     // tab reflects the latest admin decisions (approved / rejected / cancelled).
     // Also reloaded on a successful submit (VM.submit → loadMyRequests).
     LaunchedEffect(Unit) { vm.loadMyRequests() }
@@ -158,12 +163,12 @@ fun RegularizeScreen(
                     .border(BorderStroke(1.dp, c.divider), RoundedCornerShape(12.dp))
                     .clickable(onClick = onDismiss),
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = c.textPrimary, modifier = Modifier.size(20.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = c.textPrimary, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("Regularize Attendance", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
-                Text("Request a correction for absent or missed days", fontSize = 12.sp, color = c.textSecondary)
+                Text(stringResource(R.string.myatt_regularize), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
+                Text(stringResource(R.string.myatt_regularize_sub), fontSize = 12.sp, color = c.textSecondary)
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -224,15 +229,15 @@ fun RegularizeScreen(
                 ) {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = c.success, modifier = Modifier.size(46.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("Request submitted", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
+                    Text(stringResource(R.string.reg_submitted), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
                     Spacer(Modifier.height(4.dp))
-                    Text("Sent to your school admin for approval", fontSize = 12.5.sp, color = c.textSecondary)
+                    Text(stringResource(R.string.reg_sent_to_admin), fontSize = 12.5.sp, color = c.textSecondary)
                 }
             }
         }
     }
 
-    // "New Date" picker — past dates only (no future regularization).
+    // stringResource(R.string.reg_new_date) picker — past dates only (no future regularization).
     if (showDatePicker) {
         val todayEnd = remember { Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59) }.timeInMillis }
         val dpState = rememberDatePickerState(
@@ -250,9 +255,9 @@ fun RegularizeScreen(
                         rows.sortBy { it.date }
                     }
                     showDatePicker = false
-                }) { Text("Add") }
+                }) { Text(stringResource(R.string.common_add)) }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.common_cancel)) } },
         ) {
             val cfg = LocalConfiguration.current
             Column(
@@ -284,22 +289,22 @@ private fun PanelCard(modifier: Modifier, scroll: Boolean, content: @Composable 
 @Composable
 private fun LeftContent(rows: List<RegRow>, onNewDate: () -> Unit) {
     val c = LocalAppColors.current
-    Text("Workday dates", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
+    Text(stringResource(R.string.reg_workday_dates), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
     Spacer(Modifier.height(12.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Timezone", fontSize = 12.5.sp, color = c.textSecondary, modifier = Modifier.width(84.dp))
+        Text(stringResource(R.string.reg_timezone), fontSize = 12.5.sp, color = c.textSecondary, modifier = Modifier.width(84.dp))
         Text(timezoneLabel(), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = c.textPrimary)
     }
     Spacer(Modifier.height(14.dp))
-    Text("Add another past date to regularize:", fontSize = 12.5.sp, color = c.textSecondary)
+    Text(stringResource(R.string.reg_add_another), fontSize = 12.5.sp, color = c.textSecondary)
     Spacer(Modifier.height(8.dp))
-    OutlineChip(label = "New Date", onClick = onNewDate)
+    OutlineChip(label = stringResource(R.string.reg_new_date), onClick = onNewDate)
     Spacer(Modifier.height(14.dp)); DividerLine(); Spacer(Modifier.height(12.dp))
-    Text("Select the day(s)", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
+    Text(stringResource(R.string.reg_select_days), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
     Spacer(Modifier.height(8.dp))
     if (rows.isEmpty()) {
         Text(
-            "No absent or unmarked days this month. Tap “New Date” to request a correction for any past date.",
+            stringResource(R.string.reg_no_absent_hint),
             fontSize = 12.5.sp, color = c.textTertiary, modifier = Modifier.padding(vertical = 12.dp),
         )
     }
@@ -320,13 +325,13 @@ private fun RightContent(
     onSubmit: () -> Unit,
 ) {
     val c = LocalAppColors.current
-    Text("Reason", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
+    Text(stringResource(R.string.common_reason), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.textPrimary)
     Spacer(Modifier.height(12.dp))
     OutlinedTextField(
         value = reason,
         onValueChange = onReasonChange,
         modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp),
-        label = { Text("Reason / note (required)") },
+        label = { Text(stringResource(R.string.reg_reason_required)) },
         minLines = 5,
         shape = RoundedCornerShape(12.dp),
     )
@@ -341,7 +346,7 @@ private fun RightContent(
     ) {
         Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = c.warning, modifier = Modifier.size(16.dp))
         Text(
-            "Each request goes to your school admin for approval. Requests may be auto-rejected after the policy deadline.",
+            stringResource(R.string.reg_policy_note),
             fontSize = 11.5.sp, color = c.textSecondary,
         )
     }
@@ -362,18 +367,18 @@ private fun RightContent(
         if (submitting) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = c.textOnAccent)
-                Text("Submitting…", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.textOnAccent)
+                Text(stringResource(R.string.common_submitting), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.textOnAccent)
             }
         } else {
             Text(
-                "Submit for $enabledCount day${if (enabledCount == 1) "" else "s"}",
+                pluralStringResource(R.plurals.myatt_submit_for_days, enabledCount, enabledCount),
                 fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.textOnAccent,
             )
         }
     }
 }
 
-/* ── tabs + "My Requests" ────────────────────────────────────────── */
+/* ── tabs + stringResource(R.string.att_my_requests) ────────────────────────────────────────── */
 
 @Composable
 private fun SegmentedTabs(selected: Int, requestCount: Int, onSelect: (Int) -> Unit) {
@@ -387,9 +392,9 @@ private fun SegmentedTabs(selected: Int, requestCount: Int, onSelect: (Int) -> U
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        SegTab("File Request", selected == 0, Modifier.weight(1f)) { onSelect(0) }
+        SegTab(stringResource(R.string.reg_file_request_tab), selected == 0, Modifier.weight(1f)) { onSelect(0) }
         SegTab(
-            label = if (requestCount > 0) "My Requests ($requestCount)" else "My Requests",
+            label = if (requestCount > 0) stringResource(R.string.reg_my_requests_n, requestCount) else stringResource(R.string.att_my_requests),
             active = selected == 1,
             modifier = Modifier.weight(1f),
         ) { onSelect(1) }
@@ -430,7 +435,7 @@ private fun MyRequestsPanel(
     val c = LocalAppColors.current
     Column(modifier = Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("Your requests", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.textPrimary, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.reg_your_requests), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.textPrimary, modifier = Modifier.weight(1f))
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -442,7 +447,7 @@ private fun MyRequestsPanel(
                 if (ui.loadingRequests) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = c.accent)
                 } else {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = c.textSecondary, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = c.textSecondary, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -468,7 +473,7 @@ private fun MyRequestsPanel(
                                 .background(c.errorSurface)
                                 .clickable(onClick = onRetry)
                                 .padding(horizontal = 18.dp, vertical = 9.dp),
-                        ) { Text("Retry", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = c.error) }
+                        ) { Text(stringResource(R.string.common_retry), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = c.error) }
                     }
                 }
 
@@ -477,9 +482,9 @@ private fun MyRequestsPanel(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = c.textTertiary, modifier = Modifier.size(28.dp))
                         Spacer(Modifier.height(10.dp))
-                        Text("No requests yet", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
+                        Text(stringResource(R.string.reg_no_requests), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.textSecondary)
                         Spacer(Modifier.height(4.dp))
-                        Text("File a correction from the “File Request” tab.", fontSize = 12.sp, color = c.textTertiary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(stringResource(R.string.reg_no_requests_hint), fontSize = 12.sp, color = c.textTertiary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
                 }
 
@@ -489,7 +494,7 @@ private fun MyRequestsPanel(
             ) {
                 // A stale error while older data is still shown — a thin banner, not a wipe.
                 ui.requestsError?.let {
-                    Text("Couldn't refresh: $it", fontSize = 11.5.sp, color = c.error)
+                    Text(stringResource(R.string.reg_couldnt_refresh, it), fontSize = 11.5.sp, color = c.error)
                 }
                 ui.myRequests.forEach { RequestCard(it) }
                 Spacer(Modifier.height(4.dp))
@@ -523,12 +528,12 @@ private fun RequestCard(doc: RegularizationDoc) {
             Text(doc.reason, fontSize = 12.5.sp, color = c.textSecondary)
         }
         // Admin decision detail — applied mark + remarks, once decided.
-        val appliedLabel = markLabel(doc.appliedMark.ifBlank { if (doc.status == "approved") doc.requestedStatus else "" })
+        val appliedLabel = markLabel(LocalContext.current, doc.appliedMark.ifBlank { if (doc.status == "approved") doc.requestedStatus else "" })
         if (doc.status == "approved" && appliedLabel != null) {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = c.success, modifier = Modifier.size(14.dp))
-                Text("Applied: $appliedLabel", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.success)
+                Text(stringResource(R.string.reg_applied_label, appliedLabel), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.success)
             }
         }
         if (doc.remarks.isNotBlank()) {
@@ -541,7 +546,7 @@ private fun RequestCard(doc: RegularizationDoc) {
                     .background(c.divider.copy(alpha = 0.25f))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
-                Text("Admin:", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = c.textTertiary)
+                Text(stringResource(R.string.reg_admin_prefix), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = c.textTertiary)
                 Text(doc.remarks, fontSize = 11.5.sp, color = c.textSecondary)
             }
         }
@@ -570,15 +575,15 @@ private fun StatusChip(status: String) {
 }
 
 /** Map a 1-letter attendance mark to a readable label (null when blank/unknown). */
-private fun markLabel(mark: String): String? = when (mark.uppercase()) {
-    "P" -> "Present"
-    "M" -> "Half-day"
-    "T" -> "Late"
-    "L" -> "Leave"
-    "H" -> "Holiday"
-    "O" -> "Weekly-off"
-    "W" -> "Extra day"
-    "A" -> "Absent"
+private fun markLabel(ctx: android.content.Context, mark: String): String? = when (mark.uppercase()) {
+    "P" -> ctx.getString(R.string.attendance_status_present)
+    "M" -> ctx.getString(R.string.myatt_status_halfday)
+    "T" -> ctx.getString(R.string.attendance_status_late)
+    "L" -> ctx.getString(R.string.attendance_status_leave)
+    "H" -> ctx.getString(R.string.attendance_status_holiday)
+    "O" -> ctx.getString(R.string.myatt_status_weeklyoff)
+    "W" -> ctx.getString(R.string.myatt_extra_day)
+    "A" -> ctx.getString(R.string.attendance_status_absent)
     else -> null
 }
 
@@ -614,8 +619,8 @@ private fun DateRow(row: RegRow) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth().padding(start = 46.dp, bottom = 6.dp),
             ) {
-                TimeField(label = "Clock In", ms = row.checkInMs, onClick = { pickTarget = 0 }, modifier = Modifier.weight(1f))
-                TimeField(label = "Clock Out", ms = row.checkOutMs, onClick = { pickTarget = 1 }, modifier = Modifier.weight(1f))
+                TimeField(label = stringResource(R.string.reg_clock_in), ms = row.checkInMs, onClick = { pickTarget = 0 }, modifier = Modifier.weight(1f))
+                TimeField(label = stringResource(R.string.reg_clock_out), ms = row.checkOutMs, onClick = { pickTarget = 1 }, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -629,7 +634,7 @@ private fun DateRow(row: RegRow) {
             is24Hour = false,
         )
         TimePickerModal(
-            title = if (pickTarget == 0) "Clock In time" else "Clock Out time",
+            title = if (pickTarget == 0) stringResource(R.string.reg_clock_in_time) else stringResource(R.string.reg_clock_out_time),
             state = tpState,
             onConfirm = {
                 val ms = combine(row.date, tpState.hour, tpState.minute)
@@ -656,7 +661,7 @@ private fun TimeField(label: String, ms: Long?, onClick: () -> Unit, modifier: M
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Schedule, contentDescription = null, tint = c.textSecondary, modifier = Modifier.size(13.dp))
             Spacer(Modifier.width(5.dp))
-            Text(ms?.let { fmtTime(it) } ?: "Set time", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (ms != null) c.textPrimary else c.textTertiary)
+            Text(ms?.let { fmtTime(it) } ?: stringResource(R.string.reg_set_time), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (ms != null) c.textPrimary else c.textTertiary)
         }
     }
 }
@@ -737,13 +742,13 @@ private fun TimePickerModal(
                     IconButton(onClick = { keyboard = !keyboard }) {
                         Icon(
                             if (keyboard) Icons.Filled.Schedule else Icons.Filled.Keyboard,
-                            contentDescription = if (keyboard) "Switch to clock" else "Switch to keyboard entry",
+                            contentDescription = if (keyboard) stringResource(R.string.reg_switch_clock) else stringResource(R.string.reg_switch_keyboard),
                             tint = c.textSecondary,
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
-                    TextButton(onClick = onConfirm) { Text("Set") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+                    TextButton(onClick = onConfirm) { Text(stringResource(R.string.common_set)) }
                 }
             }
         }
@@ -766,7 +771,10 @@ private class RegRow(val date: String, enabled: Boolean) {
 
 private val ISO_FMT = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
 private val KEY_FMT = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-private val PRETTY_FMT = SimpleDateFormat("EEE, d MMM", Locale.getDefault())
+// NOT a cached SimpleDateFormat. A top-level val is initialised once per
+// process, so it would capture whatever locale the app launched in and keep
+// rendering that language after a switch + recreate() until the process dies.
+// DisplayFormat builds a fresh formatter per call (and pins Latin digits).
 private val TIME_FMT = SimpleDateFormat("hh:mm a", Locale.US)
 
 /** Combine a yyyy-MM-dd date with an hour/minute into epoch millis (device tz). */
@@ -792,7 +800,7 @@ private fun isoDate(utcMillis: Long): String {
 }
 
 private fun prettyDate(date: String): String =
-    runCatching { PRETTY_FMT.format(KEY_FMT.parse(date)!!) }.getOrDefault(date)
+    runCatching { DisplayFormat.weekdayDayMonth(KEY_FMT.parse(date)!!) }.getOrDefault(date)
 
 private fun fmtTime(ms: Long): String = TIME_FMT.format(Date(ms))
 

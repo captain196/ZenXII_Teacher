@@ -69,6 +69,8 @@ import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.glassCard
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.util.localizedString
 
 private data class RecoveryContact(
     val schoolName: String,
@@ -85,7 +87,7 @@ private sealed interface LookupState {
 }
 
 /**
- * "Forgot password?" dialog shown from the login screen. The teacher enters
+ * stringResource(R.string.login_forgot_password) dialog shown from the login screen. The teacher enters
  * their Teacher ID; an unauthenticated cloud function (getRecoveryContact)
  * resolves their school from the ID and returns the school's recovery
  * contact so they know who to call. The reset itself is performed by the
@@ -95,25 +97,30 @@ private sealed interface LookupState {
 @Composable
 fun ForgotPasswordDialog(onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var teacherId by remember { mutableStateOf("") }
     var state by remember { mutableStateOf<LookupState>(LookupState.Idle) }
+
+    // Hoisted: lookup() is a plain local function, not a composable scope.
+    val msgEnterIdFirst = stringResource(R.string.fp_enter_id_first)
+    val msgNotTeacher = stringResource(R.string.fp_not_teacher)
 
     fun lookup() {
         val id = teacherId.trim()
         if (id.isEmpty()) {
-            state = LookupState.Failure("Enter your Teacher ID first.")
+            state = LookupState.Failure(msgEnterIdFirst)
             return
         }
         // This is the Teacher app — only teacher (STA) accounts recover here.
         // Reject obvious non-teacher IDs (student / admin / super-admin) before
         // the lookup; the server also enforces this by role.
         if (Regex("^(STU|ADM|SSA|SUP|PAR)\\d+$").matches(id.uppercase())) {
-            state = LookupState.Failure("That's not a teacher account. Enter your Teacher ID (e.g. STA0001).")
+            state = LookupState.Failure(msgNotTeacher)
             return
         }
         state = LookupState.Loading
         scope.launch {
-            state = fetchRecoveryContact(id)
+            state = fetchRecoveryContact(context, id)
         }
     }
 
@@ -121,7 +128,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Forgot password?",
+                text = stringResource(R.string.login_forgot_password),
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold
@@ -134,8 +141,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Passwords can only be reset by your school's admin. " +
-                        "Enter your Teacher ID to see who to contact.",
+                    text = stringResource(R.string.fp_admin_only),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -149,8 +155,8 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
                             state = LookupState.Idle
                         }
                     },
-                    label = { Text("Teacher ID") },
-                    placeholder = { Text("e.g. STA0001") },
+                    label = { Text(stringResource(R.string.login_teacher_id)) },
+                    placeholder = { Text(stringResource(R.string.fp_id_hint)) },
                     singleLine = true,
                     enabled = state !is LookupState.Loading,
                     keyboardOptions = KeyboardOptions(
@@ -175,7 +181,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
                             )
                             Spacer(Modifier.size(8.dp))
                             Text(
-                                "Looking up your school…",
+                                stringResource(R.string.fp_looking_up),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextSecondary
                             )
@@ -198,16 +204,16 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             if (state is LookupState.Success) {
-                TextButton(onClick = onDismiss) { Text("Done") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
             } else {
                 Button(
                     onClick = { lookup() },
                     enabled = state !is LookupState.Loading
-                ) { Text("Look up") }
+                ) { Text(stringResource(R.string.fp_look_up)) }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         }
     )
 }
@@ -233,7 +239,7 @@ private fun ContactCard(contact: RecoveryContact, loginId: String) {
             )
             Spacer(Modifier.size(ROW_GAP))
             Text(
-                text = contact.schoolName.ifBlank { "Your school" },
+                text = contact.schoolName.ifBlank { stringResource(R.string.fp_your_school) },
                 style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold
@@ -243,20 +249,20 @@ private fun ContactCard(contact: RecoveryContact, loginId: String) {
         HorizontalDivider(thickness = 1.dp, color = Divider)
 
         if (contact.name.isNotBlank()) {
-            ContactRow(Icons.Filled.Person, "Admin", contact.name)
+            ContactRow(Icons.Filled.Person, stringResource(R.string.common_admin), contact.name)
         }
 
         if (contact.phone.isNotBlank()) {
-            ContactRow(Icons.Filled.Phone, "Phone", contact.phone) {
-                IconActionChip(Icons.Filled.Call, "Call") { dial(context, contact.phone) }
+            ContactRow(Icons.Filled.Phone, stringResource(R.string.common_phone), contact.phone) {
+                IconActionChip(Icons.Filled.Call, stringResource(R.string.common_call)) { dial(context, contact.phone) }
                 WhatsAppChip { openWhatsApp(context, contact.phone) }
                 CopyChip { copy(clipboard, context, contact.phone) }
             }
         }
 
         if (contact.email.isNotBlank()) {
-            ContactRow(Icons.Filled.Email, "Email", contact.email) {
-                IconActionChip(Icons.Filled.Email, "Email") { sendEmail(context, contact.email, teacherSubject(loginId)) }
+            ContactRow(Icons.Filled.Email, stringResource(R.string.common_email), contact.email) {
+                IconActionChip(Icons.Filled.Email, stringResource(R.string.common_email)) { sendEmail(context, contact.email, teacherSubject(loginId)) }
                 CopyChip { copy(clipboard, context, contact.email) }
             }
         }
@@ -336,7 +342,7 @@ private fun WhatsAppChip(onClick: () -> Unit) {
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_whatsapp),
-            contentDescription = "WhatsApp",
+            contentDescription = stringResource(R.string.common_whatsapp),
             tint = Color.Unspecified,
             modifier = Modifier.size(20.dp),
         )
@@ -353,17 +359,17 @@ private fun CopyChip(onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = Teal, modifier = Modifier.size(15.dp))
+        Icon(Icons.Filled.ContentCopy, contentDescription = stringResource(R.string.common_copy), tint = Teal, modifier = Modifier.size(15.dp))
     }
 }
 
 private fun teacherSubject(loginId: String) =
-    "Password reset request – ZenXii Teacher" + if (loginId.isNotBlank()) " – $loginId" else ""
+    "Password reset request – ZenXii Teacher"  /* i18n-ignore: email subject read by the school admin, not the staff member */ + if (loginId.isNotBlank()) " – $loginId" else ""
 
 private fun dial(context: Context, number: String) {
     runCatching {
         context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")))
-    }.onFailure { Toast.makeText(context, "No dialer app found.", Toast.LENGTH_SHORT).show() }
+    }.onFailure { Toast.makeText(context, context.getString(R.string.fp_no_dialer), Toast.LENGTH_SHORT).show() }
 }
 
 private fun openWhatsApp(context: Context, number: String) {
@@ -371,7 +377,7 @@ private fun openWhatsApp(context: Context, number: String) {
     if (digits.isEmpty()) return
     runCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits")))
-    }.onFailure { Toast.makeText(context, "Couldn't open WhatsApp.", Toast.LENGTH_SHORT).show() }
+    }.onFailure { Toast.makeText(context, context.getString(R.string.fp_no_whatsapp), Toast.LENGTH_SHORT).show() }
 }
 
 private fun sendEmail(context: Context, email: String, subject: String) {
@@ -380,7 +386,7 @@ private fun sendEmail(context: Context, email: String, subject: String) {
             putExtra(Intent.EXTRA_SUBJECT, subject)
         }
         context.startActivity(intent)
-    }.onFailure { Toast.makeText(context, "No email app found.", Toast.LENGTH_SHORT).show() }
+    }.onFailure { Toast.makeText(context, context.getString(R.string.fp_no_email), Toast.LENGTH_SHORT).show() }
 }
 
 private fun copy(
@@ -389,10 +395,10 @@ private fun copy(
     value: String,
 ) {
     clipboard.setText(AnnotatedString(value))
-    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.common_copied), Toast.LENGTH_SHORT).show()
 }
 
-private suspend fun fetchRecoveryContact(userId: String): LookupState {
+private suspend fun fetchRecoveryContact(ctx: Context, userId: String): LookupState {
     return try {
         val result = Firebase.functions
             .getHttpsCallable("getRecoveryContact")
@@ -404,7 +410,7 @@ private suspend fun fetchRecoveryContact(userId: String): LookupState {
         val found = data["found"] as? Boolean ?: false
         if (!found) {
             LookupState.Failure(
-                "No contact found for \"$userId\". Check your Teacher ID and try again."
+                ctx.localizedString(R.string.fp_no_contact_teacher_fmt, userId)
             )
         } else {
             LookupState.Success(
@@ -418,7 +424,7 @@ private suspend fun fetchRecoveryContact(userId: String): LookupState {
         }
     } catch (e: Exception) {
         LookupState.Failure(
-            "Couldn't reach the server. Check your connection and try again."
+            ctx.getString(R.string.err_cannot_reach_server)
         )
     }
 }

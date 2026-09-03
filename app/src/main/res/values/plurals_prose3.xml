@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plural forms for the counts added in the interpolated-copy wave.
+     English tolerates "%d day(s)"; hi/ta/te do not. -->
+<resources>
+    <plurals name="att_saved_marks">
+        <item quantity="one">Saved %1$d mark.</item>
+        <item quantity="other">Saved %1$d marks.</item>
+    </plurals>
+    <plurals name="ptm_marked_delivered">
+        <item quantity="one">Marked %1$d student delivered.</item>
+        <item quantity="other">Marked %1$d students delivered.</item>
+    </plurals>
+    <plurals name="myatt_submit_for_days">
+        <item quantity="one">Submit for %1$d day</item>
+        <item quantity="other">Submit for %1$d days</item>
+    </plurals>
+    <plurals name="marks_saved_for">
+        <item quantity="one">Marks saved for %1$d student</item>
+        <item quantity="other">Marks saved for %1$d students</item>
+    </plurals>
+</resources>

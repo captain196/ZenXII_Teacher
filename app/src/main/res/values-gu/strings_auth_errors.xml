@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firebase Auth failures, mapped by error code instead of leaking the raw provider message. -->
+<resources>
+    <string name="err_auth_invalid">ID કે પાસવર્ડ ખોટો છે. કૃપા કરી તપાસીને ફરી પ્રયાસ કરો.</string>
+    <string name="err_auth_disabled">આ ખાતું બંધ કરવામાં આવ્યું છે. કૃપા કરી શાળા કાર્યાલયનો સંપર્ક કરો.</string>
+    <string name="err_auth_too_many">બહુ વધારે પ્રયાસ. કૃપા કરી થોડી મિનિટ રાહ જોઈને ફરી પ્રયાસ કરો.</string>
+    <string name="err_account_deactivated">તમારું ખાતું બંધ કરવામાં આવ્યું છે. કૃપા કરી શાળા કાર્યાલયનો સંપર્ક કરો.</string>
+    <string name="err_staff_record_missing">તમારો સ્ટાફ રેકોર્ડ મળ્યો નથી. કૃપા કરી શાળા કાર્યાલયનો સંપર્ક કરો.</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Attendance locked-window banner. -->
+<resources>
+    <string name="att_locked_by_fmt">%1$s ஆல் பூட்டப்பட்டது. திருத்தக் கோரிக்கையைத் தாக்கல் செய்யவும்.</string>
+    <string name="att_locked_generic">பூட்டப்பட்டது. குறியீடுகளை மாற்ற திருத்தக் கோரிக்கையைத் தாக்கல் செய்யவும்.</string>
+</resources>

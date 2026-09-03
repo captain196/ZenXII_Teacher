@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c: my attendance - GPS punch, calendar, regularization requests. -->
+<resources>
+    <string name="myatt_clock_in_anyway">તો પણ ક્લોક ઇન કરો</string>
+    <string name="common_not_now">હમણાં નહીં</string>
+    <string name="myatt_extra_work_warn">ક્લોક ઇન કરવાથી આજનો દિવસ વધારાના કામ તરીકે નોંધાશે અને તમારી કંપનીની નીતિ મુજબ તે દિવસનું વધારાનું વેતન ઉમેરાશે.</string>
+    <string name="myatt_today_title">આજની હાજરી</string>
+    <string name="myatt_check_in">ચેક-ઇન</string>
+    <string name="myatt_check_out">ચેક-આઉટ</string>
+    <string name="myatt_working_duration">કામનો સમયગાળો</string>
+    <string name="myatt_approx_location">ફક્ત અંદાજિત સ્થાન — હાજરી માટે ચોક્કસ સ્થાન ચાલુ કરો.</string>
+    <string name="myatt_enable_precise">ચોક્કસ ચાલુ કરો</string>
+    <string name="myatt_getting_location">તમારું સ્થાન મેળવી રહ્યું છે…</string>
+    <string name="myatt_calendar">હાજરી કૅલેન્ડર</string>
+    <string name="myatt_all_done">આજ માટે બધું પૂર્ણ</string>
+    <string name="myatt_regularize">હાજરી નિયમિત કરો</string>
+    <string name="myatt_regularize_sub">ગેરહાજર અથવા ચૂકી ગયેલા દિવસો માટે સુધારાની વિનંતી કરો</string>
+    <string name="myatt_perm_blocked">સ્થાન પરવાનગી અવરોધિત</string>
+    <string name="myatt_perm_needed">સ્થાન પરવાનગી જરૂરી</string>
+    <string name="myatt_location_off">સ્થાન બંધ છે</string>
+    <string name="myatt_weak_gps">નબળો GPS સિગ્નલ</string>
+    <string name="myatt_perm_required">પરવાનગી જરૂરી</string>
+    <string name="reg_submitted">વિનંતી મોકલાઈ</string>
+    <string name="reg_sent_to_admin">મંજૂરી માટે તમારી શાળાના એડમિનને મોકલ્યું</string>
+    <string name="common_add">ઉમેરો</string>
+    <string name="reg_workday_dates">કામકાજના દિવસોની તારીખો</string>
+    <string name="reg_timezone">સમય ઝોન</string>
+    <string name="reg_add_another">નિયમિત કરવા માટે બીજી પાછલી તારીખ ઉમેરો:</string>
+    <string name="reg_new_date">નવી તારીખ</string>
+    <string name="reg_select_days">દિવસ પસંદ કરો</string>
+    <string name="common_reason">કારણ</string>
+    <string name="reg_reason_required">કારણ / નોંધ (જરૂરી)</string>
+    <string name="common_submitting">મોકલી રહ્યું છે…</string>
+    <string name="reg_your_requests">તમારી વિનંતીઓ</string>
+    <string name="reg_no_requests">હજી કોઈ વિનંતી નથી</string>
+    <string name="reg_file_request_tab">વિનંતી દાખલ કરો</string>
+    <string name="reg_no_requests_hint">“વિનંતી દાખલ કરો” ટૅબમાંથી સુધારો દાખલ કરો.</string>
+    <string name="reg_admin_prefix">એડમિન:</string>
+    <string name="reg_clock_in">ક્લોક ઇન</string>
+    <string name="reg_clock_out">ક્લોક આઉટ</string>
+    <string name="common_set">સેટ કરો</string>
+</resources>

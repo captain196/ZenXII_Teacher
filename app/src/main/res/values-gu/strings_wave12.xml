@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 12: MyProfileScreen field labels. They went through a screen-local
+     f(label, value) helper, which no UI-position pattern could see (HOLE 14).
+     PAN / Aadhar / IFSC / ESI stay English: statutory identifiers. -->
+<resources>
+    <string name="prof_f_name">નામ</string>
+    <string name="prof_f_gender">લિંગ</string>
+    <string name="prof_f_dob">જન્મ તારીખ</string>
+    <string name="prof_f_designation">હોદ્દો</string>
+    <string name="prof_f_department">વિભાગ</string>
+    <string name="prof_f_type">પ્રકાર</string>
+    <string name="prof_f_joined">જોડાયા</string>
+    <string name="prof_f_subjects">વિષયો</string>
+    <string name="prof_f_bank">બેંક</string>
+    <string name="prof_f_holder">ખાતાધારક</string>
+    <string name="prof_f_account">ખાતું</string>
+    <string name="prof_f_email">ઇમેઇલ</string>
+    <string name="prof_f_phone">ફોન</string>
+    <string name="prof_f_emergency">કટોકટી</string>
+    <string name="prof_f_current">વર્તમાન</string>
+    <string name="prof_f_permanent">કાયમી</string>
+    <string name="prof_f_degree">ડિગ્રી</string>
+    <string name="prof_f_university">યુનિવર્સિટી</string>
+    <string name="prof_f_year">વર્ષ</string>
+    <string name="prof_f_experience">અનુભવ</string>
+    <string name="prof_years_fmt">%1$s વર્ષ</string>
+</resources>

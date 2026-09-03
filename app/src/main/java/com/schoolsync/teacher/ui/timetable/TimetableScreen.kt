@@ -64,6 +64,11 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.glassCard
 import java.util.Calendar
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.platform.LocalContext
+import com.schoolsync.teacher.util.displayLabel
+import com.schoolsync.teacher.util.CanonicalLabels
 
 @Composable
 fun TimetableScreen(
@@ -90,14 +95,14 @@ fun TimetableScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Weekly Timetable",
+                        text = stringResource(R.string.tt_weekly),
                         style = MaterialTheme.typography.headlineMedium,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 }
                 IconButton(onClick = viewModel::refresh) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
                 }
             }
 
@@ -110,8 +115,8 @@ fun TimetableScreen(
                 state.error != null -> {
                     TimetableMessage(
                         icon = Icons.Filled.CloudOff,
-                        title = "Couldn't load timetable",
-                        message = state.error ?: "Something went wrong",
+                        title = stringResource(R.string.tt_load_error),
+                        message = state.error ?: stringResource(R.string.common_something_wrong),
                         onRetry = viewModel::refresh
                     )
                 }
@@ -119,8 +124,8 @@ fun TimetableScreen(
                     state.weekGrid.values.all { row -> row.all { it == null } } -> {
                     TimetableMessage(
                         icon = Icons.Filled.CalendarMonth,
-                        title = "No timetable yet",
-                        message = "Your weekly schedule hasn't been set up. Pull to refresh or check back later.",
+                        title = stringResource(R.string.tt_none),
+                        message = stringResource(R.string.tt_none_hint),
                         onRetry = viewModel::refresh
                     )
                 }
@@ -176,7 +181,7 @@ private fun TimetableMessage(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(text = "Retry", color = Teal, fontWeight = FontWeight.SemiBold)
+                Text(text = stringResource(R.string.common_retry), color = Teal, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -225,7 +230,7 @@ private fun TimetableGrid(state: TimetableUiState) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Time",
+                        text = stringResource(R.string.tt_time_col),
                         style = MaterialTheme.typography.labelMedium,
                         color = TextTertiary,
                         fontWeight = FontWeight.SemiBold
@@ -287,7 +292,7 @@ private fun TimetableGrid(state: TimetableUiState) {
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = day.take(3),
+                                    text = CanonicalLabels.dayShort(LocalContext.current, day),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = if (isToday) Teal else TextPrimary,
                                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
@@ -370,7 +375,7 @@ private fun TimetableCell(
     ) {
         if (isBreakEntry && entry != null) {
             // Break / Lunch row — same cell size, distinct styling.
-            val label = if (entry.isLunch) "Lunch" else entry.subject.ifBlank { "Break" }
+            val label = if (entry.isLunch) stringResource(R.string.tt_lunch) else entry.subject.ifBlank { stringResource(R.string.tt_break) }
             val icon = if (entry.isLunch) "🍱" else "☕"
             Column(
                 modifier = Modifier.padding(4.dp),
@@ -403,7 +408,8 @@ private fun TimetableCell(
         } else if (entry != null) {
             val subjectText = entry.subject
             val teacherText = entry.teacher
-            val classText = entry.className.removePrefix("Class ") + " " + entry.section.removePrefix("Section ")
+            val classText = entry.className.removePrefix("Class ") + " " +  // i18n-ignore: server prefix
+                entry.section.removePrefix("Section ")  // i18n-ignore: server prefix
             val roomText = entry.room
             val isSub = teacherText.startsWith("Covered by") || subjectText.contains("(Sub)")
             Column(

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings hidden from the audit by the escape-sequence / conditional detector holes. -->
+<resources>
+    <string name="att_all_marked">सभी चिह्नित ✓</string>
+    <string name="login_tagline">अपनी कक्षाएँ, उपस्थिति और अंक\nएक ही जगह प्रबंधित करें।</string>
+    <string name="common_hide">छिपाएँ</string>
+    <string name="common_show">दिखाएँ</string>
+    <string name="ev_view_gallery">गैलरी देखें</string>
+    <string name="fees_select_class">एक कक्षा चुनें</string>
+    <string name="common_collapse">संक्षिप्त करें</string>
+    <string name="common_expand">विस्तृत करें</string>
+    <string name="gal_cancel_upload">अपलोड रद्द करें</string>
+    <string name="file_type_image">चित्र</string>
+    <string name="file_type_document">दस्तावेज़</string>
+    <string name="leave_no_balances">अवकाश शेष अभी कॉन्फ़िगर नहीं है।\nअवकाश प्रकार सेट करने हेतु व्यवस्थापक से संपर्क करें।</string>
+    <string name="lib_due_today">आज देय</string>
+    <string name="reg_clock_in_time">क्लॉक इन समय</string>
+    <string name="reg_clock_out_time">क्लॉक आउट समय</string>
+    <string name="reg_switch_clock">घड़ी पर जाएँ</string>
+    <string name="reg_switch_keyboard">कीबोर्ड प्रविष्टि पर जाएँ</string>
+    <string name="profile_class_teacher_prefix">कक्षा शिक्षक  ·  %1$s</string>
+    <string name="rf_all_flags">सभी फ्लैग</string>
+    <string name="rf_none_student">इस छात्र हेतु कोई फ्लैग नहीं</string>
+    <string name="rf_none_class">इस कक्षा में कोई फ्लैग नहीं</string>
+    <string name="results_no_rank">रैंक उपलब्ध नहीं</string>
+    <string name="results_collapse_subjects">विषय संक्षिप्त करें</string>
+    <string name="results_expand_subjects">विषय विस्तृत करें</string>
+    <string name="wt_desc_attendance">एक टैप में डिजिटल उपस्थिति लें।\nप्रवृत्तियाँ देखें और सहजता से रिपोर्ट बनाएँ।</string>
+    <string name="wt_desc_marks">अंक अपलोड करें, ग्रेड स्वतः गणना करें और\nपरिणाम तुरंत अभिभावकों से साझा करें।</string>
+    <string name="wt_desc_connected">अभिभावकों से संवाद करें, सूचनाएँ साझा करें और\nअवकाश अनुरोध एक ही जगह प्रबंधित करें।</string>
+    <string name="wt_get_started">शुरू करें</string>
+    <string name="wt_next">आगे</string>
+    <string name="story_unmute">ध्वनि चालू करें</string>
+    <string name="story_mute">ध्वनि बंद करें</string>
+    <string name="story_none_active">कोई सक्रिय स्टोरी नहीं</string>
+    <string name="story_none_yet">अभी कोई स्टोरी नहीं</string>
+    <string name="story_past_in_archive">आपकी पुरानी स्टोरीज़ ऊपर संग्रहित में हैं।</string>
+    <string name="tt_lunch">भोजनावकाश</string>
+    <string name="tt_break">विराम</string>
+    <string name="fees_yearly_short">वार्षिक</string>
+</resources>

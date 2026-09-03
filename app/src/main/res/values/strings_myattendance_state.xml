@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c (cont.): GPS/permission state-prompt cards. -->
+<resources>
+    <string name="myatt_perm_blocked_body">Enable Location for this app in system Settings to mark attendance.</string>
+    <string name="myatt_open_settings">Open Settings</string>
+    <string name="myatt_perm_needed_body">Attendance needs your location to confirm you are on campus.</string>
+    <string name="myatt_grant_permission">Grant Permission</string>
+    <string name="myatt_location_off_body">Turn on device location (GPS), then retry.</string>
+    <string name="myatt_open_location_settings">Open Location Settings</string>
+    <string name="myatt_weak_gps_body">Couldn\'t get an accurate fix. Move to an open area and retry. If location is set to Approximate, enable Precise location for this app.</string>
+    <string name="myatt_perm_required_body">Grant location permission to continue.</string>
+    <string name="common_something_wrong">Something went wrong.</string>
+</resources>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings hidden from the audit by the escape-sequence / conditional detector holes. -->
+<resources>
+    <string name="att_all_marked">सर्व नोंदवले ✓</string>
+    <string name="login_tagline">तुमचे वर्ग, उपस्थिती व गुण\nएकाच ठिकाणी व्यवस्थापित करा.</string>
+    <string name="common_hide">लपवा</string>
+    <string name="common_show">दाखवा</string>
+    <string name="ev_view_gallery">गॅलरी पहा</string>
+    <string name="fees_select_class">एक वर्ग निवडा</string>
+    <string name="common_collapse">संक्षिप्त करा</string>
+    <string name="common_expand">विस्तृत करा</string>
+    <string name="gal_cancel_upload">अपलोड रद्द करा</string>
+    <string name="file_type_image">प्रतिमा</string>
+    <string name="file_type_document">दस्तऐवज</string>
+    <string name="leave_no_balances">रजा शिल्लक अद्याप कॉन्फिगर केलेली नाही.\nरजा प्रकार सेट करण्यासाठी प्रशासकाशी संपर्क साधा.</string>
+    <string name="lib_due_today">आज देय</string>
+    <string name="reg_clock_in_time">क्लॉक इन वेळ</string>
+    <string name="reg_clock_out_time">क्लॉक आउट वेळ</string>
+    <string name="reg_switch_clock">घड्याळावर जा</string>
+    <string name="reg_switch_keyboard">कीबोर्ड नोंदीवर जा</string>
+    <string name="profile_class_teacher_prefix">वर्गशिक्षक  ·  %1$s</string>
+    <string name="rf_all_flags">सर्व फ्लॅग</string>
+    <string name="rf_none_student">या विद्यार्थ्यासाठी फ्लॅग नाहीत</string>
+    <string name="rf_none_class">या वर्गात फ्लॅग नाहीत</string>
+    <string name="results_no_rank">क्रमांक उपलब्ध नाही</string>
+    <string name="results_collapse_subjects">विषय संक्षिप्त करा</string>
+    <string name="results_expand_subjects">विषय विस्तृत करा</string>
+    <string name="wt_desc_attendance">एका टॅपमध्ये डिजिटल उपस्थिती घ्या.\nकल पहा व सहजपणे अहवाल तयार करा.</string>
+    <string name="wt_desc_marks">गुण अपलोड करा, श्रेणी आपोआप मोजा आणि\nनिकाल त्वरित पालकांना पाठवा.</string>
+    <string name="wt_desc_connected">पालकांशी संवाद साधा, सूचना पाठवा आणि\nरजा विनंत्या एकाच ठिकाणी हाताळा.</string>
+    <string name="wt_get_started">सुरू करा</string>
+    <string name="wt_next">पुढे</string>
+    <string name="story_unmute">आवाज चालू करा</string>
+    <string name="story_mute">आवाज बंद करा</string>
+    <string name="story_none_active">सक्रिय स्टोरी नाहीत</string>
+    <string name="story_none_yet">अद्याप स्टोरी नाहीत</string>
+    <string name="story_past_in_archive">तुमच्या जुन्या स्टोरीज वर संग्रहितमध्ये आहेत.</string>
+    <string name="tt_lunch">भोजन सुट्टी</string>
+    <string name="tt_break">सुट्टी</string>
+    <string name="fees_yearly_short">वार्षिक</string>
+</resources>

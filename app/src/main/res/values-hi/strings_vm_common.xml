@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViewModel-level messages: auth, dashboard, attendance, marks, my attendance. -->
+<resources>
+    <string name="vm_teacher_id_required">शिक्षक ID आवश्यक है</string>
+    <string name="vm_password_required">पासवर्ड आवश्यक है</string>
+    <string name="vm_login_failed">लॉगिन विफल</string>
+    <string name="vm_error_occurred">एक त्रुटि हुई</string>
+    <string name="vm_reset_failed">रीसेट विफल।</string>
+    <string name="vm_pw_length">पासवर्ड 8–72 वर्ण का होना चाहिए।</string>
+    <string name="vm_pw_upper">एक बड़ा अक्षर होना चाहिए।</string>
+    <string name="vm_pw_lower">एक छोटा अक्षर होना चाहिए।</string>
+    <string name="vm_pw_digit">एक अंक होना चाहिए।</string>
+    <string name="vm_pw_mismatch">पासवर्ड मेल नहीं खाते।</string>
+    <string name="vm_logout_failed">लॉगआउट विफल</string>
+    <string name="vm_not_logged_in">लॉग इन नहीं है</string>
+    <string name="vm_no_session">आपके विद्यालय हेतु अभी कोई सक्रिय शैक्षणिक सत्र नहीं है। रीफ़्रेश हेतु खींचें।</string>
+    <string name="vm_dash_load_error">आपका डैशबोर्ड लोड नहीं हो सका — कनेक्शन जाँचें और रीफ़्रेश हेतु खींचें।</string>
+    <string name="vm_dash_load_failed">डैशबोर्ड लोड करने में विफल</string>
+    <string name="vm_stat_classes">कक्षाएँ</string>
+    <string name="vm_substitute">प्रतिस्थापन</string>
+    <string name="vm_att_load_failed">उपस्थिति लोड करने में विफल</string>
+    <string name="vm_att_past_month">बीते माह के संपादन हेतु सुधार अनुरोध आवश्यक है। दर्ज करने हेतु किसी बंद खाने पर टैप करें।</string>
+    <string name="vm_att_date_changed">चिह्नित करना शुरू करने के बाद तिथि बदल गई। आज की शीट पुनः लोड हो रही है — कृपया दोबारा जाँचकर सहेजें।</string>
+    <string name="vm_att_not_authorized">इस कक्षा हेतु अधिकृत नहीं।</string>
+    <string name="vm_att_holiday">आज अवकाश है — उपस्थिति दर्ज नहीं की जा सकती।</string>
+    <string name="vm_conflict_refresh">विरोध — रीफ़्रेश करके पुनः प्रयास करें।</string>
+    <string name="vm_not_found">नहीं मिला।</string>
+    <string name="vm_save_failed">सहेजना विफल</string>
+    <string name="vm_correction_exists">एक लंबित सुधार पहले से मौजूद है।</string>
+    <string name="vm_reason_min">कारण 10+ अक्षर का होना चाहिए।</string>
+    <string name="vm_submit_failed">भेजने में विफल</string>
+    <string name="vm_requests_load_failed">अनुरोध लोड करने में विफल</string>
+    <string name="vm_marks_invalid">अमान्य</string>
+    <string name="vm_marks_fix_errors">सहेजने से पहले कृपया सत्यापन त्रुटियाँ ठीक करें</string>
+    <string name="vm_marks_saved_offline">ऑफ़लाइन सहेजा गया — ऑनलाइन होने पर सिंक होगा</string>
+    <string name="vm_marks_save_failed">अंक सहेजने में विफल</string>
+    <string name="vm_myatt_load_failed">उपस्थिति लोड नहीं हो सकी।</string>
+    <string name="vm_unexpected_error">अप्रत्याशित त्रुटि</string>
+    <string name="vm_reg_load_failed">आपके अनुरोध लोड नहीं हो सके।</string>
+    <string name="vm_reg_submit_failed">अनुरोध नहीं भेजा जा सका।</string>
+</resources>

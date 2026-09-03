@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings hidden from the audit by the escape-sequence / conditional detector holes. -->
+<resources>
+    <string name="att_all_marked">બધા ચિહ્નિત ✓</string>
+    <string name="login_tagline">તમારા વર્ગો, હાજરી અને ગુણ\nએક જ જગ્યાએ સંભાળો.</string>
+    <string name="common_hide">છુપાવો</string>
+    <string name="common_show">બતાવો</string>
+    <string name="ev_view_gallery">ગેલેરી જુઓ</string>
+    <string name="fees_select_class">એક વર્ગ પસંદ કરો</string>
+    <string name="common_collapse">સંકોચો</string>
+    <string name="common_expand">વિસ્તારો</string>
+    <string name="gal_cancel_upload">અપલોડ રદ કરો</string>
+    <string name="file_type_image">છબી</string>
+    <string name="file_type_document">દસ્તાવેજ</string>
+    <string name="leave_no_balances">રજા બાકી હજી ગોઠવાઈ નથી.\nરજા પ્રકાર સેટ કરવા એડમિનનો સંપર્ક કરો.</string>
+    <string name="lib_due_today">આજે બાકી</string>
+    <string name="reg_clock_in_time">ક્લોક ઇન સમય</string>
+    <string name="reg_clock_out_time">ક્લોક આઉટ સમય</string>
+    <string name="reg_switch_clock">ઘડિયાળ પર જાઓ</string>
+    <string name="reg_switch_keyboard">કીબોર્ડ પ્રવેશ પર જાઓ</string>
+    <string name="profile_class_teacher_prefix">વર્ગ શિક્ષક  ·  %1$s</string>
+    <string name="rf_all_flags">બધા ફ્લેગ</string>
+    <string name="rf_none_student">આ વિદ્યાર્થી માટે કોઈ ફ્લેગ નથી</string>
+    <string name="rf_none_class">આ વર્ગમાં કોઈ ફ્લેગ નથી</string>
+    <string name="results_no_rank">રેન્ક ઉપલબ્ધ નથી</string>
+    <string name="results_collapse_subjects">વિષયો સંકોચો</string>
+    <string name="results_expand_subjects">વિષયો વિસ્તારો</string>
+    <string name="wt_desc_attendance">એક ટૅપમાં ડિજિટલ હાજરી લો.\nવલણો જુઓ અને સરળતાથી રિપોર્ટ બનાવો.</string>
+    <string name="wt_desc_marks">ગુણ અપલોડ કરો, ગ્રેડ આપોઆપ ગણો અને\nપરિણામ તરત વાલીઓને મોકલો.</string>
+    <string name="wt_desc_connected">વાલીઓ સાથે વાત કરો, સૂચનાઓ મોકલો અને\nરજા વિનંતીઓ એક જ જગ્યાએ સંભાળો.</string>
+    <string name="wt_get_started">શરૂ કરો</string>
+    <string name="wt_next">આગળ</string>
+    <string name="story_unmute">અવાજ ચાલુ કરો</string>
+    <string name="story_mute">અવાજ બંધ કરો</string>
+    <string name="story_none_active">કોઈ સક્રિય સ્ટોરી નથી</string>
+    <string name="story_none_yet">હજી કોઈ સ્ટોરી નથી</string>
+    <string name="story_past_in_archive">તમારી જૂની સ્ટોરીઝ ઉપર આર્કાઇવમાં છે.</string>
+    <string name="tt_lunch">ભોજન વિરામ</string>
+    <string name="tt_break">વિરામ</string>
+    <string name="fees_yearly_short">વાર્ષિક</string>
+</resources>

@@ -53,6 +53,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.schoolsync.teacher.data.model.StudentFlag
 import com.schoolsync.teacher.data.model.StudentInfo
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.annotation.StringRes
+import androidx.compose.ui.platform.LocalContext
+import com.schoolsync.teacher.util.CanonicalLabels
 
 /**
  * Phase 6A — Teacher 1-tap Red Flag quick flow.
@@ -74,34 +79,41 @@ import com.schoolsync.teacher.data.model.StudentInfo
 
 /** Compact template descriptor — drives the chip row. */
 private data class FlagTemplate(
-    val label: String,
+    // @StringRes: TEMPLATES below is a top-level val, so a String label would be
+    // resolved once per process and freeze the launch language.
+    @StringRes val label: Int,
     val emoji: String,
     val type: String,        // canonical lowercase enum
     val severity: String,    // canonical lowercase enum
     val message: String
 )
 
+// NOTE on `message`: it is deliberately NOT translated. It is inserted into the
+// flag document and read by the PARENT app, whose reader may have chosen a
+// different language than the staff member filing the flag — so translating it
+// here would show one family's flag in someone else's language. The teacher can
+// always edit the text (More options -> Message) before filing.
 private val TEMPLATES = listOf(
     FlagTemplate(
-        label = "Late HW",
+        label = R.string.rf_tpl_late_hw,
         emoji = "📝",
         type = "homework",
         severity = "medium",
-        message = "Did not submit homework on time"
+        message = "Did not submit homework on time"  // i18n-ignore: read by the Parent app
     ),
     FlagTemplate(
-        label = "Behaviour",
+        label = R.string.rf_tpl_behaviour,
         emoji = "😟",
         type = "behavior",
         severity = "medium",
-        message = "Behaviour requires attention"
+        message = "Behaviour requires attention"  // i18n-ignore: read by the Parent app
     ),
     FlagTemplate(
-        label = "Low performance",
+        label = R.string.rf_tpl_low_perf,
         emoji = "📉",
         type = "performance",
         severity = "medium",
-        message = "Recent performance below expectation"
+        message = "Recent performance below expectation"  // i18n-ignore: read by the Parent app
     )
 )
 
@@ -254,7 +266,7 @@ fun QuickFlagSheet(
         ) {
             // ── Header: student + class ──────────────────────────
             Text(
-                text = "🚩 Flag ${student.displayName}",
+                text = stringResource(R.string.rf_flag_student_cd, student.displayName),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -269,7 +281,7 @@ fun QuickFlagSheet(
 
             // ── Template chips ──────────────────────────────────
             Text(
-                text = "Quick reason",
+                text = stringResource(R.string.rf_quick_reason),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -300,7 +312,7 @@ fun QuickFlagSheet(
                 onClick = { moreOptionsOpen = !moreOptionsOpen },
                 contentPadding = PaddingValues(horizontal = 4.dp)
             ) {
-                Text(if (moreOptionsOpen) "▾ Hide options" else "▸ More options")
+                Text(if (moreOptionsOpen) stringResource(R.string.rf_hide_options) else stringResource(R.string.rf_more_options))
             }
             AnimatedVisibility(
                 visible = moreOptionsOpen,
@@ -308,24 +320,27 @@ fun QuickFlagSheet(
                 exit = shrinkVertically()
             ) {
                 Column {
+                    val ctx = LocalContext.current
                     EnumDropdown(
-                        label = "Severity",
+                        label = stringResource(R.string.common_severity),
                         options = SEVERITIES,
                         value = severity,
+                        display = { CanonicalLabels.flagSeverity(ctx, it) },
                         onChange = { severity = it }
                     )
                     Spacer(Modifier.height(8.dp))
                     EnumDropdown(
-                        label = "Type",
+                        label = stringResource(R.string.common_type),
                         options = TYPES,
                         value = type,
+                        display = { CanonicalLabels.flagType(ctx, it) },
                         onChange = { type = it }
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = message,
                         onValueChange = { message = it },
-                        label = { Text("Message") },
+                        label = { Text(stringResource(R.string.common_message)) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                         maxLines = 4
@@ -340,7 +355,7 @@ fun QuickFlagSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                OutlinedButton(onClick = { state.dismiss() }) { Text("Cancel") }
+                OutlinedButton(onClick = { state.dismiss() }) { Text(stringResource(R.string.common_cancel)) }
                 Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = {
@@ -382,23 +397,21 @@ fun QuickFlagSheet(
                         )
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (submitting) "Submitting…" else "Submit Flag")
+                    Text(if (submitting) stringResource(R.string.common_submitting_ellipsis) else stringResource(R.string.rf_submit_flag))
                 }
             }
 
             if (noAssignedSubjects) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "No subject is assigned to you for this class — this flag " +
-                        "will be filed without a subject. Ask an admin to set up your " +
-                        "subject assignment.",
+                    text = stringResource(R.string.rf_no_subject_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else if (needsSubject) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "Subject is required on this screen.",
+                    text = stringResource(R.string.rf_subject_required),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -428,7 +441,7 @@ private fun TemplateChip(
         Text(template.emoji, fontSize = 14.sp)
         Spacer(Modifier.width(6.dp))
         Text(
-            template.label,
+            stringResource(template.label),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
         )
@@ -445,10 +458,10 @@ private fun SubjectField(
     hasDefault: Boolean
 ) {
     val helper = when {
-        hasDefault && !forced       -> "Auto-resolved from this screen"
-        subjectsForClass.size == 1  -> "Single assignment auto-filled"
-        forced                      -> "Required — pick a subject"
-        else                        -> "Optional"
+        hasDefault && !forced       -> stringResource(R.string.rf_auto_resolved)
+        subjectsForClass.size == 1  -> stringResource(R.string.rf_auto_filled)
+        forced                      -> stringResource(R.string.rf_subject_required_pick)
+        else                        -> stringResource(R.string.common_optional)
     }
 
     if (subjectsForClass.isEmpty()) {
@@ -467,7 +480,7 @@ private fun SubjectField(
                 value = subject,
                 onValueChange = { /* read-only */ },
                 readOnly = true,
-                label = { Text("Subject") },
+                label = { Text(stringResource(R.string.common_subject)) },
                 supportingText = { Text(helper) },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -484,7 +497,7 @@ private fun SubjectField(
             value = subject,
             onValueChange = { /* read-only via dropdown */ },
             readOnly = true,
-            label = { Text("Subject" + if (forced) " *" else "") },
+            label = { Text(stringResource(R.string.common_subject) + if (forced) " *" else "") },
             supportingText = { Text(helper) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
@@ -536,7 +549,7 @@ fun QuickFlagUndoBanner(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Text(
-                "🚩 Flag raised",
+                stringResource(R.string.flag_raised_toast),
                 color = MaterialTheme.colorScheme.inverseOnSurface,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f)
@@ -547,7 +560,7 @@ fun QuickFlagUndoBanner(
                     contentColor = MaterialTheme.colorScheme.inversePrimary
                 )
             ) {
-                Text("UNDO", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.common_undo), fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -559,6 +572,9 @@ private fun EnumDropdown(
     label: String,
     options: List<String>,
     value: String,
+    // Renders a canonical wire value for display. `value`/`options` stay
+    // canonical — only what the user reads passes through this.
+    display: (String) -> String,
     onChange: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -567,7 +583,7 @@ private fun EnumDropdown(
         onExpandedChange = { expanded = !expanded }
     ) {
         OutlinedTextField(
-            value = value.replaceFirstChar { it.uppercase() },
+            value = display(value),
             onValueChange = { /* read-only */ },
             readOnly = true,
             label = { Text(label) },

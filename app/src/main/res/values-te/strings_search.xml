@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Topbar search: section headers and result placeholders. -->
+<resources>
+    <string name="search_cat_my_classes">నా తరగతులు</string>
+    <string name="search_cat_goto">ఇక్కడికి వెళ్లండి</string>
+    <string name="search_open_fmt">%1$s తెరవండి</string>
+    <string name="search_unnamed_student">(పేరు లేని విద్యార్థి)</string>
+    <string name="search_untitled_notice">(శీర్షిక లేని నోటీసు)</string>
+    <string name="search_untitled_event">(శీర్షిక లేని ఈవెంట్)</string>
+    <string name="search_class_teacher">తరగతి ఉపాధ్యాయుడు</string>
+</resources>

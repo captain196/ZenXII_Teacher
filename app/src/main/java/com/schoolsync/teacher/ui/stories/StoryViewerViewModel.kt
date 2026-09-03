@@ -25,6 +25,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /**
  * Drives the teacher's full-screen "All stories" viewer.
@@ -72,7 +76,7 @@ class StoryViewerViewModel @Inject constructor(
     val currentUserId: StateFlow<String> = flow { emit(tokenManager.userId.firstOrNull().orEmpty()) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
-    /** Own name + avatar for the tray's "Your story" tile. Needed even with no
+    /** Own name + avatar for the tray's appContext.localizedString(R.string.story_your_story) tile. Needed even with no
      *  stories posted, so it can't come from the (absent) own story group. */
     val currentUserName: StateFlow<String> = flow { emit(tokenManager.userName.firstOrNull().orEmpty()) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
@@ -148,7 +152,7 @@ class StoryViewerViewModel @Inject constructor(
                     onFailure = { e ->
                         android.util.Log.w(TAG, "seen-by stream failed for $storyId", e)
                         _seenByState.value =
-                            ViewersUiState.Error(e.message ?: "Couldn't load who viewed this.")
+                            ViewersUiState.Error(e.message ?: appContext.localizedString(R.string.story_viewers_error))
                     }
                 )
             }
@@ -199,12 +203,12 @@ class StoryViewerViewModel @Inject constructor(
         viewModelScope.launch {
             storyRepo.deleteStory(storyId).fold(
                 onSuccess = {
-                    _actionMessage.value = "Story deleted"
+                    _actionMessage.value = appContext.localizedString(R.string.vm_story_deleted)
                     _storyDeleted.value = storyId
                 },
                 onFailure = { e ->
                     android.util.Log.w(TAG, "delete failed for $storyId", e)
-                    _actionMessage.value = e.message ?: "Couldn't delete this story"
+                    _actionMessage.value = e.message ?: appContext.localizedString(R.string.vm_story_delete_failed)
                 }
             )
         }

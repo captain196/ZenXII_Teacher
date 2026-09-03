@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Three-letter month labels. month.take(3) on the server's English name renders Latin in every locale. -->
+<resources>
+    <string name="month_short_january">జన</string>
+    <string name="month_short_february">ఫిబ్ర</string>
+    <string name="month_short_march">మార్చి</string>
+    <string name="month_short_april">ఏప్రి</string>
+    <string name="month_short_may">మే</string>
+    <string name="month_short_june">జూన్</string>
+    <string name="month_short_july">జూలై</string>
+    <string name="month_short_august">ఆగ</string>
+    <string name="month_short_september">సెప్</string>
+    <string name="month_short_october">అక్టో</string>
+    <string name="month_short_november">నవం</string>
+    <string name="month_short_december">డిసెం</string>
+</resources>

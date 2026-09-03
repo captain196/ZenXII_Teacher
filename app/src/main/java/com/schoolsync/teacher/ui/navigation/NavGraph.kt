@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ripple.rememberRipple
+import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -147,10 +148,15 @@ import com.schoolsync.teacher.ui.theme.TealSurface
 import com.schoolsync.teacher.ui.timetable.TimetableScreen
 import com.schoolsync.teacher.ui.lessonplan.TodayLessonsScreen
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.platform.LocalContext
+import com.schoolsync.teacher.util.LocaleManager
 
 /** All navigation routes in the app. */
 sealed class Route(val route: String) {
     data object Splash : Route("splash")
+    data object LanguageSetup : Route("language_setup")
     data object Walkthrough : Route("walkthrough")
     data object Login : Route("login")
     data object ForceChangePassword : Route("force_change_password")
@@ -189,39 +195,43 @@ sealed class Route(val route: String) {
 
 data class NavRailItem(
     val route: Route,
-    val label: String,
+    // @StringRes, never String. These lists are top-level vals, initialised
+    // once per process — a String here would freeze the language the app
+    // launched in and survive recreate(), which is exactly the bug class this
+    // work exists to remove. Resolved at render with stringResource().
+    @StringRes val labelRes: Int,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 )
 
 /** Primary nav items (shown directly in the rail). */
 val mainNavItems = listOf(
-    NavRailItem(Route.Dashboard, "Home", Icons.Filled.Dashboard, Icons.Outlined.Dashboard),
-    NavRailItem(Route.Attendance, "Attend.", Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle),
-    NavRailItem(Route.Marks, "Marks", Icons.Filled.Grade, Icons.Outlined.Grade),
-    NavRailItem(Route.Students, "Students", Icons.Filled.People, Icons.Outlined.People),
-    NavRailItem(Route.Messages, "Chat", Icons.Filled.Chat, Icons.Outlined.Chat),
+    NavRailItem(Route.Dashboard, R.string.nav_home, Icons.Filled.Dashboard, Icons.Outlined.Dashboard),
+    NavRailItem(Route.Attendance, R.string.nav_attendance_short, Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle),
+    NavRailItem(Route.Marks, R.string.nav_marks, Icons.Filled.Grade, Icons.Outlined.Grade),
+    NavRailItem(Route.Students, R.string.nav_students, Icons.Filled.People, Icons.Outlined.People),
+    NavRailItem(Route.Messages, R.string.nav_chat, Icons.Filled.Chat, Icons.Outlined.Chat),
 )
 
 /** Sub-items revealed when "More" is expanded. */
 val moreSubItems = listOf(
-    NavRailItem(Route.MyAttendance, "My Att.", Icons.Filled.MyLocation, Icons.Outlined.MyLocation),
-    NavRailItem(Route.Results, "Results", Icons.Filled.Leaderboard, Icons.Outlined.Leaderboard),
-    NavRailItem(Route.Homework, "HW", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
-    NavRailItem(Route.Fees, "Fees", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet),
-    NavRailItem(Route.RedFlags, "Flags", Icons.Filled.Flag, Icons.Outlined.Flag),
-    NavRailItem(Route.Stories, "Stories", Icons.Filled.CameraAlt, Icons.Outlined.CameraAlt),
-    NavRailItem(Route.Timetable, "Time", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-    NavRailItem(Route.LessonPlan, "Plans", Icons.Filled.EventNote, Icons.Outlined.EventNote),
-    NavRailItem(Route.Notices, "Notices", Icons.Filled.Campaign, Icons.Outlined.Campaign),
-    NavRailItem(Route.Events, "Events", Icons.Filled.Event, Icons.Outlined.Event),
-    NavRailItem(Route.Ptm, "PTM", Icons.Filled.Groups, Icons.Outlined.Groups),
-    NavRailItem(Route.Leave, "Leave", Icons.Filled.EventNote, Icons.Outlined.EventNote),
-    NavRailItem(Route.Gallery, "Gallery", Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
-    NavRailItem(Route.Library, "Library", Icons.Filled.LocalLibrary, Icons.Outlined.LocalLibrary),
-    NavRailItem(Route.Payslips, "Pay", Icons.Filled.Payments, Icons.Outlined.Payments),
-    NavRailItem(Route.Appraisals, "Review", Icons.Filled.WorkspacePremium, Icons.Outlined.WorkspacePremium),
-    NavRailItem(Route.Recruitment, "Jobs", Icons.Filled.WorkOutline, Icons.Outlined.WorkOutline),
+    NavRailItem(Route.MyAttendance, R.string.nav_my_attendance_short, Icons.Filled.MyLocation, Icons.Outlined.MyLocation),
+    NavRailItem(Route.Results, R.string.nav_results, Icons.Filled.Leaderboard, Icons.Outlined.Leaderboard),
+    NavRailItem(Route.Homework, R.string.nav_homework_short, Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
+    NavRailItem(Route.Fees, R.string.nav_fees, Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet),
+    NavRailItem(Route.RedFlags, R.string.nav_flags, Icons.Filled.Flag, Icons.Outlined.Flag),
+    NavRailItem(Route.Stories, R.string.nav_stories, Icons.Filled.CameraAlt, Icons.Outlined.CameraAlt),
+    NavRailItem(Route.Timetable, R.string.nav_timetable_short, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+    NavRailItem(Route.LessonPlan, R.string.nav_plans, Icons.Filled.EventNote, Icons.Outlined.EventNote),
+    NavRailItem(Route.Notices, R.string.nav_notices, Icons.Filled.Campaign, Icons.Outlined.Campaign),
+    NavRailItem(Route.Events, R.string.nav_events, Icons.Filled.Event, Icons.Outlined.Event),
+    NavRailItem(Route.Ptm, R.string.nav_ptm, Icons.Filled.Groups, Icons.Outlined.Groups),
+    NavRailItem(Route.Leave, R.string.nav_leave, Icons.Filled.EventNote, Icons.Outlined.EventNote),
+    NavRailItem(Route.Gallery, R.string.nav_gallery, Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
+    NavRailItem(Route.Library, R.string.nav_library, Icons.Filled.LocalLibrary, Icons.Outlined.LocalLibrary),
+    NavRailItem(Route.Payslips, R.string.nav_pay, Icons.Filled.Payments, Icons.Outlined.Payments),
+    NavRailItem(Route.Appraisals, R.string.nav_review, Icons.Filled.WorkspacePremium, Icons.Outlined.WorkspacePremium),
+    NavRailItem(Route.Recruitment, R.string.nav_jobs, Icons.Filled.WorkOutline, Icons.Outlined.WorkOutline),
 )
 
 /** Routes that belong to the "More" group (for highlight logic). */
@@ -281,6 +291,11 @@ fun AppNavGraph(
                             popUpTo(Route.Splash.route) { inclusive = true }
                         }
                     },
+                    onNavigateToLanguageSetup = {
+                        navController.navigate(Route.LanguageSetup.route) {
+                            popUpTo(Route.Splash.route) { inclusive = true }
+                        }
+                    },
                     onNavigateToLogin = {
                         navController.navigate(Route.Login.route) {
                             popUpTo(Route.Splash.route) { inclusive = true }
@@ -301,6 +316,38 @@ fun AppNavGraph(
                     mustChangePassword = state.mustChangePassword,
                 )
             }
+        }
+
+        composable(Route.LanguageSetup.route) {
+            // recreate() does NOT restart the graph at Splash: Navigation-Compose
+            // saves and restores its back stack across an Activity recreate, so
+            // this destination comes straight back — in the new language, with
+            // the user having to press Continue a second time to get anywhere.
+            // (Verified on device: first tap re-rendered this screen in Tamil,
+            // second tap finally reached Splash.)
+            //
+            // So detect the post-recreate pass explicitly. On first entry
+            // hasExplicitChoice() is false — Splash only routes here when it is
+            // — and the effect does nothing. After a language change it is true,
+            // and we route onward without asking again.
+            val langCtx = LocalContext.current
+            LaunchedEffect(Unit) {
+                if (LocaleManager.hasExplicitChoice(langCtx)) {
+                    navController.navigate(Route.Splash.route) {
+                        popUpTo(Route.LanguageSetup.route) { inclusive = true }
+                    }
+                }
+            }
+            // onContinue covers the case where the pre-selected language is kept
+            // and no recreate happens — routing back through Splash keeps the
+            // login/onboarding decision in one place.
+            com.schoolsync.teacher.ui.splash.LanguageSetupScreen(
+                onContinue = {
+                    navController.navigate(Route.Splash.route) {
+                        popUpTo(Route.LanguageSetup.route) { inclusive = true }
+                    }
+                }
+            )
         }
 
         composable(Route.Walkthrough.route) {
@@ -539,7 +586,7 @@ fun MainScaffold(navController: NavHostController) {
                 ) {
                     Icon(
                         imageVector = Icons.Filled.ExpandMore,
-                        contentDescription = "More",
+                        contentDescription = stringResource(R.string.nav_more),
                         tint = if (moreActive) NavSelected else NavUnselected,
                         modifier = Modifier
                             .size(22.dp)
@@ -548,7 +595,7 @@ fun MainScaffold(navController: NavHostController) {
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "More",
+                    text = stringResource(R.string.nav_more),
                     fontSize = 10.sp,
                     color = if (moreActive) NavSelected else NavUnselected,
                     maxLines = 1
@@ -772,7 +819,7 @@ private fun NavRailEntry(
         ) {
             Icon(
                 imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                contentDescription = item.label,
+                contentDescription = stringResource(item.labelRes),
                 tint = iconColor,
                 modifier = Modifier.size(22.dp)
             )
@@ -787,7 +834,7 @@ private fun NavRailEntry(
         }
         Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = item.label,
+            text = stringResource(item.labelRes),
             fontSize = 10.sp,
             color = labelColor,
             maxLines = 1,

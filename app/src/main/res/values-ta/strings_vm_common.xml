@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViewModel-level messages: auth, dashboard, attendance, marks, my attendance. -->
+<resources>
+    <string name="vm_teacher_id_required">ஆசிரியர் ID தேவை</string>
+    <string name="vm_password_required">கடவுச்சொல் தேவை</string>
+    <string name="vm_login_failed">உள்நுழைவு தோல்வி</string>
+    <string name="vm_error_occurred">ஒரு பிழை ஏற்பட்டது</string>
+    <string name="vm_reset_failed">மீட்டமைப்பு தோல்வி.</string>
+    <string name="vm_pw_length">கடவுச்சொல் 8–72 எழுத்துகளாக இருக்க வேண்டும்.</string>
+    <string name="vm_pw_upper">ஒரு பெரிய எழுத்து இருக்க வேண்டும்.</string>
+    <string name="vm_pw_lower">ஒரு சிறிய எழுத்து இருக்க வேண்டும்.</string>
+    <string name="vm_pw_digit">ஓர் இலக்கம் இருக்க வேண்டும்.</string>
+    <string name="vm_pw_mismatch">கடவுச்சொற்கள் பொருந்தவில்லை.</string>
+    <string name="vm_logout_failed">வெளியேறல் தோல்வி</string>
+    <string name="vm_not_logged_in">உள்நுழையவில்லை</string>
+    <string name="vm_no_session">உங்கள் பள்ளிக்கு இன்னும் செயலில் உள்ள கல்வி அமர்வு இல்லை. புதுப்பிக்க இழுக்கவும்.</string>
+    <string name="vm_dash_load_error">உங்கள் டாஷ்போர்டை ஏற்ற முடியவில்லை — இணைப்பைச் சரிபார்த்து புதுப்பிக்க இழுக்கவும்.</string>
+    <string name="vm_dash_load_failed">டாஷ்போர்டை ஏற்ற முடியவில்லை</string>
+    <string name="vm_stat_classes">வகுப்புகள்</string>
+    <string name="vm_substitute">மாற்று</string>
+    <string name="vm_att_load_failed">வருகையை ஏற்ற முடியவில்லை</string>
+    <string name="vm_att_past_month">கடந்த மாத திருத்தங்களுக்குத் திருத்தக் கோரிக்கை தேவை. தாக்கல் செய்ய பூட்டிய கட்டத்தைத் தட்டவும்.</string>
+    <string name="vm_att_date_changed">குறிக்கத் தொடங்கியபின் தேதி மாறியது. இன்றைய தாள் மீளேற்றப்படுகிறது — மீண்டும் சரிபார்த்துச் சேமிக்கவும்.</string>
+    <string name="vm_att_not_authorized">இந்த வகுப்புக்கு அனுமதி இல்லை.</string>
+    <string name="vm_att_holiday">இன்று விடுமுறை — வருகையைப் பதிவு செய்ய முடியாது.</string>
+    <string name="vm_conflict_refresh">முரண்பாடு — புதுப்பித்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="vm_not_found">கிடைக்கவில்லை.</string>
+    <string name="vm_save_failed">சேமிப்பு தோல்வி</string>
+    <string name="vm_correction_exists">நிலுவையில் ஒரு திருத்தம் ஏற்கனவே உள்ளது.</string>
+    <string name="vm_reason_min">காரணம் 10+ எழுத்துகளாக இருக்க வேண்டும்.</string>
+    <string name="vm_submit_failed">சமர்ப்பிக்க முடியவில்லை</string>
+    <string name="vm_requests_load_failed">கோரிக்கைகளை ஏற்ற முடியவில்லை</string>
+    <string name="vm_marks_invalid">தவறானது</string>
+    <string name="vm_marks_fix_errors">சேமிப்பதற்கு முன் சரிபார்ப்புப் பிழைகளைச் சரிசெய்யவும்</string>
+    <string name="vm_marks_saved_offline">ஆஃப்லைனில் சேமிக்கப்பட்டது — ஆன்லைனில் ஒத்திசைக்கும்</string>
+    <string name="vm_marks_save_failed">மதிப்பெண்களைச் சேமிக்க முடியவில்லை</string>
+    <string name="vm_myatt_load_failed">வருகையை ஏற்ற முடியவில்லை.</string>
+    <string name="vm_unexpected_error">எதிர்பாராத பிழை</string>
+    <string name="vm_reg_load_failed">உங்கள் கோரிக்கைகளை ஏற்ற முடியவில்லை.</string>
+    <string name="vm_reg_submit_failed">கோரிக்கையைச் சமர்ப்பிக்க முடியவில்லை.</string>
+</resources>

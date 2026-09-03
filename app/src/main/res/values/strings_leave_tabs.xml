@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Leave tabs and allotment labels. -->
+<resources>
+    <string name="leave_tab_my">My Leave</string>
+    <string name="leave_tab_student">Student Leave</string>
+    <string name="leave_allotted">Allotted %1$s</string>
+    <string name="leave_allotted_carried">Allotted %1$s + %2$s carried</string>
+</resources>

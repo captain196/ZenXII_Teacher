@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Homework due/submitted time labels (plain functions -> Context-based). -->
+<resources>
+    <string name="hw_submitted_min_ago">Submitted %1$dm ago</string>
+    <string name="hw_submitted_today">Submitted today, %1$s</string>
+    <string name="hw_submitted_yesterday">Submitted yesterday, %1$s</string>
+    <string name="hw_submitted_on">Submitted %1$s, %2$s IST</string>
+    <string name="hw_past_due_fmt">Past due · %1$s</string>
+</resources>

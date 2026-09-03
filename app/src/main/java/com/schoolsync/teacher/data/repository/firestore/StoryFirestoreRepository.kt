@@ -21,6 +21,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.schoolsync.teacher.util.localizedString
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
+import com.schoolsync.teacher.R
 
 /**
  * Stories — single source of truth for the teacher app.
@@ -92,7 +96,8 @@ data class StoryInsights(
 @Singleton
 class StoryFirestoreRepository @Inject constructor(
     private val firestoreService: FirestoreService,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    @ApplicationContext private val ctx: Context,
 ) {
 
     companion object {
@@ -325,7 +330,7 @@ class StoryFirestoreRepository @Inject constructor(
             val pic = d.getString("userPic").orEmpty().ifBlank { reaction?.third.orEmpty() }
             entries[uid] = StoryViewerEntry(
                 userId = uid,
-                name = nm.ifBlank { "Viewer" },
+                name = nm.ifBlank { ctx.localizedString(R.string.story_viewer_generic) },
                 emoji = reaction?.first?.takeIf { it.isNotBlank() },
                 // A pending server timestamp reads as null on the writer's own
                 // device for one snapshot; 0 sorts it to the top as "just now"

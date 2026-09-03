@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two-word UI copy the 3-word prose threshold used to hide. -->
+<resources>
+    <string name="common_submitting_ellipsis">Submitting…</string>
+    <string name="att_submit_request">Submit Request</string>
+    <string name="att_correction_pending">Correction pending</string>
+    <string name="ptm_meetings_title">Parent-Teacher Meetings</string>
+    <string name="ptm_meeting_single">Parent-Teacher Meeting</string>
+    <string name="fees_unknown_student">Unknown student</string>
+    <string name="fees_last_payment">Last payment:</string>
+    <string name="fees_just_reminded">Just reminded</string>
+    <string name="marks_select_exam">Select Exam</string>
+    <string name="marks_select_subject">Select Subject</string>
+    <string name="marks_col_roll_no">Roll No</string>
+    <string name="marks_col_student_id">Student (ID)</string>
+    <string name="myatt_extra_day">Extra day</string>
+    <string name="myatt_not_marked">Not marked</string>
+    <string name="myatt_on_campus">On campus</string>
+    <string name="myatt_locating">Locating…</string>
+    <string name="myatt_clocking_in">Clocking in…</string>
+    <string name="myatt_clock_in">Clock in</string>
+    <string name="myatt_clocking_out">Clocking out…</string>
+    <string name="myatt_clock_out">Clock out</string>
+    <string name="myatt_on_leave_short">On leave</string>
+    <string name="myatt_extra_work">Extra work</string>
+    <string name="reg_set_time">Set time</string>
+    <string name="login_hide_password">Hide password</string>
+    <string name="login_show_password">Show password</string>
+    <string name="fp_your_school">Your school</string>
+    <string name="gal_upload_media">Upload Media</string>
+    <string name="lib_loading">Loading library...</string>
+    <string name="lib_unknown_author">Unknown Author</string>
+    <string name="lib_unknown_book">Unknown Book</string>
+    <string name="dash_todays_attendance">Today\'s Attendance</string>
+    <string name="story_just_now">Just now</string>
+    <string name="story_search_viewers">Search viewers</string>
+    <string name="story_new_story">New story</string>
+    <string name="story_loading">Loading stories...</string>
+    <string name="story_preparing_preview">Preparing preview…</string>
+    <string name="story_share">Share Story</string>
+    <string name="profile_marital_status">Marital Status</string>
+    <string name="profile_fathers_name">Father\'s Name</string>
+    <string name="profile_alt_phone">Alt. Phone</string>
+    <string name="profile_my_assignments">My Assignments</string>
+    <string name="hw_submit_review">Submit Review</string>
+    <string name="hw_edit_assignment">Edit assignment</string>
+    <string name="hw_new_assignment">New assignment</string>
+    <string name="hw_save_changes">Save changes</string>
+    <string name="hw_create_assignment">Create assignment</string>
+    <string name="ev_untitled_event">Untitled event</string>
+    <string name="leave_type_label">Leave Type</string>
+    <string name="rf_submit_flag">Submit Flag</string>
+</resources>

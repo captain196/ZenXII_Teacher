@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2a: dashboard - quick actions, module grid, today's schedule. -->
+<resources>
+    <string name="dash_quick_actions">விரைவு செயல்கள்</string>
+    <string name="dash_upcoming_events">வரவிருக்கும் நிகழ்வுகள்</string>
+    <string name="dash_all_modules">அனைத்து தொகுதிகள்</string>
+    <string name="common_search">தேடு</string>
+    <string name="dash_schedule_error">உங்கள் அட்டவணையை ஏற்ற முடியவில்லை</string>
+    <string name="common_retry">மீண்டும் முயற்சி</string>
+    <string name="dash_in_class_now">இப்போது வகுப்பில்</string>
+    <string name="common_view_all">அனைத்தையும் காண</string>
+    <string name="dash_take_attendance">வருகை எடு</string>
+    <string name="dash_add_homework">வீட்டுப்பாடம் சேர்</string>
+    <string name="dash_enter_marks">மதிப்பெண் பதிவு</string>
+    <string name="dash_post_notice">அறிவிப்பு இடு</string>
+    <string name="dash_clock_in">வருகை பதிவு</string>
+    <string name="dash_red_flags">சிவப்பு கொடிகள்</string>
+    <string name="dash_apply_leave">விடுப்பு விண்ணப்பம்</string>
+    <string name="dash_no_upcoming_events">வரவிருக்கும் நிகழ்வுகள் இல்லை</string>
+    <string name="mod_attendance">வருகை</string>
+    <string name="mod_homework">வீட்டுப்பாடம்</string>
+    <string name="mod_timetable">கால அட்டவணை</string>
+    <string name="mod_my_attendance">என் வருகை</string>
+    <string name="mod_lesson_plan">பாட திட்டம்</string>
+    <string name="mod_payslips">ஊதிய சீட்டு</string>
+    <string name="att_unmarked">குறிக்கப்படாதது</string>
+</resources>

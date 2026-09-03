@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Relative-time labels from plain (non-composable) formatters. -->
+<resources>
+    <string name="fees_reminded_min">%1$d મિ. પહેલાં યાદ</string>
+    <string name="fees_reminded_hour">%1$d ક. પહેલાં યાદ</string>
+    <string name="fees_reminded_day">%1$d દિ. પહેલાં યાદ</string>
+    <string name="myatt_status_halfday">અડધો દિવસ</string>
+    <string name="myatt_status_weeklyoff">સાપ્તાહિક રજા</string>
+    <string name="myatt_status_recorded">નોંધાયું</string>
+    <string name="story_minutes_ago">%1$d મિ. પહેલાં</string>
+    <string name="story_hours_ago">%1$d ક. પહેલાં</string>
+</resources>

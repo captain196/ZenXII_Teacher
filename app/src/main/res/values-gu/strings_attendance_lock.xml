@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Attendance locked-window banner. -->
+<resources>
+    <string name="att_locked_by_fmt">%1$s દ્વારા બંધ. સુધારા વિનંતી દાખલ કરો.</string>
+    <string name="att_locked_generic">બંધ. નોંધ બદલવા સુધારા વિનંતી દાખલ કરો.</string>
+</resources>

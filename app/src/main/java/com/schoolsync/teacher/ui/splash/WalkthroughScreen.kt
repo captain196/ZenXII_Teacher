@@ -55,6 +55,8 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.WarningAmber
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 data class WalkthroughPage(
     val icon: ImageVector,
@@ -69,20 +71,20 @@ private fun teacherPages(): List<WalkthroughPage> = listOf(
     WalkthroughPage(
         icon = Icons.Filled.CheckCircle,
         iconBg = listOf(Teal, TealDark),
-        title = "Smart Attendance",
-        description = "Take attendance digitally with one tap.\nTrack patterns and generate reports effortlessly."
+        title = stringResource(R.string.wt_smart_attendance),
+        description = stringResource(R.string.wt_desc_attendance)
     ),
     WalkthroughPage(
         icon = Icons.Filled.Grade,
         iconBg = listOf(WarningAmber, Color(0xFFD97706)),
-        title = "Marks & Results",
-        description = "Upload marks, auto-calculate grades, and\nshare results with parents instantly."
+        title = stringResource(R.string.wt_marks_results),
+        description = stringResource(R.string.wt_desc_marks)
     ),
     WalkthroughPage(
         icon = Icons.Filled.Forum,
         iconBg = listOf(InfoBlue, Color(0xFF2563EB)),
-        title = "Stay Connected",
-        description = "Communicate with parents, share notices,\nand manage leave requests all in one place."
+        title = stringResource(R.string.wt_stay_connected),
+        description = stringResource(R.string.wt_desc_connected)
     )
 )
 
@@ -126,7 +128,7 @@ fun WalkthroughScreen(
             // Skip button
             TextButton(onClick = onFinished) {
                 Text(
-                    text = "Skip",
+                    text = stringResource(R.string.common_skip),
                     color = TextSecondary,
                     fontSize = 14.sp
                 )
@@ -173,7 +175,7 @@ fun WalkthroughScreen(
                 contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
             ) {
                 Text(
-                    text = if (isLastPage) "Get Started" else "Next",
+                    text = if (isLastPage) stringResource(R.string.wt_get_started) else stringResource(R.string.wt_next),
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp
                 )
@@ -227,6 +229,12 @@ private fun WalkthroughPageContent(page: WalkthroughPage) {
             Text(
                 text = page.title,
                 fontSize = 28.sp,
+                // Explicit lineHeight: without it a title that wraps to a second
+                // line has the line clipped at the top. English fits on one line
+                // so it never showed; caught under the en-XA pseudolocale, and it
+                // would hit any language whose translation runs longer. The body
+                // Text below already sets its own lineHeight for the same reason.
+                lineHeight = 34.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )

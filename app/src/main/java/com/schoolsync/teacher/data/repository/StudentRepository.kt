@@ -51,7 +51,19 @@ class StudentRepository @Inject constructor(
          * "Active", "active", and blank) keeps the student visible.
          */
         private val INACTIVE_STATUSES = setOf(
-            "tc", "withdrawn", "inactive", "suspended"
+            "tc", "withdrawn", "inactive", "suspended",
+            // BUG-001 (2026-08-17): "deleted" was missing here too. Observed on
+            // the admin panel — a student carrying status="Deleted" was offered
+            // in the create-flag roster. Same gap existed on both surfaces.
+            // Keep byte-identical to Red_flags.php INACTIVE_STUDENT_STATUSES.
+            //
+            // ONLY "deleted" is added. A production census of all 150 student
+            // docs found exactly two statuses in use — "Active" (148) and
+            // "Deleted" (2) — so anything else would be invented. This set is
+            // read by 7 modules (attendance, homework, fees, dashboard,
+            // students, red flags); widening it on speculation would silently
+            // remove students from rosters across all of them.
+            "deleted"
         )
     }
 

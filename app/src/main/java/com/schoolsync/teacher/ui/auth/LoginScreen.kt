@@ -53,7 +53,23 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import android.app.Activity
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -71,6 +87,8 @@ import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.glassCard
+import com.schoolsync.teacher.service.NotificationChannels
+import com.schoolsync.teacher.util.LocaleManager
 import kotlinx.coroutines.flow.collectLatest
 
 @Composable
@@ -121,7 +139,7 @@ fun LoginScreen(
                 )
 
                 Text(
-                    text = "Teacher",
+                    text = stringResource(R.string.login_app_subtitle),
                     style = if (compact) MaterialTheme.typography.titleLarge
                     else MaterialTheme.typography.headlineMedium,
                     color = Teal,
@@ -131,7 +149,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(if (compact) 10.dp else 16.dp))
 
                 Text(
-                    text = "Manage your classes, attendance, and marks\nall in one place.",
+                    text = stringResource(R.string.login_tagline),
                     style = if (compact) MaterialTheme.typography.bodyMedium
                     else MaterialTheme.typography.bodyLarge,
                     color = TextSecondary,
@@ -144,9 +162,9 @@ fun LoginScreen(
 
                     // Feature highlights
                     listOf(
-                        "Take attendance in seconds",
-                        "Upload marks with auto-calculation",
-                        "Communicate with parents instantly"
+                        stringResource(R.string.login_feature_attendance),
+                        stringResource(R.string.login_feature_marks),
+                        stringResource(R.string.login_feature_communicate)
                     ).forEach { feature ->
                         Row(
                             modifier = Modifier.padding(vertical = 4.dp),
@@ -184,14 +202,14 @@ fun LoginScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                         Text(
-                            text = "Welcome Back",
+                            text = stringResource(R.string.login_welcome_back),
                             style = MaterialTheme.typography.headlineMedium,
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
 
                         Text(
-                            text = "Sign in to continue",
+                            text = stringResource(R.string.login_sign_in_to_continue),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary,
                             modifier = Modifier.padding(top = 4.dp, bottom = 28.dp)
@@ -201,8 +219,8 @@ fun LoginScreen(
                         OutlinedTextField(
                             value = state.userId,
                             onValueChange = viewModel::onUserIdChange,
-                            label = { Text("Teacher ID") },
-                            placeholder = { Text("Enter your Teacher ID") },
+                            label = { Text(stringResource(R.string.login_teacher_id)) },
+                            placeholder = { Text(stringResource(R.string.login_enter_teacher_id)) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Filled.Person,
@@ -229,8 +247,8 @@ fun LoginScreen(
                         OutlinedTextField(
                             value = state.password,
                             onValueChange = viewModel::onPasswordChange,
-                            label = { Text("Password") },
-                            placeholder = { Text("Enter your password") },
+                            label = { Text(stringResource(R.string.login_password)) },
+                            placeholder = { Text(stringResource(R.string.login_enter_password)) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Filled.Lock,
@@ -246,7 +264,7 @@ fun LoginScreen(
                                         else
                                             Icons.Filled.Visibility,
                                         contentDescription = if (state.isPasswordVisible)
-                                            "Hide password" else "Show password",
+                                            stringResource(R.string.login_hide_password) else stringResource(R.string.login_show_password),
                                         tint = TextTertiary
                                     )
                                 }
@@ -273,12 +291,12 @@ fun LoginScreen(
 
                         // Error message
                         AnimatedVisibility(
-                            visible = state.error != null,
+                            visible = state.errorRes != null,
                             enter = fadeIn(),
                             exit = fadeOut()
                         ) {
                             Text(
-                                text = state.error ?: "",
+                                text = state.errorRes?.let { stringResource(it) } ?: "",
                                 color = ErrorRed,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier
@@ -315,7 +333,7 @@ fun LoginScreen(
                                 )
                             } else {
                                 Text(
-                                    text = "Sign In",
+                                    text = stringResource(R.string.login_sign_in),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -328,7 +346,7 @@ fun LoginScreen(
                             onClick = { showForgotState.value = true }
                         ) {
                             Text(
-                                text = "Forgot password?",
+                                text = stringResource(R.string.login_forgot_password),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Teal,
                                 fontWeight = FontWeight.Medium,
@@ -340,6 +358,20 @@ fun LoginScreen(
         }
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            // Compact language control, pinned top-right. Overlaid on the outer
+            // box rather than placed inside either branch, so the wide
+            // (landscape/tablet) and narrow layouts both get exactly one — and
+            // so it never scrolls away with the form.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 12.dp, end = 16.dp)
+                    .zIndex(1f)
+            ) {
+                LoginLanguageControl()
+            }
+
             if (maxWidth >= 640.dp) {
                 // Wide (tablet / landscape): branding and form side by side
                 Row(
@@ -404,3 +436,99 @@ private fun loginTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = Glass.copy(alpha = 0.3f),
     unfocusedContainerColor = Glass.copy(alpha = 0.15f)
 )
+
+/**
+ * Compact language control for the login screen.
+ *
+ * Deliberately NOT the full picker. The first-run chooser
+ * ([com.schoolsync.teacher.ui.splash.LanguageSetupScreen]) already asked, and on
+ * comparable Indian apps the overwhelming majority of users who pick a language
+ * never change it — so showing six options above the login form every time is
+ * clutter that competes with the Sign In action.
+ *
+ * This shows only the CURRENT language, in its own script, and opens a sheet on
+ * tap — the same pattern Facebook and Instagram use on their login screens. It
+ * still has to exist here, because a staff member who reads no English cannot
+ * reach Profile to change it, and because a shared or handed-down device may
+ * carry someone else's choice.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LoginLanguageControl() {
+    val context = LocalContext.current
+    val current = LocaleManager.effectiveTag(context)
+    var showSheet by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
+            .clickable { showSheet = true }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "\uD83C\uDF10  " + LocaleManager.labelFor(current),  // i18n-ignore: emoji prefix
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSecondary
+        )
+        Icon(
+            imageVector = Icons.Filled.ArrowDropDown,
+            contentDescription = null,
+            tint = TextTertiary,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            containerColor = BgStart
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text(
+                    text = stringResource(R.string.lang_sheet_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                LocaleManager.SUPPORTED.forEach { (tag, endonym) ->
+                    val selected = tag == current
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                showSheet = false
+                                if (tag != current) {
+                                    LocaleManager.setLanguage(context, tag)
+                                    NotificationChannels.ensureChannels(context)
+                                    (context as? Activity)?.recreate()
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = endonym,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) Teal else TextPrimary
+                        )
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = Teal,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- తెలుగు · Telugu
+     Teacher app foundation: canonical labels + language UI.
+     DISPLAY ONLY. The English source of the day/month/status names is
+     also a Firestore path segment, an RTDB key and a stored code — the
+     staff app WRITES these, so a translated form must never be sent
+     back. Read only via CanonicalLabels / StatusLabels at render. -->
+<resources>
+    <string name="attendance_status_absent">గైర్హాజరు</string>
+    <string name="attendance_status_holiday">సెలవు దినం</string>
+    <string name="attendance_status_late">ఆలస్యం</string>
+    <string name="attendance_status_leave">సెలవు</string>
+    <string name="attendance_status_present">హాజరు</string>
+    <string name="attendance_status_vacation">సెలవు</string>
+    <string name="day_friday">శుక్రవారం</string>
+    <string name="day_monday">సోమవారం</string>
+    <string name="day_saturday">శనివారం</string>
+    <string name="day_sunday">ఆదివారం</string>
+    <string name="day_thursday">గురువారం</string>
+    <string name="day_tuesday">మంగళవారం</string>
+    <string name="day_wednesday">బుధవారం</string>
+    <string name="lang_setup_continue">కొనసాగించండి</string>
+    <string name="lang_setup_subtitle">దీన్ని ప్రొఫైల్‌లో ఎప్పుడైనా మార్చవచ్చు</string>
+    <string name="lang_setup_title">మీ భాషను ఎంచుకోండి</string>
+    <string name="lang_sheet_title">భాష</string>
+    <string name="leave_status_approved">ఆమోదించారు</string>
+    <string name="leave_status_cancelled">రద్దు</string>
+    <string name="leave_status_pending">పెండింగ్</string>
+    <string name="leave_status_rejected">తిరస్కరించారు</string>
+    <string name="month_april">ఏప్రిల్</string>
+    <string name="month_august">ఆగస్టు</string>
+    <string name="month_december">డిసెంబర్</string>
+    <string name="month_february">ఫిబ్రవరి</string>
+    <string name="month_january">జనవరి</string>
+    <string name="month_july">జూలై</string>
+    <string name="month_june">జూన్</string>
+    <string name="month_march">మార్చి</string>
+    <string name="month_may">మే</string>
+    <string name="month_november">నవంబర్</string>
+    <string name="month_october">అక్టోబర్</string>
+    <string name="month_september">సెప్టెంబర్</string>
+    <string name="settings_language">భాష</string>
+
+</resources>

@@ -142,6 +142,9 @@ import com.schoolsync.teacher.ui.theme.glassCard
 import com.schoolsync.teacher.util.toFormattedDate
 import com.schoolsync.teacher.util.toRelativeTime
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,9 +186,9 @@ fun HomeworkTeacherScreen(
                         contentColor = BgStart,
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = "Create new homework")
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.hw_create_new))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("New Homework", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.hw_new), fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -194,15 +197,18 @@ fun HomeworkTeacherScreen(
             // is shared by BOTH the full-width list and the split-pane list.
             // Previously each layout owned its own rememberSaveable, so opening
             // a homework (which swaps full-width → split-pane) re-created the
-            // list with default state and the "Closed" section snapped shut.
+            // list with default state and the Closed section snapped shut.
             var activeExpanded by rememberSaveable { mutableStateOf(true) }
             var pastDueExpanded by rememberSaveable { mutableStateOf(true) }
             var closedExpanded by rememberSaveable { mutableStateOf(false) }
-            val onToggleSection: (String) -> Unit = { title ->
-                when (title) {
-                    "Active" -> activeExpanded = !activeExpanded
-                    "Past due" -> pastDueExpanded = !pastDueExpanded
-                    "Closed" -> closedExpanded = !closedExpanded
+            // Keyed on a stable id, never on the section's display title: the
+            // titles are translated, and a translated key stops matching here
+            // with no error — the section would simply refuse to toggle.
+            val onToggleSection: (String) -> Unit = { key ->
+                when (key) {
+                    "active" -> activeExpanded = !activeExpanded
+                    "past_due" -> pastDueExpanded = !pastDueExpanded
+                    "closed" -> closedExpanded = !closedExpanded
                 }
             }
             // Whenever a homework is opened, make sure its section is expanded so
@@ -332,11 +338,11 @@ fun HomeworkTeacherScreen(
         state.error?.let { error ->
             AlertDialog(
                 onDismissRequest = viewModel::clearError,
-                title = { Text("Error", color = TextPrimary) },
+                title = { Text(stringResource(R.string.common_error), color = TextPrimary) },
                 text = { Text(error, color = TextSecondary) },
                 confirmButton = {
                     TextButton(onClick = viewModel::clearError) {
-                        Text("OK", color = Teal)
+                        Text(stringResource(R.string.common_ok), color = Teal)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -348,7 +354,7 @@ fun HomeworkTeacherScreen(
         state.homeworkToDelete?.let { hw ->
             AlertDialog(
                 onDismissRequest = { viewModel.confirmDelete(null) },
-                title = { Text("Delete Homework?", color = TextPrimary) },
+                title = { Text(stringResource(R.string.hw_delete_q), color = TextPrimary) },
                 text = {
                     Text(
                         "\"${hw.title}\" and all its submissions will be permanently deleted.",
@@ -357,12 +363,12 @@ fun HomeworkTeacherScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = viewModel::executeDelete) {
-                        Text("Delete", color = ErrorRed)
+                        Text(stringResource(R.string.common_delete), color = ErrorRed)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.confirmDelete(null) }) {
-                        Text("Cancel", color = TextSecondary)
+                        Text(stringResource(R.string.common_cancel), color = TextSecondary)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -418,7 +424,7 @@ private fun HomeworkTopBar(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Homework",
+                text = stringResource(R.string.mod_homework),
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -440,7 +446,7 @@ private fun HomeworkTopBar(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
-                        text = state.selectedClass?.displayName ?: "Select Class",
+                        text = state.selectedClass?.displayName ?: stringResource(R.string.att_select_class),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -495,7 +501,7 @@ private fun HomeworkTopBar(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = state.selectedSubjectFilter ?: "All Subjects",
+                        text = state.selectedSubjectFilter ?: stringResource(R.string.hw_all_subjects),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -507,7 +513,7 @@ private fun HomeworkTopBar(
                     modifier = Modifier.background(SurfaceDark)
                 ) {
                     DropdownMenuItem(
-                        text = { Text("All Subjects", color = if (state.selectedSubjectFilter == null) Teal else TextPrimary) },
+                        text = { Text(stringResource(R.string.hw_all_subjects), color = if (state.selectedSubjectFilter == null) Teal else TextPrimary) },
                         onClick = {
                             onSubjectFilter(null)
                             subjectDropdownExpanded = false
@@ -532,7 +538,7 @@ private fun HomeworkTopBar(
 
             // Refresh
             IconButton(onClick = onRefresh, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
             }
         }
     }
@@ -544,7 +550,7 @@ private fun HomeworkTopBar(
  * at narrow widths that layout left a noticeable gap between the title and
  * the class pill — looked like wasted whitespace, not deliberate spacing.
  *
- * Row 1 (chrome): app icon + "Homework" title + count badge + refresh.
+ * Row 1 (chrome): app icon + stringResource(R.string.mod_homework) title + count badge + refresh.
  * Row 2 (context): class chip + subject filter chip.
  * Bottom-edge divider: visually anchors the cards below as belonging to
  * "this class's homework", not floating in space.
@@ -579,7 +585,7 @@ private fun CompactHomeworkTopBar(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Homework",
+                text = stringResource(R.string.mod_homework),
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -608,7 +614,7 @@ private fun CompactHomeworkTopBar(
             IconButton(onClick = onRefresh, modifier = Modifier.size(48.dp)) {
                 Icon(
                     Icons.Filled.Refresh,
-                    contentDescription = "Refresh",
+                    contentDescription = stringResource(R.string.common_refresh),
                     tint = TextSecondary,
                     modifier = Modifier.size(16.dp)
                 )
@@ -637,7 +643,7 @@ private fun CompactHomeworkTopBar(
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = state.selectedClass?.displayName ?: "Select Class",
+                        text = state.selectedClass?.displayName ?: stringResource(R.string.att_select_class),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp
@@ -694,7 +700,7 @@ private fun CompactHomeworkTopBar(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = state.selectedSubjectFilter ?: "All Subjects",
+                        text = state.selectedSubjectFilter ?: stringResource(R.string.hw_all_subjects),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.sp,
@@ -709,7 +715,7 @@ private fun CompactHomeworkTopBar(
                     DropdownMenuItem(
                         text = {
                             Text(
-                                "All Subjects",
+                                stringResource(R.string.hw_all_subjects),
                                 color = if (state.selectedSubjectFilter == null) Teal else TextPrimary
                             )
                         },
@@ -762,7 +768,7 @@ private fun HomeworkListContent(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator(color = Teal)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Loading homework...", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.hw_loading), color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
             }
         }
     } else if (state.homeworkList.isEmpty()) {
@@ -776,12 +782,12 @@ private fun HomeworkListContent(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "No homework assigned",
+                    text = stringResource(R.string.hw_none),
                     style = MaterialTheme.typography.titleMedium,
                     color = TextSecondary
                 )
                 Text(
-                    text = "Tap + to create new homework",
+                    text = stringResource(R.string.hw_none_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )
@@ -855,6 +861,11 @@ private fun HomeworkListContent(
             if (target >= 0) listState.animateScrollToItem(target)
         }
 
+        // Hoisted out of the LazyColumn: its content lambda is a LazyListScope,
+        // not a composable scope, so stringResource() cannot be called inside it.
+        val activeTitle = stringResource(R.string.hw_section_active)
+        val pastDueTitle = stringResource(R.string.hw_past_due)
+        val closedTitle = stringResource(R.string.hw_closed)
         LazyColumn(
             state = listState,
             modifier = modifier.padding(horizontal = 16.dp),
@@ -862,35 +873,35 @@ private fun HomeworkListContent(
             contentPadding = PaddingValues(vertical = 4.dp)
         ) {
             homeworkSection(
-                title = "Active",
+                title = activeTitle,
                 homeworks = active,
                 expanded = activeExpanded,
                 accent = activeAccent,
                 icon = Icons.Filled.Assignment,
                 selectedId = selectedId,
-                onToggle = { onToggleSection("Active") },
+                onToggle = { onToggleSection("active") },
                 onClick = onHomeworkClick
             )
             homeworkSection(
-                title = "Past due",
+                title = pastDueTitle,
                 homeworks = pastDue,
                 expanded = pastDueExpanded,
                 accent = pastDueAccent,
                 icon = Icons.Filled.HourglassEmpty,
                 selectedId = selectedId,
                 markOverdue = true,
-                onToggle = { onToggleSection("Past due") },
+                onToggle = { onToggleSection("past_due") },
                 onClick = onHomeworkClick
             )
             homeworkSection(
-                title = "Closed",
+                title = closedTitle,
                 homeworks = closed,
                 expanded = closedExpanded,
                 accent = closedAccent,
                 icon = Icons.Filled.Lock,
                 selectedId = selectedId,
                 dimmed = true,
-                onToggle = { onToggleSection("Closed") },
+                onToggle = { onToggleSection("closed") },
                 onClick = onHomeworkClick
             )
         }
@@ -982,7 +993,7 @@ private fun HomeworkSectionHeader(
         Spacer(modifier = Modifier.weight(1f))
         Icon(
             if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-            contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+            contentDescription = if (expanded) stringResource(R.string.common_collapse_fmt, title) else stringResource(R.string.common_expand_fmt, title),
             tint = TextTertiary,
             modifier = Modifier.size(20.dp)
         )
@@ -1087,7 +1098,7 @@ private fun HomeworkCard(
                     ) {
                         Icon(
                             Icons.Filled.AttachFile,
-                            contentDescription = "Has attachments",
+                            contentDescription = stringResource(R.string.hw_has_attachments),
                             tint = Teal,
                             modifier = Modifier.size(11.dp)
                         )
@@ -1119,8 +1130,8 @@ private fun HomeworkCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isOverdue) "Past due · ${formatDueDateIST(homework.dueDate)}"
-                               else formatDueDateIST(homework.dueDate),
+                        text = if (isOverdue) stringResource(R.string.hw_past_due_fmt, formatDueDateIST(LocalContext.current, homework.dueDate))
+                               else formatDueDateIST(LocalContext.current, homework.dueDate),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isOverdue) ErrorRed else TextSecondary,
                         fontWeight = if (isOverdue) FontWeight.SemiBold else FontWeight.Normal,
@@ -1136,7 +1147,7 @@ private fun HomeworkCard(
             // due-date for horizontal space.
             if (homework.createdAt > 0) {
                 Text(
-                    text = "Created ${homework.createdAt.toRelativeTime()}",
+                    text = stringResource(R.string.hw_created_fmt, homework.createdAt.toRelativeTime()),
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     fontSize = 9.sp,
@@ -1245,7 +1256,7 @@ private fun HomeworkDetailPanel(
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text(
-                            text = formatDueDateIST(homework.dueDate),
+                            text = formatDueDateIST(LocalContext.current, homework.dueDate),
                             style = MaterialTheme.typography.labelMedium,
                             color = TextSecondary
                         )
@@ -1262,25 +1273,25 @@ private fun HomeworkDetailPanel(
                     // guard via canModify); ≥48dp touch targets (icons stay 18dp).
                     if (canModify) {
                         IconButton(onClick = { onEdit(homework) }, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Edit homework", tint = Teal, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.hw_edit), tint = Teal, modifier = Modifier.size(18.dp))
                         }
                         if (!homework.status.equals("closed", ignoreCase = true)) {
                             IconButton(onClick = { onCloseHomework(homework) }, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.Filled.Lock, contentDescription = "Close homework (stop submissions)", tint = WarningAmber, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Filled.Lock, contentDescription = stringResource(R.string.hw_close_stop), tint = WarningAmber, modifier = Modifier.size(18.dp))
                             }
                         }
                         IconButton(onClick = { onDelete(homework) }, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = ErrorRed, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.common_delete), tint = ErrorRed, modifier = Modifier.size(18.dp))
                         }
                     }
                     IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close panel", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.hw_close_panel), tint = TextSecondary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
         }
 
-        // Status summary chips. "Done" merges Reviewed + Complete +
+        // Status summary chips. stringResource(R.string.common_done) merges Reviewed + Complete +
         // teacher marks (the three end-states where the teacher has
         // actioned the row); previously Reviewed had no chip and the
         // students with that status disappeared from the totals.
@@ -1289,10 +1300,10 @@ private fun HomeworkDetailPanel(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                StatusChip("Done", doneCount.toString(), SuccessGreen, SuccessGreenSurface, Modifier.weight(1f))
-                StatusChip("Submitted", submittedCount.toString(), InfoBlue, InfoBlueSurface, Modifier.weight(1f))
-                StatusChip("Incomplete", incompleteCount.toString(), WarningAmber, WarningAmberSurface, Modifier.weight(1f))
-                StatusChip("Pending", pendingCount.toString(), ErrorRed, ErrorRedSurface, Modifier.weight(1f))
+                StatusChip(stringResource(R.string.common_done), doneCount.toString(), SuccessGreen, SuccessGreenSurface, Modifier.weight(1f))
+                StatusChip(stringResource(R.string.hw_submitted), submittedCount.toString(), InfoBlue, InfoBlueSurface, Modifier.weight(1f))
+                StatusChip(stringResource(R.string.hw_status_incomplete), incompleteCount.toString(), WarningAmber, WarningAmberSurface, Modifier.weight(1f))
+                StatusChip(stringResource(R.string.hw_status_pending), pendingCount.toString(), ErrorRed, ErrorRedSurface, Modifier.weight(1f))
             }
         }
 
@@ -1312,7 +1323,7 @@ private fun HomeworkDetailPanel(
                 val attachmentContext = LocalContext.current
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "ATTACHMENTS",
+                        text = stringResource(R.string.hw_attachments_hdr),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         fontWeight = FontWeight.SemiBold,
@@ -1381,7 +1392,7 @@ private fun HomeworkDetailPanel(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = if (isImage) "Image" else if (isPdf) "PDF" else "Document",
+                                    text = if (isImage) stringResource(R.string.file_type_image) else if (isPdf) "PDF" /* i18n-ignore: acronym */ else stringResource(R.string.file_type_document),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextTertiary,
                                     fontSize = 10.sp
@@ -1389,7 +1400,7 @@ private fun HomeworkDetailPanel(
                             }
                             Icon(
                                 imageVector = Icons.Filled.AttachFile,
-                                contentDescription = "Open",
+                                contentDescription = stringResource(R.string.common_open),
                                 tint = TextTertiary,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -1537,7 +1548,7 @@ private fun StudentSubmissionRow(
             // IST submission time — sourced directly from Firestore submittedAt.
             if (entry != null && entry.submittedAt > 0L) {
                 Text(
-                    text = formatSubmittedAtIST(entry.submittedAt),
+                    text = formatSubmittedAtIST(LocalContext.current, entry.submittedAt),
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     fontSize = 10.sp,
@@ -1547,7 +1558,7 @@ private fun StudentSubmissionRow(
             // Show score if graded
             if (entry != null && entry.score >= 0) {
                 Text(
-                    text = "Score: ${entry.score}" + if (entry.remark.isNotBlank()) " — ${entry.remark}" else "",
+                    text = stringResource(R.string.hw_score_fmt, entry.score.toString()) + if (entry.remark.isNotBlank()) " — ${entry.remark}" else "",
                     style = MaterialTheme.typography.labelSmall,
                     color = SuccessGreen,
                     modifier = Modifier.padding(top = 2.dp)
@@ -1561,7 +1572,7 @@ private fun StudentSubmissionRow(
                 val scoreSuffix = if (teacherMark.score >= 0) " · score: ${teacherMark.score}" else ""
                 val remarkSuffix = if (teacherMark.remark.isNotBlank()) " — ${teacherMark.remark}" else ""
                 Text(
-                    text = "Marked (no submission)$scoreSuffix$remarkSuffix",
+                    text = stringResource(R.string.hw_marked_no_submission) + scoreSuffix + remarkSuffix,
                     style = MaterialTheme.typography.labelSmall,
                     color = WarningAmber,
                     modifier = Modifier.padding(top = 2.dp)
@@ -1594,12 +1605,12 @@ private fun StudentSubmissionRow(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Saving…",
+                        text = stringResource(R.string.att_saving),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 } else {
-                    Icon(statusIcon, contentDescription = "Current status: ${currentStatus.replaceFirstChar { it.uppercase() }}, tap to change", modifier = Modifier.size(14.dp))
+                    Icon(statusIcon, contentDescription = stringResource(R.string.hw_current_status_cd, currentStatus.replaceFirstChar { it.uppercase() }), modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = currentStatus.replaceFirstChar { it.uppercase() },
@@ -1660,12 +1671,12 @@ private fun StudentSubmissionRow(
         AlertDialog(
             onDismissRequest = { showReviewDialog = false },
             title = {
-                Text("Review — ${student.displayName}", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.hw_review_of, student.displayName), color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (entry != null && entry.text.isNotBlank()) {
-                        Text("Student's response:", color = TextTertiary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.hw_student_response), color = TextTertiary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         Text(
                             entry.text,
                             color = TextSecondary,
@@ -1678,7 +1689,7 @@ private fun StudentSubmissionRow(
                         )
                         if (entry.submittedAt > 0L) {
                             Text(
-                                formatSubmittedAtIST(entry.submittedAt),
+                                formatSubmittedAtIST(LocalContext.current, entry.submittedAt),
                                 color = TextTertiary,
                                 fontSize = 11.sp
                             )
@@ -1687,12 +1698,12 @@ private fun StudentSubmissionRow(
                     OutlinedTextField(
                         value = scoreText,
                         onValueChange = { scoreText = it.filter { c -> c.isDigit() }.take(3) },
-                        label = { Text("Score") },
-                        placeholder = { Text("e.g. 8") },
+                        label = { Text(stringResource(R.string.hw_score)) },
+                        placeholder = { Text(stringResource(R.string.hw_score_hint)) },
                         singleLine = true,
                         isError = !scoreValid,
                         supportingText = if (!scoreValid) {
-                            { Text("Score must be 0–200", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                            { Text(stringResource(R.string.hw_score_range), color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
                         } else null,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Teal,
@@ -1710,8 +1721,8 @@ private fun StudentSubmissionRow(
                         // body can't bloat the Firestore doc or push payload.
                         // Visible counter keeps the limit obvious.
                         onValueChange = { if (it.length <= 500) remarkText = it },
-                        label = { Text("Remark") },
-                        placeholder = { Text("e.g. Good work, keep it up!") },
+                        label = { Text(stringResource(R.string.hw_remark)) },
+                        placeholder = { Text(stringResource(R.string.hw_remark_hint)) },
                         maxLines = 3,
                         supportingText = { Text("${remarkText.length} / 500", fontSize = 11.sp, color = TextSecondary) },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1737,7 +1748,7 @@ private fun StudentSubmissionRow(
                     enabled = scoreValid
                 ) {
                     Text(
-                        "Submit Review",
+                        stringResource(R.string.hw_submit_review),
                         color = if (scoreValid) Teal else TextSecondary,
                         fontWeight = FontWeight.Bold
                     )
@@ -1745,7 +1756,7 @@ private fun StudentSubmissionRow(
             },
             dismissButton = {
                 TextButton(onClick = { showReviewDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text(stringResource(R.string.common_cancel), color = TextSecondary)
                 }
             },
             containerColor = SurfaceDark,
@@ -1873,14 +1884,14 @@ private fun CreateHomeworkDialog(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                if (isEditing) "Edit assignment" else "New assignment",
+                                if (isEditing) stringResource(R.string.hw_edit_assignment) else stringResource(R.string.hw_new_assignment),
                                 color = TextPrimary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 19.sp
                             )
                             Text(
-                                if (isEditing) "Update the details below"
-                                else "Set work for your class",
+                                if (isEditing) stringResource(R.string.hw_edit_subtitle)
+                                else stringResource(R.string.hw_new_subtitle),
                                 color = TextSecondary,
                                 fontSize = 13.sp
                             )
@@ -1889,7 +1900,7 @@ private fun CreateHomeworkDialog(
                             onClick = { if (!formState.isSubmitting) onDismiss() },
                             enabled = !formState.isSubmitting
                         ) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary)
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_close), tint = TextSecondary)
                         }
                     }
                 }
@@ -1906,11 +1917,11 @@ private fun CreateHomeworkDialog(
                 ) {
                     // Title
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FieldSectionHeader("Title", required = true, accent = accent)
+                        FieldSectionHeader(stringResource(R.string.common_title), required = true, accent = accent)
                         OutlinedTextField(
                             value = formState.title,
                             onValueChange = onTitleChange,
-                            placeholder = { Text("e.g. Chapter 4 — Exercise 3") },
+                            placeholder = { Text(stringResource(R.string.hw_title_hint)) },
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth(),
@@ -1920,11 +1931,11 @@ private fun CreateHomeworkDialog(
 
                     // Description
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FieldSectionHeader("Details", accent = accent)
+                        FieldSectionHeader(stringResource(R.string.common_details), accent = accent)
                         OutlinedTextField(
                             value = formState.description,
                             onValueChange = onDescriptionChange,
-                            placeholder = { Text("What should students do?") },
+                            placeholder = { Text(stringResource(R.string.hw_details_hint)) },
                             minLines = 3,
                             maxLines = 5,
                             shape = RoundedCornerShape(14.dp),
@@ -1935,10 +1946,10 @@ private fun CreateHomeworkDialog(
 
                     // Subject — tactile colour chips instead of a dropdown
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FieldSectionHeader("Subject", required = true, accent = accent)
+                        FieldSectionHeader(stringResource(R.string.common_subject), required = true, accent = accent)
                         if (subjects.isEmpty()) {
                             Text(
-                                "No subjects assigned to you for this class.",
+                                stringResource(R.string.hw_no_subjects),
                                 color = TextTertiary,
                                 fontSize = 13.sp
                             )
@@ -1961,17 +1972,17 @@ private fun CreateHomeworkDialog(
 
                     // Due date — quick presets + selected pill + custom picker
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FieldSectionHeader("Due date", required = true, accent = accent)
+                        FieldSectionHeader(stringResource(R.string.hw_due_date), required = true, accent = accent)
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            DueDateChip("Today", formState.dueDate == quickToday, accent) { onDueDateChange(quickToday) }
-                            DueDateChip("Tomorrow", formState.dueDate == quickTomorrow, accent) { onDueDateChange(quickTomorrow) }
-                            DueDateChip("In 3 days", formState.dueDate == quick3, accent) { onDueDateChange(quick3) }
-                            DueDateChip("Next week", formState.dueDate == quickWeek, accent) { onDueDateChange(quickWeek) }
+                            DueDateChip(stringResource(R.string.common_today), formState.dueDate == quickToday, accent) { onDueDateChange(quickToday) }
+                            DueDateChip(stringResource(R.string.common_tomorrow), formState.dueDate == quickTomorrow, accent) { onDueDateChange(quickTomorrow) }
+                            DueDateChip(stringResource(R.string.hw_in_3_days), formState.dueDate == quick3, accent) { onDueDateChange(quick3) }
+                            DueDateChip(stringResource(R.string.hw_next_week), formState.dueDate == quickWeek, accent) { onDueDateChange(quickWeek) }
                             DueDateChip(
-                                label = "Pick date",
+                                label = stringResource(R.string.common_pick_date),
                                 selected = formState.dueDate.isNotBlank() &&
                                     formState.dueDate !in listOf(quickToday, quickTomorrow, quick3, quickWeek),
                                 accent = accent,
@@ -2040,7 +2051,7 @@ private fun CreateHomeworkDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                if (canAdd) "Add photos or PDF" else "Attachment limit reached",
+                                if (canAdd) stringResource(R.string.hw_add_attachment) else stringResource(R.string.hw_attach_limit),
                                 color = if (canAdd) accent else TextTertiary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -2058,7 +2069,7 @@ private fun CreateHomeworkDialog(
                                     .padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = ErrorRed, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_dismiss), tint = ErrorRed, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(err, color = ErrorRed, fontSize = 12.sp, modifier = Modifier.weight(1f))
                             }
@@ -2110,7 +2121,7 @@ private fun CreateHomeworkDialog(
                                         enabled = !formState.isSubmitting,
                                         modifier = Modifier.size(40.dp)
                                     ) {
-                                        Icon(Icons.Filled.Close, contentDescription = "Remove attachment", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.hw_remove_attachment), tint = TextSecondary, modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
@@ -2132,7 +2143,7 @@ private fun CreateHomeworkDialog(
                         onClick = onDismiss,
                         enabled = !formState.isSubmitting
                     ) {
-                        Text("Cancel", color = TextSecondary)
+                        Text(stringResource(R.string.common_cancel), color = TextSecondary)
                     }
                     Button(
                         onClick = onCreate,
@@ -2157,10 +2168,10 @@ private fun CreateHomeworkDialog(
                         }
                         Text(
                             when {
-                                formState.isSubmitting && isEditing -> "Saving…"
+                                formState.isSubmitting && isEditing -> stringResource(R.string.att_saving)
                                 formState.isSubmitting -> "Creating…"
-                                isEditing -> "Save changes"
-                                else -> "Create assignment"
+                                isEditing -> stringResource(R.string.hw_save_changes)
+                                else -> stringResource(R.string.hw_create_assignment)
                             },
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
@@ -2279,11 +2290,11 @@ private fun CreateHomeworkDialog(
                         onDueDateChange(ymdUtc.format(java.util.Date(millis)))
                     }
                     showDatePicker = false
-                }) { Text("OK", color = Teal) }
+                }) { Text(stringResource(R.string.common_ok), color = Teal) }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text(stringResource(R.string.common_cancel), color = TextSecondary)
                 }
             }
         ) {
@@ -2371,7 +2382,7 @@ private fun SubjectSelectChip(
     }
 }
 
-/** Pill chip for a quick due-date preset (or the "Pick date" custom entry). */
+/** Pill chip for a quick due-date preset (or the stringResource(R.string.common_pick_date) custom entry). */
 @Composable
 private fun DueDateChip(
     label: String,
@@ -2412,10 +2423,10 @@ private fun quickDueDate(daysFromNow: Int): String {
     return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(cal.time)
 }
 
-/** Render a stored "yyyy-MM-dd" due date as a friendly "EEE, dd MMM" label. */
+/** Render a stored "yyyy-MM-dd" due date as a friendly "EEE, dd MMM"  /* i18n-ignore: date pattern */ label. */
 private fun prettyDueLabel(ymd: String): String = try {
     val d = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(ymd)
-    if (d != null) java.text.SimpleDateFormat("EEE, dd MMM", java.util.Locale.US).format(d) else ymd
+    if (d != null) java.text.SimpleDateFormat("EEE, dd MMM"  /* i18n-ignore: date pattern */, java.util.Locale.US).format(d) else ymd
 } catch (e: Exception) { ymd }
 
 /**
@@ -2427,7 +2438,7 @@ private fun formatBytes(bytes: Long): String = when {
     bytes <= 0L -> "—"
     bytes < 1024L -> "$bytes B"
     bytes < 1024L * 1024L -> "${bytes / 1024L} KB"
-    else -> "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0))
+    else -> String.format(java.util.Locale.ROOT, "%.1f MB", bytes.toDouble() / (1024.0 * 1024.0))
 }
 
 /**
@@ -2542,10 +2553,40 @@ internal fun isDuePassed(raw: String): Boolean {
  *   - same day  → "Due today (h:mm a)"
  *   - next day  → "Due tomorrow"
  *   - otherwise → "Due on dd MMM"
- * Returns "No due date" for blank input and the raw string if unparseable.
+ * Returns a localized "No due date" for blank input, the raw string if unparseable.
  */
-internal fun formatDueDateIST(raw: String): String {
-    if (raw.isBlank()) return "No due date"
+internal fun formatDueDateIST(ctx: android.content.Context, raw: String): String {
+    if (raw.isBlank()) return ctx.localizedString(R.string.hw_no_due_date)
+    val d = dueLabelIST(raw) ?: return raw
+    return when (d.kind) {
+        DueLabel.Kind.TODAY    -> ctx.localizedString(R.string.hw_due_today_fmt2, d.time)
+        DueLabel.Kind.TOMORROW -> ctx.localizedString(R.string.hw_due_tomorrow_fmt2, d.time)
+        else                   -> ctx.localizedString(R.string.hw_due_on_fmt2, d.date, d.time)
+    }
+}
+
+/**
+ * The parsed halves of a due-date label: which phrasing applies, and the
+ * already-formatted date and time pieces.
+ *
+ * Splitting this out is what lets the phrasing be localized (in the Context
+ * overload above) while [formatDueDateIST] stays Context-free — the parsing and
+ * IST end-of-day behaviour is where the regression risk lives, and
+ * HomeworkDateLogicTest asserts it as a plain JVM test.
+ */
+internal data class DueLabel(val kind: Kind, val date: String, val time: String) {
+    enum class Kind { TODAY, TOMORROW, SHORT, LONG }
+}
+
+/**
+ * Pure date-formatting half, with no Context and therefore no Android runtime.
+ *
+ * Only the blank-input branch needs a resource, so it lives in the overload
+ * above. Keeping this one Context-free is what lets HomeworkDateLogicTest stay
+ * a plain JVM test — it asserts the parsing and IST end-of-day behaviour, which
+ * is the part that actually carries regression risk.
+ */
+internal fun dueLabelIST(raw: String): DueLabel? {
     val tz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
     // Reuse parseDueInstant so parsing is IDENTICAL to the overdue check:
     // strict (isLenient=false) parsing, and date-only values pinned to
@@ -2553,7 +2594,7 @@ internal fun formatDueDateIST(raw: String): String {
     // in the default TZ, so the rendered time was wrong and TZ-dependent).
     // Time-bearing ISO inputs resolve to the exact same instant as before,
     // so their display is unchanged.
-    val due: java.util.Date = parseDueInstant(raw) ?: return raw
+    val due: java.util.Date = parseDueInstant(raw) ?: return null
     fun istDay(d: java.util.Date): Long {
         val c = java.util.Calendar.getInstance(tz).apply {
             time = d
@@ -2568,26 +2609,41 @@ internal fun formatDueDateIST(raw: String): String {
     val dateFmtLong  = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).apply { timeZone = tz }
     val time = timeFmt.format(due)
     return when {
-        diff == 0L  -> "Due today, $time IST"
-        diff == 1L  -> "Due tomorrow, $time IST"
-        diff in 2..6 -> "Due ${dateFmtShort.format(due)}, $time IST"
-        else        -> "Due ${dateFmtLong.format(due)}, $time IST"
+        diff == 0L   -> DueLabel(DueLabel.Kind.TODAY, "", time)
+        diff == 1L   -> DueLabel(DueLabel.Kind.TOMORROW, "", time)
+        diff in 2..6 -> DueLabel(DueLabel.Kind.SHORT, dateFmtShort.format(due), time)
+        else         -> DueLabel(DueLabel.Kind.LONG, dateFmtLong.format(due), time)
+    }
+}
+
+/**
+ * English rendering of [dueLabelIST]. Used only by HomeworkDateLogicTest, which
+ * asserts the parsing/IST behaviour without an Android runtime. Production goes
+ * through the Context overload so the phrasing follows the app language.
+ */
+internal fun formatDueDateIST(raw: String): String {
+    if (raw.isBlank()) return ""    // callers use the ctx overload for this case
+    val d = dueLabelIST(raw) ?: return raw
+    return when (d.kind) {                                            // i18n-ignore: test-only
+        DueLabel.Kind.TODAY    -> "Due today, ${d.time} IST"           // i18n-ignore: test-only
+        DueLabel.Kind.TOMORROW -> "Due tomorrow, ${d.time} IST"        // i18n-ignore: test-only
+        else                   -> "Due ${d.date}, ${d.time} IST"       // i18n-ignore: test-only
     }
 }
 
 /**
  * Format a submission timestamp (Long millis) as IST date/time.
- * "Submitted just now" / "Submitted 5m ago" / "Submitted today, 11:30 AM" /
+ * stringResource(R.string.hw_submitted_just_now) / "Submitted 5m ago" / "Submitted today, 11:30 AM" /
  * "Submitted 5 May, 11:30 AM IST" / "Submitted 5 May 2026, 11:30 AM IST".
  * Returns empty string for 0 / negative input.
  */
-private fun formatSubmittedAtIST(ms: Long): String {
+private fun formatSubmittedAtIST(ctx: android.content.Context, ms: Long): String {
     if (ms <= 0L) return ""
     val tz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
     val now = System.currentTimeMillis()
     val diffMs = now - ms
-    if (diffMs in 0..59_000L) return "Submitted just now"
-    if (diffMs in 60_000L..3_599_000L) return "Submitted ${diffMs / 60_000}m ago"
+    if (diffMs in 0..59_000L) return ctx.getString(R.string.hw_submitted_just_now)
+    if (diffMs in 60_000L..3_599_000L) return ctx.getString(R.string.hw_submitted_min_ago, (diffMs / 60_000).toInt())
     val timeFmt = java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).apply { timeZone = tz }
     val dateFmtShort = java.text.SimpleDateFormat("dd MMM", java.util.Locale.US).apply { timeZone = tz }
     val dateFmtLong  = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).apply { timeZone = tz }
@@ -2602,9 +2658,9 @@ private fun formatSubmittedAtIST(ms: Long): String {
     val daysAgo = istDay(now) - istDay(ms)
     val time = timeFmt.format(java.util.Date(ms))
     return when {
-        daysAgo == 0L -> "Submitted today, $time"
-        daysAgo == 1L -> "Submitted yesterday, $time"
-        daysAgo in 2..6 -> "Submitted ${dateFmtShort.format(java.util.Date(ms))}, $time IST"
-        else -> "Submitted ${dateFmtLong.format(java.util.Date(ms))}, $time IST"
+        daysAgo == 0L -> ctx.getString(R.string.hw_submitted_today, time)
+        daysAgo == 1L -> ctx.getString(R.string.hw_submitted_yesterday, time)
+        daysAgo in 2..6 -> ctx.getString(R.string.hw_submitted_on, dateFmtShort.format(java.util.Date(ms)), time)
+        else -> ctx.getString(R.string.hw_submitted_on, dateFmtLong.format(java.util.Date(ms)), time)
     }
 }

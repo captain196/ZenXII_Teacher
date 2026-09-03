@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2b: class attendance - marking grid, edit windows, correction requests. -->
+<resources>
+    <string name="att_saving">सहेजा जा रहा है…</string>
+    <string name="att_save">उपस्थिति सहेजें</string>
+    <string name="common_error">त्रुटि</string>
+    <string name="common_ok">ठीक है</string>
+    <string name="common_refresh">रीफ़्रेश</string>
+    <string name="common_today">आज</string>
+    <string name="common_loading">लोड हो रहा है…</string>
+    <string name="att_arrival_time">आगमन समय</string>
+    <string name="att_request_correction">सुधार का अनुरोध</string>
+    <string name="att_change_to">इसमें बदलें:</string>
+    <string name="att_reason_min">कारण (10+ अक्षर)</string>
+    <string name="att_discard_q">बिना सहेजे बदलाव छोड़ें?</string>
+    <string name="att_discard_reload">छोड़ें और पुनः लोड करें</string>
+    <string name="att_keep_editing">संपादन जारी रखें</string>
+    <string name="att_change_class">कक्षा बदलें</string>
+    <string name="att_no_classes">कोई कक्षा नियत नहीं</string>
+    <string name="att_history">इतिहास</string>
+    <string name="att_my_requests">मेरे अनुरोध</string>
+    <string name="att_all_present">सभी उपस्थित</string>
+    <string name="att_all_absent">सभी अनुपस्थित</string>
+    <string name="att_tap_to_change">बदलने हेतु टैप करें</string>
+    <string name="att_loading">उपस्थिति लोड हो रही है…</string>
+    <string name="att_no_students">कोई छात्र नहीं मिला</string>
+    <string name="att_select_class">उपस्थिति देखने हेतु कक्षा चुनें</string>
+    <string name="att_section_empty_pick">इस अनुभाग में कोई नामांकित छात्र नहीं है। ऊपर के चयनकर्ता से दूसरी कक्षा चुनें।</string>
+    <string name="att_section_empty">इस अनुभाग में अभी कोई नामांकित छात्र नहीं है।</string>
+    <string name="att_read_only">केवल कक्षा शिक्षक ही उपस्थिति दर्ज कर सकते हैं। आप केवल-पढ़ने के मोड में देख रहे हैं।</string>
+    <string name="att_my_corrections_title">मेरे सुधार अनुरोध</string>
+    <string name="att_my_corrections_sub">आपके द्वारा दर्ज अनुरोध और उनकी स्थिति</string>
+    <string name="att_no_corrections">अभी कोई सुधार अनुरोध नहीं</string>
+    <string name="att_no_corrections_hint">बंद या बीते दिन से दर्ज किए गए अनुरोध यहाँ दिखेंगे।</string>
+    <string name="att_history_title">उपस्थिति इतिहास</string>
+    <string name="att_window_open">खुला</string>
+    <string name="att_window_open_desc">मुक्त संपादन। कारण आवश्यक नहीं।</string>
+    <string name="att_window_restricted">प्रतिबंधित</string>
+    <string name="att_window_restricted_desc">संपादन हेतु कारण आवश्यक (10+ अक्षर)।</string>
+    <string name="att_window_locked">बंद</string>
+    <string name="att_reason_hint">कारण (जैसे \'बस देरी सुधार\')</string>
+    <string name="att_prev_month">पिछला माह</string>
+    <string name="att_all_p">सभी P</string>
+    <string name="att_all_a">सभी A</string>
+    <string name="att_next_month">अगला माह</string>
+    <string name="att_col_student">छात्र</string>
+</resources>

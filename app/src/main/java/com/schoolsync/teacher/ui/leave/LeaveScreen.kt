@@ -115,6 +115,13 @@ import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.WarningAmberSurface
 import com.schoolsync.teacher.ui.theme.glassCard
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.platform.LocalContext
+import com.schoolsync.teacher.util.displayLabel
+import androidx.compose.ui.text.style.TextAlign
+import com.schoolsync.teacher.util.localizedString
+import com.schoolsync.teacher.util.localizedPlural
 
 @Composable
 fun LeaveScreen(
@@ -163,7 +170,7 @@ fun LeaveScreen(
             containerColor = Color.Transparent,
             snackbarHost = { },
             floatingActionButton = {
-                // Only show "Apply Leave" FAB on the My Leave tab (tab 0)
+                // Only show stringResource(R.string.dash_apply_leave) FAB on the My Leave tab (tab 0)
                 if (state.selectedTab == 0) {
                     ExtendedFloatingActionButton(
                         onClick = viewModel::showApplyDialog,
@@ -173,7 +180,7 @@ fun LeaveScreen(
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Apply Leave", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.dash_apply_leave), fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -198,7 +205,7 @@ fun LeaveScreen(
                         Icon(Icons.Filled.EventAvailable, null, tint = SuccessGreen, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text("Leave Submitted", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = SuccessGreen)
+                            Text(stringResource(R.string.leave_submitted), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = SuccessGreen)
                             Text(msg, fontSize = 11.sp, color = TextSecondary)
                         }
                     }
@@ -217,7 +224,7 @@ fun LeaveScreen(
                         Icon(Icons.Filled.Close, null, tint = ErrorRed, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text("Error", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ErrorRed)
+                            Text(stringResource(R.string.common_error), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ErrorRed)
                             Text(msg, fontSize = 11.sp, color = TextSecondary)
                         }
                     }
@@ -240,14 +247,14 @@ fun LeaveScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Leave Management",
+                            text = stringResource(R.string.leave_management),
                             style = MaterialTheme.typography.headlineMedium,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     IconButton(onClick = viewModel::refresh) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
                     }
                 }
 
@@ -260,7 +267,8 @@ fun LeaveScreen(
                             .padding(bottom = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("My Leave" to 0, "Student Leave" to 1).forEach { (label, idx) ->
+                        listOf(stringResource(R.string.leave_tab_my) to 0,
+                               stringResource(R.string.leave_tab_student) to 1).forEach { (label, idx) ->
                             val selected = state.selectedTab == idx
                             val pendingCount = if (idx == 1) state.studentLeaves.count { it.status.equals("pending", ignoreCase = true) } else 0
                             Button(
@@ -393,9 +401,12 @@ fun LeaveScreen(
 private fun formatDays(days: Double): String =
     if (days == days.toLong().toDouble()) days.toLong().toString() else days.toString()
 
-// "0.5 day" / "1 day" / "3 days"
-private fun formatDayLabel(days: Double): String =
-    "${formatDays(days)} " + if (days == 1.0) "day" else "days"
+// "0.5 day" / "1 day" / "3 days" — takes a Context because the day/days
+// distinction is a plural rule, and half-days mean the quantity is not
+// always an integer, so the formatted value is passed as a String arg.
+private fun formatDayLabel(ctx: android.content.Context, days: Double): String =
+    ctx.resources.getQuantityString(
+        R.plurals.leave_days_count, if (days == 1.0) 1 else 2, formatDays(days))
 
 // H11: reusable error+retry box, distinct from a genuine empty state.
 @Composable
@@ -416,7 +427,7 @@ private fun LeaveErrorBox(message: String, onRetry: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Couldn't load",
+                text = stringResource(R.string.gal_load_error),
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold
@@ -439,7 +450,7 @@ private fun LeaveErrorBox(message: String, onRetry: () -> Unit) {
             ) {
                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Retry")
+                Text(stringResource(R.string.common_retry))
             }
         }
     }
@@ -453,7 +464,7 @@ private fun LeaveBalancePanel(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Leave Balance",
+            text = stringResource(R.string.leave_balance),
             style = MaterialTheme.typography.titleLarge,
             color = TextPrimary,
             fontWeight = FontWeight.SemiBold,
@@ -481,7 +492,7 @@ private fun LeaveBalancePanel(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Leave balances not configured yet.\nContact your admin to set up leave types.",
+                            text = stringResource(R.string.leave_no_balances),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -503,12 +514,12 @@ private fun LeaveHistoryPanel(
 ) {
     // Tapping a history card opens a detail sheet (details + cancel action live
     // there now, so the card itself carries no inline button that the floating
-    // "Apply Leave" FAB could overlap).
+    // stringResource(R.string.dash_apply_leave) FAB could overlap).
     var detailLeave by remember { mutableStateOf<LeaveRequest?>(null) }
 
     Column(modifier = modifier) {
         Text(
-            text = "Leave History",
+            text = stringResource(R.string.leave_history),
             style = MaterialTheme.typography.titleLarge,
             color = TextPrimary,
             fontWeight = FontWeight.SemiBold
@@ -534,7 +545,7 @@ private fun LeaveHistoryPanel(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "No leave records",
+                            text = stringResource(R.string.leave_none),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextTertiary
                         )
@@ -544,7 +555,7 @@ private fun LeaveHistoryPanel(
             else -> {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    // Bottom inset clears the floating "Apply Leave" FAB so the last
+                    // Bottom inset clears the floating stringResource(R.string.dash_apply_leave) FAB so the last
                     // card is always fully tappable and never covered.
                     contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp)
                 ) {
@@ -612,7 +623,7 @@ private fun LeaveBalanceCard(balance: LeaveBalance) {
 
             // Prominent remaining-of-total summary.
             Text(
-                text = "Remaining ${formatDays(balance.remaining)} of ${formatDays(balance.total)}",
+                text = stringResource(R.string.leave_remaining_of, formatDays(balance.remaining), formatDays(balance.total)),
                 style = MaterialTheme.typography.labelMedium,
                 color = color,
                 fontWeight = FontWeight.SemiBold,
@@ -638,22 +649,35 @@ private fun LeaveBalanceCard(balance: LeaveBalance) {
                 )
             }
 
-            Row(
+            // Balance line. Two fixes, both found on device: SpaceBetween with
+            // unconstrained Texts ran the labels together, and a weight(1f)
+            // half-and-half split then clipped the Tamil mid-word. FlowRow
+            // gives each label its natural width and wraps to a second line.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = "Used ${formatDays(balance.used)}",
+                    // No weight(1f): "Used 2" is six characters, but
+                    // "2 பயன்படுத்தப்பட்டது" is twenty-five, and forcing it into
+                    // half the row made it wrap to three lines and clip
+                    // mid-word. Each label takes the width it needs and the
+                    // FlowRow moves the second one to its own line when they
+                    // no longer fit side by side.
+                    text = stringResource(R.string.leave_used_fmt, formatDays(balance.used)),
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     fontSize = 10.sp
                 )
                 Text(
                     text = if (balance.carried > 0)
-                        "Allotted ${formatDays(balance.allocated)} + ${formatDays(balance.carried)} carried"
-                    else "Allotted ${formatDays(balance.allocated)}",
+                        stringResource(R.string.leave_allotted_carried,
+                            formatDays(balance.allocated), formatDays(balance.carried))
+                    else stringResource(R.string.leave_allotted, formatDays(balance.allocated)),
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     fontSize = 10.sp
@@ -679,7 +703,7 @@ private fun LeaveHistoryCard(
         modifier = Modifier
             .fillMaxWidth()
             .glassCard(cornerRadius = 12.dp)
-            .clickable(onClickLabel = "View leave details") { onClick() }
+            .clickable(onClickLabel = stringResource(R.string.leave_view_details_cd)) { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -707,7 +731,7 @@ private fun LeaveHistoryCard(
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = request.status.label,
+                        text = request.status.displayLabel(LocalContext.current),
                         style = MaterialTheme.typography.labelSmall,
                         color = statusColor,
                         fontWeight = FontWeight.SemiBold,
@@ -728,7 +752,7 @@ private fun LeaveHistoryCard(
                     fontSize = 11.sp
                 )
                 Text(
-                    text = formatDayLabel(request.days),
+                    text = formatDayLabel(LocalContext.current, request.days),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                     fontSize = 11.sp
@@ -750,7 +774,7 @@ private fun LeaveHistoryCard(
         Spacer(modifier = Modifier.width(8.dp))
         Icon(
             Icons.Filled.ChevronRight,
-            contentDescription = "View details",
+            contentDescription = stringResource(R.string.leave_view_details),
             tint = TextTertiary,
             modifier = Modifier.size(20.dp)
         )
@@ -760,7 +784,7 @@ private fun LeaveHistoryCard(
 // Detail view for a single leave, opened by tapping a history card. Full
 // details + the owner-cancel action live here (a scrollable bottom sheet that
 // fits small screens & landscape), so the history cards stay clean and nothing
-// collides with the floating "Apply Leave" FAB.
+// collides with the floating stringResource(R.string.dash_apply_leave) FAB.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LeaveDetailSheet(
@@ -812,7 +836,7 @@ private fun LeaveDetailSheet(
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = request.status.label,
+                        text = request.status.displayLabel(LocalContext.current),
                         color = statusColor,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp
@@ -821,10 +845,10 @@ private fun LeaveDetailSheet(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            LeaveDetailRow("Duration", "${request.startDate}  →  ${request.endDate}")
-            LeaveDetailRow("Days", formatDayLabel(request.days))
-            if (request.reason.isNotEmpty()) LeaveDetailRow("Reason", request.reason)
-            if (request.remarks.isNotEmpty()) LeaveDetailRow("Remarks", request.remarks, valueColor = statusColor)
+            LeaveDetailRow(stringResource(R.string.common_duration), "${request.startDate}  →  ${request.endDate}")
+            LeaveDetailRow(stringResource(R.string.common_days), formatDayLabel(LocalContext.current, request.days))
+            if (request.reason.isNotEmpty()) LeaveDetailRow(stringResource(R.string.common_reason), request.reason)
+            if (request.remarks.isNotEmpty()) LeaveDetailRow(stringResource(R.string.common_remarks), request.remarks, valueColor = statusColor)
 
             if (request.status == LeaveStatus.PENDING) {
                 Spacer(modifier = Modifier.height(20.dp))
@@ -837,7 +861,7 @@ private fun LeaveDetailSheet(
                 ) {
                     Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Cancel this leave request")
+                    Text(stringResource(R.string.leave_cancel_request))
                 }
             }
         }
@@ -846,10 +870,10 @@ private fun LeaveDetailSheet(
     if (showCancelConfirm) {
         AlertDialog(
             onDismissRequest = { showCancelConfirm = false },
-            title = { Text("Cancel this leave?", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text(stringResource(R.string.leave_cancel_q), color = TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "This will withdraw your pending ${request.type} request for ${request.startDate} - ${request.endDate}.",
+                    stringResource(R.string.leave_withdraw_confirm_fmt, request.type, request.startDate, request.endDate),
                     color = TextSecondary
                 )
             },
@@ -862,11 +886,11 @@ private fun LeaveDetailSheet(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White),
                     shape = RoundedCornerShape(8.dp)
-                ) { Text("Yes, cancel") }
+                ) { Text(stringResource(R.string.leave_yes_cancel)) }
             },
             dismissButton = {
                 TextButton(onClick = { showCancelConfirm = false }) {
-                    Text("Keep it", color = TextSecondary)
+                    Text(stringResource(R.string.leave_keep_it), color = TextSecondary)
                 }
             },
             containerColor = SurfaceDark,
@@ -923,14 +947,14 @@ private fun ApplyLeaveDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Apply for Leave",
+                    stringResource(R.string.leave_apply_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 // LOW #10: 48dp minimum touch target for accessibility.
                 IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary)
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_close), tint = TextSecondary)
                 }
             }
         },
@@ -942,7 +966,7 @@ private fun ApplyLeaveDialog(
                 // Leave type selector
                 Column {
                     Text(
-                        "Leave Type",
+                        stringResource(R.string.leave_type_label),
                         style = MaterialTheme.typography.labelMedium,
                         color = TextSecondary
                     )
@@ -994,8 +1018,8 @@ private fun ApplyLeaveDialog(
                             catch (_: Exception) { state.applyStartDate }
                         } else "",
                         onValueChange = {},
-                        label = { Text("Start Date") },
-                        placeholder = { Text("Tap to select") },
+                        label = { Text(stringResource(R.string.common_start_date)) },
+                        placeholder = { Text(stringResource(R.string.common_tap_to_select)) },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         readOnly = true,
@@ -1003,7 +1027,7 @@ private fun ApplyLeaveDialog(
                         shape = RoundedCornerShape(8.dp),
                         trailingIcon = {
                             IconButton(onClick = { showStartPicker = true }) {
-                                Icon(Icons.Filled.CalendarMonth, "Pick date", tint = Teal)
+                                Icon(Icons.Filled.CalendarMonth, stringResource(R.string.common_pick_date), tint = Teal)
                             }
                         },
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }.also {
@@ -1022,8 +1046,8 @@ private fun ApplyLeaveDialog(
                             catch (_: Exception) { state.applyEndDate }
                         } else "",
                         onValueChange = {},
-                        label = { Text("End Date") },
-                        placeholder = { Text(if (state.applyHalfDay) "Same as start" else "Tap to select") },
+                        label = { Text(stringResource(R.string.common_end_date)) },
+                        placeholder = { Text(if (state.applyHalfDay) "Same as start" else stringResource(R.string.common_tap_to_select)) },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         readOnly = true,
@@ -1037,7 +1061,7 @@ private fun ApplyLeaveDialog(
                             ) {
                                 Icon(
                                     Icons.Filled.CalendarMonth,
-                                    "Pick date",
+                                    stringResource(R.string.common_pick_date),
                                     tint = if (state.applyHalfDay) TextTertiary else Teal
                                 )
                             }
@@ -1069,13 +1093,13 @@ private fun ApplyLeaveDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Half Day Leave",
+                            stringResource(R.string.leave_half_day),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            "Counts as 0.5 day on a single date",
+                            stringResource(R.string.leave_half_day_note),
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary,
                             fontSize = 10.sp
@@ -1112,7 +1136,7 @@ private fun ApplyLeaveDialog(
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text(
-                                    text = if (state.applyHalfDayPeriod == "PM") "Afternoon (PM)" else "Morning (AM)",
+                                    text = if (state.applyHalfDayPeriod == "PM")  /* i18n-ignore: wire value */ stringResource(R.string.leave_afternoon) else stringResource(R.string.leave_morning),
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -1124,14 +1148,14 @@ private fun ApplyLeaveDialog(
                                 modifier = Modifier.background(SurfaceDark)
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Morning (AM)", color = TextPrimary) },
+                                    text = { Text(stringResource(R.string.leave_morning), color = TextPrimary) },
                                     onClick = {
                                         onHalfDayPeriodChange("AM")
                                         periodDropdownExpanded = false
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Afternoon (PM)", color = TextPrimary) },
+                                    text = { Text(stringResource(R.string.leave_afternoon), color = TextPrimary) },
                                     onClick = {
                                         onHalfDayPeriodChange("PM")
                                         periodDropdownExpanded = false
@@ -1157,7 +1181,7 @@ private fun ApplyLeaveDialog(
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "Half-day (${state.applyHalfDayPeriod})",
+                                text = stringResource(R.string.leave_half_day_fmt, state.applyHalfDayPeriod),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Teal
@@ -1177,7 +1201,7 @@ private fun ApplyLeaveDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Half-day counts as 0.5 day deduction from your balance.",
+                            text = stringResource(R.string.leave_halfday_note),
                             fontSize = 12.sp,
                             color = WarningAmber,
                             fontWeight = FontWeight.Medium
@@ -1222,8 +1246,8 @@ private fun ApplyLeaveDialog(
                 OutlinedTextField(
                     value = state.applyReason,
                     onValueChange = onReasonChange,
-                    label = { Text("Reason") },
-                    placeholder = { Text("Enter reason for leave") },
+                    label = { Text(stringResource(R.string.common_reason)) },
+                    placeholder = { Text(stringResource(R.string.leave_enter_reason)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(100.dp),
@@ -1236,7 +1260,7 @@ private fun ApplyLeaveDialog(
                 // Hidden until both dates are set so an empty preview never
                 // misleads the user; updates live as they edit.
                 if (state.applyStartDate.isNotBlank() && state.applyEndDate.isNotBlank()) {
-                    val previewText = buildLeavePreview(state)
+                    val previewText = buildLeavePreview(LocalContext.current, state)
                     if (previewText.isNotBlank()) {
                         Row(
                             modifier = Modifier
@@ -1268,12 +1292,14 @@ private fun ApplyLeaveDialog(
                 ),
                 shape = RoundedCornerShape(8.dp)
             ) {
+                // Hoisted: Modifier.semantics {} is not a composable scope.
+                val submittingCd = stringResource(R.string.leave_submitting)
                 if (state.isSubmitting) {
                     CircularProgressIndicator(
                         modifier = Modifier
                             .size(18.dp)
                             .semantics {
-                                contentDescription = "Submitting leave request"
+                                contentDescription = submittingCd
                                 liveRegion = LiveRegionMode.Polite
                             },
                         color = BgStart,
@@ -1281,12 +1307,12 @@ private fun ApplyLeaveDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Submit", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.common_submit), fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextSecondary)
+                Text(stringResource(R.string.common_cancel), color = TextSecondary)
             }
         },
         containerColor = SurfaceDark,
@@ -1296,23 +1322,28 @@ private fun ApplyLeaveDialog(
 
 // Build the human-readable preview line shown above the Submit button.
 // Returns "" if dates can't be parsed so the caller can hide the row.
-private fun buildLeavePreview(state: LeaveUiState): String {
+private fun buildLeavePreview(ctx: android.content.Context, state: LeaveUiState): String {
     return try {
         val start = java.time.LocalDate.parse(state.applyStartDate)
         val end = java.time.LocalDate.parse(state.applyEndDate)
         val dayMonth = java.time.format.DateTimeFormatter.ofPattern("d MMM")
-        val typeLabel = state.applyLeaveType.ifBlank { "Leave" }
+        val typeLabel = state.applyLeaveType.ifBlank { ctx.localizedString(R.string.leave_type_default) }
 
         if (state.applyHalfDay) {
-            val periodWord = if (state.applyHalfDayPeriod == "PM") "Afternoon" else "Morning"
-            "Applying Half-Day $typeLabel ($periodWord) on ${start.format(dayMonth)}"
+            val periodWord = ctx.localizedString(
+                if (state.applyHalfDayPeriod == "PM") R.string.leave_half_afternoon  // i18n-ignore: wire value
+                else R.string.leave_half_morning
+            )
+            ctx.localizedString(R.string.leave_applying_half_fmt, typeLabel, periodWord, start.format(dayMonth))
         } else {
             val days = (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1)
                 .toInt().coerceAtLeast(1)
             if (days == 1) {
-                "Applying $typeLabel on ${start.format(dayMonth)} (1 day)"
+                ctx.localizedString(R.string.leave_applying_one_fmt, typeLabel, start.format(dayMonth))
             } else {
-                "Applying $typeLabel from ${start.format(dayMonth)} to ${end.format(dayMonth)} ($days days)"
+                ctx.localizedPlural(
+                    R.plurals.leave_applying_range_fmt, days,
+                    typeLabel, start.format(dayMonth), end.format(dayMonth), days)
             }
         }
     } catch (_: Exception) {
@@ -1400,7 +1431,7 @@ private fun LeaveDatePickerDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel), color = TextSecondary) }
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = {
                         val millis = pickerState.selectedDateMillis
@@ -1409,7 +1440,7 @@ private fun LeaveDatePickerDialog(
                                 .atZone(zone).toLocalDate()
                             onDateSelected(date.toString())
                         } else onDismiss()
-                    }) { Text("OK", color = Teal, fontWeight = FontWeight.Bold) }
+                    }) { Text(stringResource(R.string.common_ok), color = Teal, fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -1487,10 +1518,10 @@ private fun StudentLeaveContent(
                     modifier = Modifier.size(48.dp)
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("No student leave requests", color = TextTertiary)
+                Text(stringResource(R.string.leave_no_student_requests), color = TextTertiary)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "Leave applications from parents in your class will appear here",
+                    stringResource(R.string.leave_parent_empty),
                     color = TextTertiary,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(horizontal = 24.dp),
@@ -1511,7 +1542,7 @@ private fun StudentLeaveContent(
         if (pending.isNotEmpty()) {
             item {
                 Text(
-                    "Pending Requests (${pending.size})",
+                    stringResource(R.string.leave_pending_requests_fmt, pending.size),
                     style = MaterialTheme.typography.titleMedium,
                     color = WarningAmber,
                     fontWeight = FontWeight.Bold,
@@ -1531,7 +1562,7 @@ private fun StudentLeaveContent(
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Processed (${processed.size})",
+                    stringResource(R.string.leave_processed_count_fmt, processed.size),
                     style = MaterialTheme.typography.titleMedium,
                     color = TextSecondary,
                     fontWeight = FontWeight.SemiBold,
@@ -1625,25 +1656,30 @@ private fun StudentLeaveCard(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Meta row
-        Row(
+        // Meta row — FOUR label/value columns. Type/From/To/Days are 2-4
+        // characters each in English and up to three times that in Tamil and
+        // Telugu, so under SpaceBetween the four columns overflow the row.
+        // FlowRow wraps them onto a second line instead of clipping.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Column {
-                Text("Type", fontSize = 10.sp, color = TextTertiary)
+                Text(stringResource(R.string.common_type), fontSize = 10.sp, color = TextTertiary)
                 Text(leave.leaveType, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.SemiBold)
             }
             Column {
-                Text("From", fontSize = 10.sp, color = TextTertiary)
+                Text(stringResource(R.string.common_from), fontSize = 10.sp, color = TextTertiary)
                 Text(leave.startDate, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
             }
             Column {
-                Text("To", fontSize = 10.sp, color = TextTertiary)
+                Text(stringResource(R.string.common_to), fontSize = 10.sp, color = TextTertiary)
                 Text(leave.endDate, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
             }
             Column {
-                Text("Days", fontSize = 10.sp, color = TextTertiary)
+                Text(stringResource(R.string.common_days), fontSize = 10.sp, color = TextTertiary)
                 Text(formatDays(leave.numberOfDays), fontSize = 13.sp, color = Teal, fontWeight = FontWeight.Bold)
             }
         }
@@ -1660,7 +1696,7 @@ private fun StudentLeaveCard(
                 .padding(10.dp)
         ) {
             Text(
-                leave.reason.ifEmpty { "No reason provided" },
+                leave.reason.ifEmpty { stringResource(R.string.leave_no_reason) },
                 fontSize = 13.sp,
                 color = TextSecondary,
                 maxLines = 3,
@@ -1672,7 +1708,8 @@ private fun StudentLeaveCard(
         if (leave.approvedBy.isNotBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Processed by ${leave.approvedBy}" + if (leave.remarks.isNotBlank()) " — \"${leave.remarks}\"" else "",
+                stringResource(R.string.leave_processed_by_fmt, leave.approvedBy) +
+                    if (leave.remarks.isNotBlank()) " — \"${leave.remarks}\"" else "",
                 fontSize = 11.sp,
                 color = TextTertiary
             )
@@ -1687,8 +1724,8 @@ private fun StudentLeaveCard(
             OutlinedTextField(
                 value = remarks,
                 onValueChange = { remarks = it },
-                label = { Text("Remarks", fontSize = 12.sp) },
-                placeholder = { Text("Optional for approve, required for reject", fontSize = 12.sp) },
+                label = { Text(stringResource(R.string.common_remarks), fontSize = 12.sp) },
+                placeholder = { Text(stringResource(R.string.leave_remark_hint), fontSize = 12.sp) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
@@ -1717,19 +1754,21 @@ private fun StudentLeaveCard(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
+                    // Hoisted: Modifier.semantics {} is not a composable scope.
+                    val processingCd = stringResource(R.string.leave_processing)
                     if (isProcessing) {
                         CircularProgressIndicator(
                             color = Color.White,
                             modifier = Modifier
                                 .size(16.dp)
                                 .semantics {
-                                    contentDescription = "Processing leave decision"
+                                    contentDescription = processingCd
                                     liveRegion = LiveRegionMode.Polite
                                 },
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Approve", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.leave_approve), fontWeight = FontWeight.SemiBold)
                     }
                 }
                 Button(
@@ -1739,7 +1778,7 @@ private fun StudentLeaveCard(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Reject", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.leave_reject), fontWeight = FontWeight.SemiBold)
                 }
             }
         }

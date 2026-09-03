@@ -80,6 +80,9 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.WarningAmber
 import com.schoolsync.teacher.ui.theme.glassCard
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.res.pluralStringResource
 
 @Composable
 fun ResultsScreen(
@@ -165,7 +168,7 @@ private fun ResultsSelectorPanel(
     ) {
         if (!compact) {
             Text(
-                text = "Results",
+                text = stringResource(R.string.nav_results),
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -174,7 +177,7 @@ private fun ResultsSelectorPanel(
         }
 
         SelectorDropdown(
-            label = "Class",
+            label = stringResource(R.string.common_class),
             selectedText = if (state.selectedClassName.isNotEmpty())
                 "${state.selectedClassName} - ${state.selectedSection}" else "Select",
             items = state.availableClasses.map { "${it.first} - ${it.second}" },
@@ -185,8 +188,8 @@ private fun ResultsSelectorPanel(
         )
 
         SelectorDropdown(
-            label = "Exam",
-            selectedText = state.selectedExam?.examName ?: "Select Exam",
+            label = stringResource(R.string.common_exam),
+            selectedText = state.selectedExam?.examName ?: stringResource(R.string.marks_select_exam),
             items = state.availableExams.map { it.examName },
             onItemSelected = { index -> onExamSelected(state.availableExams[index]) },
             enabled = state.availableExams.isNotEmpty()
@@ -218,7 +221,7 @@ private fun ResultsContent(
                             onClick = onRetry,
                             colors = ButtonDefaults.buttonColors(containerColor = Teal, contentColor = BgStart),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Text("Retry", fontWeight = FontWeight.SemiBold) }
+                        ) { Text(stringResource(R.string.common_retry), fontWeight = FontWeight.SemiBold) }
                     }
                 )
             }
@@ -226,16 +229,16 @@ private fun ResultsContent(
                 CenteredMessage(
                     icon = Icons.Filled.Leaderboard,
                     tint = TextTertiary,
-                    title = "Select class and exam",
-                    subtitle = "Choose an exam to view published results"
+                    title = stringResource(R.string.results_select),
+                    subtitle = stringResource(R.string.results_select_hint)
                 )
             }
             state.notPublished -> {
                 CenteredMessage(
                     icon = Icons.Filled.HelpOutline,
                     tint = WarningAmber,
-                    title = "Results not published yet",
-                    subtitle = "This exam's results are still a draft and haven't been published."
+                    title = stringResource(R.string.results_not_published),
+                    subtitle = stringResource(R.string.results_draft)
                 )
             }
             else -> {
@@ -250,7 +253,9 @@ private fun ResultsContent(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "${state.selectedClassName} - ${state.selectedSection} | ${state.results.size} students",
+                        text = pluralStringResource(
+                            R.plurals.results_class_students, state.results.size,
+                            state.selectedClassName, state.selectedSection, state.results.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -292,14 +297,15 @@ private fun ResultRowCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Rank badge
             val rankText = if (row.rank > 0) row.rank.toString() else "—"
+            // Hoisted: Modifier.semantics {} is not a composable scope.
+            val rankCd = if (row.rank > 0) stringResource(R.string.results_rank_fmt, row.rank)
+                         else stringResource(R.string.results_no_rank)
             Box(
                 modifier = Modifier
                     .size(34.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(TealSurface)
-                    .semantics {
-                        contentDescription = if (row.rank > 0) "Rank ${row.rank}" else "Rank not available"
-                    },
+                    .semantics { contentDescription = rankCd },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -323,7 +329,7 @@ private fun ResultRowCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Roll ${row.rollNo.ifBlank { "—" }} · ${row.cells.totalText} · ${row.cells.percentText}",
+                    text = stringResource(R.string.results_row_summary, row.rollNo.ifBlank { "—" }, row.cells.totalText, row.cells.percentText),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                     maxLines = 1,
@@ -348,7 +354,7 @@ private fun ResultRowCard(
             Spacer(Modifier.width(4.dp))
             Icon(
                 imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                contentDescription = if (expanded) "Collapse subjects" else "Expand subjects",
+                contentDescription = if (expanded) stringResource(R.string.results_collapse_subjects) else stringResource(R.string.results_expand_subjects),
                 tint = TextTertiary,
                 modifier = Modifier.size(20.dp)
             )
@@ -360,7 +366,7 @@ private fun ResultRowCard(
                 Spacer(Modifier.height(6.dp))
                 if (row.subjects.isEmpty()) {
                     Text(
-                        text = "No subject breakdown available",
+                        text = stringResource(R.string.results_no_breakdown),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary
                     )
@@ -415,12 +421,14 @@ private fun PassFailChip(cells: ResultDisplayCells) {
     }
     // Text label carries the signal (not color alone); single content description
     // for the whole chip so a screen reader announces the outcome once.
+    // Hoisted: Modifier.semantics {} is not a composable scope.
+    val resultCd = stringResource(R.string.results_result_fmt, cells.passLabel)
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .padding(horizontal = 8.dp, vertical = 4.dp)
-            .clearAndSetSemantics { contentDescription = "Result: ${cells.passLabel}" },
+            .clearAndSetSemantics { contentDescription = resultCd },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(imageVector = icon, contentDescription = null, tint = fg, modifier = Modifier.size(14.dp))
@@ -538,7 +546,7 @@ private fun SelectorDropdown(
                     DropdownMenuItem(
                         text = {
                             Text(
-                                "No items available",
+                                stringResource(R.string.common_no_items),
                                 color = TextTertiary,
                                 style = MaterialTheme.typography.bodySmall
                             )

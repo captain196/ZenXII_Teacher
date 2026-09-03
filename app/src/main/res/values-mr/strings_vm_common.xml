@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViewModel-level messages: auth, dashboard, attendance, marks, my attendance. -->
+<resources>
+    <string name="vm_teacher_id_required">शिक्षक ID आवश्यक आहे</string>
+    <string name="vm_password_required">पासवर्ड आवश्यक आहे</string>
+    <string name="vm_login_failed">लॉगिन अयशस्वी</string>
+    <string name="vm_error_occurred">त्रुटी आली</string>
+    <string name="vm_reset_failed">रीसेट अयशस्वी.</string>
+    <string name="vm_pw_length">पासवर्ड 8–72 अक्षरांचा असावा.</string>
+    <string name="vm_pw_upper">एक मोठे अक्षर असावे.</string>
+    <string name="vm_pw_lower">एक लहान अक्षर असावे.</string>
+    <string name="vm_pw_digit">एक अंक असावा.</string>
+    <string name="vm_pw_mismatch">पासवर्ड जुळत नाहीत.</string>
+    <string name="vm_logout_failed">लॉगआउट अयशस्वी</string>
+    <string name="vm_not_logged_in">लॉग इन नाही</string>
+    <string name="vm_no_session">तुमच्या शाळेसाठी अद्याप सक्रिय शैक्षणिक सत्र नाही. रिफ्रेशसाठी खेचा.</string>
+    <string name="vm_dash_load_error">तुमचा डॅशबोर्ड लोड होऊ शकला नाही — कनेक्शन तपासा व रिफ्रेशसाठी खेचा.</string>
+    <string name="vm_dash_load_failed">डॅशबोर्ड लोड करण्यात अयशस्वी</string>
+    <string name="vm_stat_classes">वर्ग</string>
+    <string name="vm_substitute">पर्यायी</string>
+    <string name="vm_att_load_failed">उपस्थिती लोड करण्यात अयशस्वी</string>
+    <string name="vm_att_past_month">मागील महिन्याच्या संपादनासाठी दुरुस्ती विनंती आवश्यक आहे. दाखल करण्यासाठी बंद खान्यावर टॅप करा.</string>
+    <string name="vm_att_date_changed">नोंद सुरू केल्यानंतर तारीख बदलली. आजची शीट पुन्हा लोड होत आहे — कृपया पुन्हा तपासून जतन करा.</string>
+    <string name="vm_att_not_authorized">या वर्गासाठी अधिकृत नाही.</string>
+    <string name="vm_att_holiday">आज सुट्टी आहे — उपस्थिती नोंदवता येणार नाही.</string>
+    <string name="vm_conflict_refresh">विरोध — रिफ्रेश करून पुन्हा प्रयत्न करा.</string>
+    <string name="vm_not_found">सापडले नाही.</string>
+    <string name="vm_save_failed">जतन करणे अयशस्वी</string>
+    <string name="vm_correction_exists">एक प्रलंबित दुरुस्ती आधीच अस्तित्वात आहे.</string>
+    <string name="vm_reason_min">कारण 10+ अक्षरांचे असावे.</string>
+    <string name="vm_submit_failed">पाठवण्यात अयशस्वी</string>
+    <string name="vm_requests_load_failed">विनंत्या लोड करण्यात अयशस्वी</string>
+    <string name="vm_marks_invalid">अवैध</string>
+    <string name="vm_marks_fix_errors">जतन करण्यापूर्वी कृपया पडताळणी त्रुटी दुरुस्त करा</string>
+    <string name="vm_marks_saved_offline">ऑफलाइन जतन केले — ऑनलाइन झाल्यावर सिंक होईल</string>
+    <string name="vm_marks_save_failed">गुण जतन करण्यात अयशस्वी</string>
+    <string name="vm_myatt_load_failed">उपस्थिती लोड होऊ शकली नाही.</string>
+    <string name="vm_unexpected_error">अनपेक्षित त्रुटी</string>
+    <string name="vm_reg_load_failed">तुमच्या विनंत्या लोड होऊ शकल्या नाहीत.</string>
+    <string name="vm_reg_submit_failed">विनंती पाठवता आली नाही.</string>
+</resources>

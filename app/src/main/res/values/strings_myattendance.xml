@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c: my attendance - GPS punch, calendar, regularization requests. -->
+<resources>
+    <string name="myatt_clock_in_anyway">Clock in anyway</string>
+    <string name="common_not_now">Not now</string>
+    <string name="myatt_extra_work_warn">Clocking in will record today as extra work and add extra pay for the day, per your company policy.</string>
+    <string name="myatt_today_title">Today\'s Attendance</string>
+    <string name="myatt_check_in">Check-in</string>
+    <string name="myatt_check_out">Check-out</string>
+    <string name="myatt_working_duration">Working duration</string>
+    <string name="myatt_approx_location">Approximate location only — enable Precise location for attendance.</string>
+    <string name="myatt_enable_precise">Enable Precise</string>
+    <string name="myatt_getting_location">Getting your location…</string>
+    <string name="myatt_calendar">Attendance calendar</string>
+    <string name="myatt_all_done">All done for today</string>
+    <string name="myatt_regularize">Regularize Attendance</string>
+    <string name="myatt_regularize_sub">Request a correction for absent or missed days</string>
+    <string name="myatt_perm_blocked">Location permission blocked</string>
+    <string name="myatt_perm_needed">Location permission needed</string>
+    <string name="myatt_location_off">Location is turned off</string>
+    <string name="myatt_weak_gps">Weak GPS signal</string>
+    <string name="myatt_perm_required">Permission required</string>
+    <string name="reg_submitted">Request submitted</string>
+    <string name="reg_sent_to_admin">Sent to your school admin for approval</string>
+    <string name="common_add">Add</string>
+    <string name="reg_workday_dates">Workday dates</string>
+    <string name="reg_timezone">Timezone</string>
+    <string name="reg_add_another">Add another past date to regularize:</string>
+    <string name="reg_new_date">New Date</string>
+    <string name="reg_select_days">Select the day(s)</string>
+    <string name="common_reason">Reason</string>
+    <string name="reg_reason_required">Reason / note (required)</string>
+    <string name="common_submitting">Submitting…</string>
+    <string name="reg_your_requests">Your requests</string>
+    <string name="reg_no_requests">No requests yet</string>
+    <string name="reg_file_request_tab">File Request</string>
+    <string name="reg_no_requests_hint">File a correction from the “File Request” tab.</string>
+    <string name="reg_admin_prefix">Admin:</string>
+    <string name="reg_clock_in">Clock In</string>
+    <string name="reg_clock_out">Clock Out</string>
+    <string name="common_set">Set</string>
+</resources>

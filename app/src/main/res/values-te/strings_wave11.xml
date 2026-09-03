@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 11: user-visible ifBlank fallbacks found by the fallback sweep.
+     Wire values (low/active/general/pending) and groupBy keys deliberately excluded. -->
+<resources>
+    <string name="attapi_reason_required">కారణం అవసరం (కనీసం 10 అక్షరాలు)</string>
+    <string name="attapi_forbidden">ఈ తరగతికి అనుమతి లేదు.</string>
+    <string name="attapi_not_found">కనుగొనబడలేదు.</string>
+    <string name="attapi_conflict">వైరుధ్యం.</string>
+    <string name="attapi_holiday">సెలవు రోజున గుర్తించలేరు.</string>
+    <string name="attapi_locked">హాజరు లాక్ చేయబడింది.</string>
+    <string name="attapi_network_fmt">నెట్‌వర్క్ లోపం (%1$d)</string>
+    <string name="staffatt_session_expired">సెషన్ ముగిసింది. దయచేసి మళ్లీ సైన్ ఇన్ చేయండి.</string>
+    <string name="staffatt_not_permitted">అనుమతి లేదు.</string>
+    <string name="staffatt_gps_disabled">GPS హాజరు ప్రారంభించబడలేదు.</string>
+    <string name="staffatt_not_recorded">హాజరును నమోదు చేయలేకపోయాము.</string>
+    <string name="staffatt_invalid_request">చెల్లని అభ్యర్థన.</string>
+    <string name="staffatt_server_error">సర్వర్ లోపం. దయచేసి మళ్లీ ప్రయత్నించండి.</string>
+    <string name="auth_reset_failed_fmt">రీసెట్ విఫలమైంది (HTTP %1$d).</string>
+    <string name="lib_book_id_fmt">పుస్తకం: %1$s</string>
+    <string name="story_generic">స్టోరీ</string>
+    <string name="story_viewer_generic">వీక్షకుడు</string>
+    <string name="lp_another_teacher">మరొక ఉపాధ్యాయుడు</string>
+    <string name="search_untitled_generic">(శీర్షిక లేదు)</string>
+</resources>

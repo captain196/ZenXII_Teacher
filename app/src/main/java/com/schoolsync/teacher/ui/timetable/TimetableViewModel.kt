@@ -15,6 +15,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 data class TimetableEntry(
     val subject: String,
@@ -45,7 +49,10 @@ data class TimetableUiState(
 class TimetableViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
     private val timetableFirestoreRepo: TimetableFirestoreRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TimetableUiState())
@@ -144,7 +151,7 @@ class TimetableViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, error = e.message ?: "Failed to load timetable")
+                    it.copy(isLoading = false, error = e.message ?: appContext.localizedString(R.string.vm_tt_load_failed))
                 }
             }
         }

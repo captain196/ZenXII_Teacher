@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c (cont.): GPS/permission state-prompt cards. -->
+<resources>
+    <string name="myatt_perm_blocked_body">उपस्थिति दर्ज करने हेतु सिस्टम सेटिंग्स में इस ऐप के लिए स्थान चालू करें।</string>
+    <string name="myatt_open_settings">सेटिंग्स खोलें</string>
+    <string name="myatt_perm_needed_body">आप परिसर में हैं इसकी पुष्टि हेतु उपस्थिति को आपका स्थान चाहिए।</string>
+    <string name="myatt_grant_permission">अनुमति दें</string>
+    <string name="myatt_location_off_body">डिवाइस स्थान (GPS) चालू करें, फिर पुनः प्रयास करें।</string>
+    <string name="myatt_open_location_settings">स्थान सेटिंग्स खोलें</string>
+    <string name="myatt_weak_gps_body">सटीक स्थान नहीं मिल सका। खुली जगह पर जाएँ और पुनः प्रयास करें। यदि स्थान अनुमानित पर सेट है, तो इस ऐप के लिए सटीक स्थान चालू करें।</string>
+    <string name="myatt_perm_required_body">जारी रखने हेतु स्थान अनुमति दें।</string>
+    <string name="common_something_wrong">कुछ गड़बड़ हो गई।</string>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Short weekday headers + attendance stage labels. -->
+<resources>
+    <string name="day_short_monday">సోమ</string>
+    <string name="day_short_tuesday">మంగళ</string>
+    <string name="day_short_wednesday">బుధ</string>
+    <string name="day_short_thursday">గురు</string>
+    <string name="day_short_friday">శుక్ర</string>
+    <string name="day_short_saturday">శని</string>
+    <string name="day_short_sunday">ఆది</string>
+    <string name="att_stage_free">సవరించదగినది</string>
+    <string name="att_stage_restricted">కారణంతో సవరించదగినది</string>
+    <string name="att_not_marked">గుర్తించలేదు</string>
+    <string name="att_currently_fmt">ప్రస్తుతం: %1$s</string>
+</resources>

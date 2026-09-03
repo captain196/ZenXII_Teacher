@@ -9,6 +9,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import com.schoolsync.teacher.util.DisplayFormat
 
 fun Context.toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
@@ -27,21 +28,22 @@ fun Long.toRelativeTime(): String {
         diff < TimeUnit.HOURS.toMillis(1) -> "${diff / TimeUnit.MINUTES.toMillis(1)}m ago"
         diff < TimeUnit.DAYS.toMillis(1) -> "${diff / TimeUnit.HOURS.toMillis(1)}h ago"
         diff < TimeUnit.DAYS.toMillis(7) -> "${diff / TimeUnit.DAYS.toMillis(1)}d ago"
-        else -> SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(this))
+        else -> DisplayFormat.date(Date(this))
     }
 }
 
 fun Long.toFormattedDate(): String =
-    SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(this))
+    DisplayFormat.date(Date(this))
 
 fun Long.toFormattedDateTime(): String =
-    SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(this))
+    DisplayFormat.dateTime(Date(this))
 
 fun Long.toTimeOnly(): String =
-    SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(this))
+    DisplayFormat.time(Date(this))
 
+/** Display-only. Localized month name, Latin digits pinned. */
 fun getCurrentMonth(): String =
-    SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date())
+    com.schoolsync.teacher.util.DisplayFormat.pattern(Date(), "MMMM yyyy")
 
 fun getCurrentSession(): String {
     val cal = Calendar.getInstance()
@@ -63,9 +65,11 @@ fun getDayOfWeek(day: Int, month: Int, year: Int): Int {
     return cal.get(Calendar.DAY_OF_WEEK)
 }
 
-fun Int.toRupees(): String = "₹${String.format("%,d", this)}"
+// Pinned to en-IN: an amount must not regroup because the UI language
+// changed. Prefer DisplayFormat.currencyWhole() in new code.
+fun Int.toRupees(): String = DisplayFormat.currencyWhole(this)
 
-fun Double.toPercent(): String = "${String.format("%.1f", this)}%"
+fun Double.toPercent(): String = DisplayFormat.percent(this.toFloat())
 
 fun Map<String, Any?>.getString(key: String, default: String = ""): String =
     (this[key] as? String) ?: default

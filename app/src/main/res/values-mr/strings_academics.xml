@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3b: lesson plan, marks entry, results, student profile. -->
+<resources>
+    <string name="lp_title">पाठ नियोजक</string>
+    <string name="lp_no_periods">आज कोणतेही तासिका नियोजित नाहीत</string>
+    <string name="lp_done">पूर्ण</string>
+    <string name="lp_skip">वगळा</string>
+    <string name="common_edit">संपादित करा</string>
+    <string name="lp_topic">विषय</string>
+    <string name="lp_no_topic">— विषय नाही —</string>
+    <string name="lp_no_topics_curriculum">अभ्यासक्रमात विषय सापडले नाहीत</string>
+    <string name="lp_notes">टिपा</string>
+    <string name="lp_notes_hint">या तासिकेबद्दल लक्षात ठेवण्यासारखे काही…</string>
+    <string name="common_status">स्थिती</string>
+    <string name="lp_reschedule_to">पुनर्नियोजित करा (YYYY-MM-DD)</string>
+    <string name="lp_period_no">तासिका #</string>
+    <string name="common_save">जतन करा</string>
+    <string name="lesson_status_planned">नियोजित</string>
+    <string name="lesson_status_completed">पूर्ण</string>
+    <string name="lesson_status_skipped">वगळले</string>
+    <string name="lesson_status_rescheduled">पुनर्नियोजित</string>
+    <string name="marks_save">गुण जतन करा</string>
+    <string name="marks_discard_q">जतन न केलेले गुण टाकून द्यायचे?</string>
+    <string name="common_discard">टाकून द्या</string>
+    <string name="marks_select_exam_subject">परीक्षा व विषय निवडा</string>
+    <string name="marks_select_hint">गुण नोंदवण्यास सुरुवात करण्यासाठी परीक्षा व विषय निवडा</string>
+    <string name="marks_unsaved">जतन न केलेले बदल</string>
+    <string name="marks_entry">गुण नोंद</string>
+    <string name="common_class">वर्ग</string>
+    <string name="common_exam">परीक्षा</string>
+    <string name="marks_max">कमाल गुण</string>
+    <string name="marks_theory">सैद्धांतिक:</string>
+    <string name="marks_practical">प्रात्यक्षिक:</string>
+    <string name="marks_total">एकूण:</string>
+    <string name="marks_absent_short">अनु</string>
+    <string name="results_select">वर्ग व परीक्षा निवडा</string>
+    <string name="results_select_hint">प्रकाशित निकाल पाहण्यासाठी परीक्षा निवडा</string>
+    <string name="results_not_published">निकाल अद्याप प्रकाशित नाही</string>
+    <string name="results_draft">या परीक्षेचे निकाल अद्याप मसुदा आहेत आणि प्रकाशित झालेले नाहीत.</string>
+    <string name="results_no_breakdown">विषयनिहाय तपशील उपलब्ध नाही</string>
+    <string name="stu_profile">विद्यार्थी प्रोफाइल</string>
+    <string name="stu_id">विद्यार्थी ID</string>
+    <string name="stu_father">वडिलांचे नाव</string>
+    <string name="stu_mother">आईचे नाव</string>
+    <string name="stu_dob">जन्म तारीख</string>
+    <string name="stu_gender">लिंग</string>
+    <string name="stu_admission_date">प्रवेश तारीख</string>
+    <string name="stu_fees_hdr">शुल्क</string>
+    <string name="stu_monthly_status">मासिक स्थिती</string>
+</resources>

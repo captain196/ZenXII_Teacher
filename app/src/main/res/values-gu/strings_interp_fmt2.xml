@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remaining interpolated copy (multi-arg / conditional) as format strings. -->
+<resources>
+    <string name="appr_type_reviewer">%1$s • સમીક્ષક: %2$s</string>
+    <string name="ev_view_all_photos">બધા ફોટા જુઓ (%1$d)</string>
+    <string name="fees_cleared_pending">%2$d માંથી %1$d ચૂકવાયા · %3$s બાકી</string>
+    <string name="gal_tap_choose_video">વીડિયો પસંદ કરવા ટૅપ કરો</string>
+    <string name="gal_tap_choose_photo">ફોટો પસંદ કરવા ટૅપ કરો</string>
+    <string name="marks_class_max">%1$s - %2$s | મહત્તમ: %3$s</string>
+    <string name="results_row_summary">રોલ %1$s · %2$s · %3$s</string>
+    <string name="myatt_today_is">આજે %1$s છે</string>
+    <string name="myatt_accuracy">ચોકસાઈ ± %1$s મી</string>
+    <string name="myatt_from_school">શાળાથી %1$s</string>
+    <string name="myatt_done_times">આજ માટે બધું પૂર્ણ · %1$s — %2$s</string>
+    <string name="myatt_recorded_status">આજે હાજરી પહેલેથી નોંધાઈ છે (%1$s).</string>
+    <string name="myatt_opens_at">ચેક-ઇન %1$s વાગ્યે ખૂલશે.</string>
+    <string name="myatt_ontime_by">સમયસર — %1$s સુધીમાં ક્લોક ઇન કરો%2$s</string>
+    <string name="myatt_marked_late">તમે મોડા ચિહ્નિત થશો (+%1$d મિ.)%2$s</string>
+    <string name="myatt_closed_after">ચેક-ઇન સમય પૂરો (%1$s પછી). તેના બદલે નિયમિતીકરણ દાખલ કરો.</string>
+    <string name="myatt_campus_fallback">કેમ્પસ</string>
+    <string name="myatt_until">%1$s સુધી</string>
+    <string name="myatt_working_since_fmt">%1$s થી કાર્યરત</string>
+    <string name="myatt_out_at">, બહાર %1$s</string>
+    <string name="reg_my_requests_n">મારી વિનંતીઓ (%1$d)</string>
+    <string name="reg_couldnt_refresh">રિફ્રેશ થઈ શક્યું નહીં: %1$s</string>
+    <string name="reg_applied_label">અરજી કરી: %1$s</string>
+    <string name="myatt_full_day_suffix"> · આખો દિવસ %1$s ક.</string>
+</resources>

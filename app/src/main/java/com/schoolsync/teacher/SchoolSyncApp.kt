@@ -1,5 +1,7 @@
 package com.schoolsync.teacher
 
+import com.schoolsync.teacher.util.LocaleManager
+import android.content.Context
 import android.app.Application
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
@@ -10,6 +12,15 @@ import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
 class SchoolSyncApp : Application() {
+
+    /**
+     * Apply the chosen language to the Application context, so
+     * context.getString() is correct in ViewModels, services and any
+     * non-Activity code path too.
+     */
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(LocaleManager.wrap(base))
+    }
     override fun onCreate() {
         super.onCreate()
         com.schoolsync.teacher.util.initDebugLog(this)

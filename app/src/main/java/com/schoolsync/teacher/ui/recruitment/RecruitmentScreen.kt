@@ -62,6 +62,9 @@ import com.schoolsync.teacher.ui.theme.TealSurface
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.res.pluralStringResource
 
 @Composable
 fun RecruitmentScreen(viewModel: RecruitmentViewModel = hiltViewModel()) {
@@ -109,7 +112,7 @@ private fun TopBar(onRefresh: () -> Unit, isLoading: Boolean, count: Int) {
     ) {
         Icon(Icons.Filled.WorkOutline, null, tint = Teal, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(10.dp))
-        Text("Open Positions", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+        Text(stringResource(R.string.rec_open_positions), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
         if (count > 0) {
             Spacer(Modifier.width(8.dp))
             Box(Modifier.clip(RoundedCornerShape(6.dp)).background(TealSurface).padding(horizontal = 6.dp, vertical = 2.dp)) {
@@ -127,8 +130,8 @@ private fun TopBar(onRefresh: () -> Unit, isLoading: Boolean, count: Int) {
 private fun EmptyState() {
     com.schoolsync.teacher.ui.components.EmptyStatePro(
         icon = Icons.Filled.WorkOutline,
-        title = "No open positions",
-        description = "New job postings from HR will appear here.",
+        title = stringResource(R.string.rec_none),
+        description = stringResource(R.string.rec_none_hint),
     )
 }
 
@@ -155,13 +158,13 @@ private fun JobCard(job: RecruitmentDoc, expanded: Boolean, onToggle: () -> Unit
                         Spacer(Modifier.width(10.dp))
                         Icon(Icons.Filled.Groups, null, tint = TextTertiary, modifier = Modifier.size(13.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("${job.vacancies} ${if (job.vacancies == 1) "vacancy" else "vacancies"}", fontSize = 12.sp, color = TextSecondary)
+                        Text(pluralStringResource(R.plurals.rec_vacancies_count, job.vacancies, job.vacancies), fontSize = 12.sp, color = TextSecondary)
                     }
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
                 Box(Modifier.clip(RoundedCornerShape(6.dp)).background(SuccessGreenSurface).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    Text("Open", color = SuccessGreen, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.common_open), color = SuccessGreen, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.height(4.dp))
                 Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = TextTertiary, modifier = Modifier.size(20.dp))
@@ -171,18 +174,18 @@ private fun JobCard(job: RecruitmentDoc, expanded: Boolean, onToggle: () -> Unit
             Column(Modifier.padding(top = 12.dp)) {
                 Divider(color = DividerColor)
                 Spacer(Modifier.height(10.dp))
-                if (job.qualification.isNotBlank()) MetaRow(Icons.Filled.School, "Qualification", job.qualification)
-                if (job.experience.isNotBlank()) MetaRow(Icons.Filled.WorkOutline, "Experience", job.experience)
-                if (job.salaryRange.isNotBlank()) MetaRow(Icons.Filled.CurrencyRupee, "Salary", job.salaryRange)
-                if (job.closingDate.isNotBlank()) MetaRow(Icons.Filled.CalendarToday, "Apply by", job.closingDate)
+                if (job.qualification.isNotBlank()) MetaRow(Icons.Filled.School, stringResource(R.string.profile_card_qualification), job.qualification)
+                if (job.experience.isNotBlank()) MetaRow(Icons.Filled.WorkOutline, stringResource(R.string.rec_experience), job.experience)
+                if (job.salaryRange.isNotBlank()) MetaRow(Icons.Filled.CurrencyRupee, stringResource(R.string.rec_salary), job.salaryRange)
+                if (job.closingDate.isNotBlank()) MetaRow(Icons.Filled.CalendarToday, stringResource(R.string.rec_apply_by), job.closingDate)
                 if (job.jobDescription.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    SectionHeader("Description")
+                    SectionHeader(stringResource(R.string.common_description))
                     Text(job.jobDescription, color = TextPrimary, fontSize = 13.sp)
                 }
                 if (job.postedDate.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    Text("Posted ${job.postedDate}", color = TextTertiary, fontSize = 11.sp)
+                    Text(stringResource(R.string.rec_posted_fmt, job.postedDate), color = TextTertiary, fontSize = 11.sp)
                 }
             }
         }

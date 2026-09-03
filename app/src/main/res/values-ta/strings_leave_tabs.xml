@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Leave tabs and allotment labels. -->
+<resources>
+    <string name="leave_tab_my">என் விடுப்பு</string>
+    <string name="leave_tab_student">மாணவர் விடுப்பு</string>
+    <string name="leave_allotted">ஒதுக்கப்பட்டது %1$s</string>
+    <string name="leave_allotted_carried">ஒதுக்கப்பட்டது %1$s + %2$s முன்னெடுப்பு</string>
+</resources>

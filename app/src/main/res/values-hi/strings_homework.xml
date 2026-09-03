@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3a: homework - list, composer, grading panel. -->
+<resources>
+    <string name="hw_create_new">नया गृहकार्य बनाएँ</string>
+    <string name="hw_new">नया गृहकार्य</string>
+    <string name="hw_delete_q">गृहकार्य हटाएँ?</string>
+    <string name="common_delete">हटाएँ</string>
+    <string name="hw_all_subjects">सभी विषय</string>
+    <string name="hw_loading">गृहकार्य लोड हो रहा है...</string>
+    <string name="hw_none">कोई गृहकार्य नियत नहीं</string>
+    <string name="hw_none_hint">नया गृहकार्य बनाने हेतु + दबाएँ</string>
+    <string name="hw_past_due">नियत तिथि बीत गई</string>
+    <string name="hw_closed">बंद</string>
+    <string name="hw_has_attachments">संलग्नक हैं</string>
+    <string name="hw_edit">गृहकार्य संपादित करें</string>
+    <string name="hw_close_stop">गृहकार्य बंद करें (सबमिशन रोकें)</string>
+    <string name="hw_close_panel">पैनल बंद करें</string>
+    <string name="hw_submitted">जमा किया</string>
+    <string name="hw_attachments_hdr">संलग्नक</string>
+    <string name="common_open">खोलें</string>
+    <string name="hw_student_response">छात्र का उत्तर:</string>
+    <string name="hw_score">अंक</string>
+    <string name="hw_score_hint">जैसे 8</string>
+    <string name="hw_score_range">अंक 0–200 के बीच होना चाहिए</string>
+    <string name="hw_remark">टिप्पणी</string>
+    <string name="hw_remark_hint">जैसे शाबाश, ऐसे ही जारी रखें!</string>
+    <string name="common_close">बंद करें</string>
+    <string name="common_title">शीर्षक</string>
+    <string name="hw_title_hint">जैसे अध्याय 4 — अभ्यास 3</string>
+    <string name="common_details">विवरण</string>
+    <string name="hw_details_hint">छात्रों को क्या करना है?</string>
+    <string name="common_subject">विषय</string>
+    <string name="hw_due_date">नियत तिथि</string>
+    <string name="common_tomorrow">कल</string>
+    <string name="hw_in_3_days">3 दिन में</string>
+    <string name="hw_next_week">अगले सप्ताह</string>
+    <string name="common_pick_date">तिथि चुनें</string>
+    <string name="common_dismiss">खारिज करें</string>
+    <string name="hw_remove_attachment">संलग्नक हटाएँ</string>
+</resources>

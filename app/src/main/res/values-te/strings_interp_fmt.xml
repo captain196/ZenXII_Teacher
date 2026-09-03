@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Interpolated user-facing copy converted to format strings. -->
+<resources>
+    <string name="fees_paid_of_total_yearly">%2$dలో %1$d చెల్లించారు · ప్రత్యేక వార్షిక బిల్లింగ్</string>
+    <string name="common_collapse_fmt">%1$s కుదించు</string>
+    <string name="common_expand_fmt">%1$s విస్తరించు</string>
+    <string name="hw_created_fmt">%1$s సృష్టించబడింది</string>
+    <string name="hw_status_incomplete">అసంపూర్ణం</string>
+    <string name="hw_status_pending">పెండింగ్</string>
+    <string name="hw_score_fmt">స్కోరు: %1$s</string>
+    <string name="hw_marked_no_submission">గుర్తించబడింది (సమర్పణ లేదు)</string>
+    <string name="hw_current_status_cd">ప్రస్తుత స్థితి: %1$s, మార్చడానికి నొక్కండి</string>
+    <string name="hw_review_of">సమీక్ష — %1$s</string>
+    <string name="leave_remaining_of">%2$sలో %1$s మిగిలి ఉంది</string>
+    <string name="leave_used_fmt">%1$s ఉపయోగించారు</string>
+    <string name="leave_half_day_fmt">సగం రోజు (%1$s)</string>
+    <string name="lp_period_time">పీరియడ్ %1$s  •  %2$s</string>
+    <string name="lib_shelf_fmt">షెల్ఫ్: %1$s</string>
+    <string name="lib_issued_fmt">జారీ: %1$s</string>
+    <string name="lib_due_fmt">గడువు: %1$s</string>
+    <string name="lib_issued">జారీ చేయబడింది</string>
+    <string name="marks_header_fmt">%1$s - %2$s | గరిష్ఠం: %3$s</string>
+    <string name="marks_toggle_absent_cd">%1$s కు గైర్హాజరు మార్చండి</string>
+    <string name="myatt_today_is_rest">ఈరోజు %1$s</string>
+    <string name="myatt_distance_from_school">పాఠశాల నుండి %1$s</string>
+    <string name="myatt_all_done_times">ఈరోజుకి అంతా పూర్తయింది · %1$s — %2$s</string>
+    <string name="myatt_already_recorded">ఈరోజు హాజరు ఇప్పటికే నమోదైంది (%1$s).</string>
+    <string name="myatt_checkin_opens">చెక్-ఇన్ %1$s కు తెరుచుకుంటుంది.</string>
+    <string name="myatt_on_time_by">సమయానికి — %1$s లోపు క్లాక్ ఇన్ చేయండి%2$s</string>
+    <string name="myatt_will_be_late">మీరు ఆలస్యంగా గుర్తించబడతారు (+%1$d నిమి.)%2$s</string>
+    <string name="myatt_window_closed">చెక్-ఇన్ సమయం ముగిసింది (%1$s తర్వాత). బదులుగా క్రమబద్ధీకరణ దాఖలు చేయండి.</string>
+    <string name="myatt_distance_from_campus">మీరు %2$s నుండి %1$s దూరంలో ఉన్నారు</string>
+    <string name="myatt_until_fmt">%1$s వరకు</string>
+    <string name="myatt_working_since">%1$s నుండి పని</string>
+    <string name="reg_my_requests_count">నా అభ్యర్థనలు (%1$d)</string>
+    <string name="reg_refresh_failed">రిఫ్రెష్ చేయలేకపోయాము: %1$s</string>
+    <string name="reg_applied_fmt">దరఖాస్తు: %1$s</string>
+    <string name="not_notice_cd">నోటీసు: %1$s, %2$s</string>
+    <string name="rec_posted_fmt">%1$s న పోస్ట్ చేయబడింది</string>
+    <string name="rf_active_count">%1$d చురుకుగా</string>
+    <string name="rf_resolved_count">%1$d పరిష్కరించబడ్డాయి</string>
+    <string name="rf_flags_of_student">ఫ్లాగ్‌లు - %1$s</string>
+    <string name="rf_flag_student_cd">🚩 %1$s ను ఫ్లాగ్ చేయండి</string>
+    <string name="results_header_fmt">%1$s - %2$s | %3$d విద్యార్థులు</string>
+    <string name="results_roll_fmt">రోల్ %1$s</string>
+    <string name="results_result_fmt">ఫలితం: %1$s</string>
+    <string name="search_class_fmt">తరగతి %1$s</string>
+    <string name="story_index_of">స్టోరీ %1$d / %2$d</string>
+    <string name="story_author_photo_cd">%1$s ప్రొఫైల్ ఫోటో</string>
+    <string name="story_no_viewer_match">“%1$s” కు సరిపోలే వీక్షకులు లేరు.</string>
+    <string name="stu_roll_fmt">రోల్: %1$s</string>
+    <string name="stu_flag_cd">%1$s ను ఫ్లాగ్ చేయండి</string>
+    <string name="stu_call_cd">%1$s కు కాల్ చేయండి</string>
+    <string name="stu_class_roll_fmt">%1$s - %2$s | రోల్: %3$s</string>
+    <string name="pay_present_days">హాజరు</string>
+    <string name="pay_absent_days">గైర్హాజరు</string>
+</resources>

@@ -16,6 +16,10 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /**
  * Phase 6A — shared submit + undo handler for the QuickFlagSheet.
@@ -36,7 +40,10 @@ import javax.inject.Inject
 @HiltViewModel
 class QuickFlagViewModel @Inject constructor(
     private val redFlagRepository: RedFlagRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     data class State(
@@ -85,18 +92,18 @@ class QuickFlagViewModel @Inject constructor(
                                 lastStudentName = flag.studentName
                             )
                         }
-                        _events.emit(Event.Success("Flag raised for ${flag.studentName}"))
+                        _events.emit(Event.Success(appContext.localizedString(R.string.flag_raised_for_fmt, flag.studentName)))
                     },
                     onFailure = { e ->
                         Log.e(TAG, "Quick flag create failed", e)
                         _state.update { it.copy(isSubmitting = false) }
-                        _events.emit(Event.Error(e.message ?: "Failed to raise flag"))
+                        _events.emit(Event.Error(e.message ?: appContext.localizedString(R.string.vm_flag_failed)))
                     }
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "submit failed", e)
                 _state.update { it.copy(isSubmitting = false) }
-                _events.emit(Event.Error(e.message ?: "Failed to raise flag"))
+                _events.emit(Event.Error(e.message ?: appContext.localizedString(R.string.vm_flag_failed)))
             }
         }
     }
@@ -108,11 +115,11 @@ class QuickFlagViewModel @Inject constructor(
             redFlagRepository.softDeleteFlag(flagId).fold(
                 onSuccess = {
                     _state.update { it.copy(lastCreatedFlagId = null, lastStudentName = "") }
-                    _events.emit(Event.Success("Flag undone"))
+                    _events.emit(Event.Success(appContext.localizedString(R.string.vm_flag_undone)))
                 },
                 onFailure = { e ->
-                    Log.e(TAG, "Undo failed", e)
-                    _events.emit(Event.Error(e.message ?: "Undo failed"))
+                    Log.e(TAG, appContext.localizedString(R.string.vm_undo_failed), e)
+                    _events.emit(Event.Error(e.message ?: appContext.localizedString(R.string.vm_undo_failed)))
                 }
             )
         }

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c: my attendance - GPS punch, calendar, regularization requests. -->
+<resources>
+    <string name="myatt_clock_in_anyway">అయినా క్లాక్ ఇన్ చేయండి</string>
+    <string name="common_not_now">ఇప్పుడు వద్దు</string>
+    <string name="myatt_extra_work_warn">క్లాక్ ఇన్ చేస్తే ఈరోజు అదనపు పనిగా నమోదవుతుంది, మీ కంపెనీ విధానం ప్రకారం ఆ రోజుకు అదనపు వేతనం జోడించబడుతుంది.</string>
+    <string name="myatt_today_title">ఈరోజు హాజరు</string>
+    <string name="myatt_check_in">చెక్-ఇన్</string>
+    <string name="myatt_check_out">చెక్-అవుట్</string>
+    <string name="myatt_working_duration">పని వ్యవధి</string>
+    <string name="myatt_approx_location">సుమారు స్థానం మాత్రమే — హాజరు కోసం ఖచ్చితమైన స్థానాన్ని ఆన్ చేయండి.</string>
+    <string name="myatt_enable_precise">ఖచ్చితమైనది ఆన్ చేయండి</string>
+    <string name="myatt_getting_location">మీ స్థానాన్ని పొందుతోంది…</string>
+    <string name="myatt_calendar">హాజరు క్యాలెండర్</string>
+    <string name="myatt_all_done">ఈరోజుకి అంతా పూర్తయింది</string>
+    <string name="myatt_regularize">హాజరును క్రమబద్ధీకరించండి</string>
+    <string name="myatt_regularize_sub">గైర్హాజరు లేదా తప్పిన రోజులకు సవరణ అభ్యర్థించండి</string>
+    <string name="myatt_perm_blocked">స్థాన అనుమతి నిరోధించబడింది</string>
+    <string name="myatt_perm_needed">స్థాన అనుమతి అవసరం</string>
+    <string name="myatt_location_off">స్థానం ఆఫ్‌లో ఉంది</string>
+    <string name="myatt_weak_gps">బలహీన GPS సిగ్నల్</string>
+    <string name="myatt_perm_required">అనుమతి అవసరం</string>
+    <string name="reg_submitted">అభ్యర్థన సమర్పించబడింది</string>
+    <string name="reg_sent_to_admin">ఆమోదం కోసం మీ పాఠశాల అడ్మిన్‌కు పంపబడింది</string>
+    <string name="common_add">జోడించు</string>
+    <string name="reg_workday_dates">పని దినాల తేదీలు</string>
+    <string name="reg_timezone">టైమ్ జోన్</string>
+    <string name="reg_add_another">క్రమబద్ధీకరించడానికి మరో గత తేదీని జోడించండి:</string>
+    <string name="reg_new_date">కొత్త తేదీ</string>
+    <string name="reg_select_days">రోజు(లు) ఎంచుకోండి</string>
+    <string name="common_reason">కారణం</string>
+    <string name="reg_reason_required">కారణం / గమనిక (అవసరం)</string>
+    <string name="common_submitting">సమర్పిస్తోంది…</string>
+    <string name="reg_your_requests">మీ అభ్యర్థనలు</string>
+    <string name="reg_no_requests">ఇంకా అభ్యర్థనలు లేవు</string>
+    <string name="reg_file_request_tab">అభ్యర్థన దాఖలు</string>
+    <string name="reg_no_requests_hint">“అభ్యర్థన దాఖలు” ట్యాబ్ నుండి సవరణను దాఖలు చేయండి.</string>
+    <string name="reg_admin_prefix">అడ్మిన్:</string>
+    <string name="reg_clock_in">క్లాక్ ఇన్</string>
+    <string name="reg_clock_out">క్లాక్ అవుట్</string>
+    <string name="common_set">సెట్ చేయి</string>
+</resources>

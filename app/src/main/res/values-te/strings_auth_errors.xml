@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firebase Auth failures, mapped by error code instead of leaking the raw provider message. -->
+<resources>
+    <string name="err_auth_invalid">ID లేదా పాస్‌వర్డ్ తప్పు. దయచేసి తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.</string>
+    <string name="err_auth_disabled">ఈ ఖాతా నిలిపివేయబడింది. దయచేసి పాఠశాల కార్యాలయాన్ని సంప్రదించండి.</string>
+    <string name="err_auth_too_many">చాలా ఎక్కువ ప్రయత్నాలు. కొన్ని నిమిషాలు వేచి మళ్లీ ప్రయత్నించండి.</string>
+    <string name="err_account_deactivated">మీ ఖాతా నిలిపివేయబడింది. దయచేసి పాఠశాల కార్యాలయాన్ని సంప్రదించండి.</string>
+    <string name="err_staff_record_missing">మీ సిబ్బంది రికార్డు కనుగొనబడలేదు. దయచేసి పాఠశాల కార్యాలయాన్ని సంప్రదించండి.</string>
+</resources>

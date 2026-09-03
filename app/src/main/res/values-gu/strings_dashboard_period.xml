@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dashboard period-number prefix. -->
+<resources>
+    <string name="dash_period_prefix"> · પિરિયડ </string>
+</resources>

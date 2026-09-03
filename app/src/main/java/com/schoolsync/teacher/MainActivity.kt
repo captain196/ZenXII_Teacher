@@ -1,5 +1,7 @@
 package com.schoolsync.teacher
 
+import com.schoolsync.teacher.util.LocaleManager
+import android.content.Context
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -34,6 +36,15 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Apply the user's chosen language before any view or composable is built.
+     * Changing the language calls recreate(), which re-runs this with the new
+     * stored tag — that is the whole switching mechanism.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleManager.wrap(newBase))
+    }
 
     @Inject
     lateinit var tokenManager: TokenManager

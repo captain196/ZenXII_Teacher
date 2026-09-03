@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Interpolated attendance/dashboard copy converted to format strings. -->
+<resources>
+    <string name="att_marked_of_total">%2$d માંથી %1$d ચિહ્નિત</string>
+    <string name="att_remaining_fmt">%1$d બાકી</string>
+    <string name="att_roll_fmt">રોલ %1$s</string>
+    <string name="att_no_students_in">%1$s માં કોઈ વિદ્યાર્થી નથી</string>
+    <string name="att_reason_count">%1$d / 10+</string>
+    <string name="dash_substitute_covering">તમારા વર્ગો માટે અવેજી: %1$s</string>
+</resources>

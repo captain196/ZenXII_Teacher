@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 7: last position-audit finding after the when-branch sweep (HOLE 11). -->
+<resources>
+    <string name="common_optional">वैकल्पिक</string>
+</resources>

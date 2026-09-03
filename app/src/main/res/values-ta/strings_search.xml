@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Topbar search: section headers and result placeholders. -->
+<resources>
+    <string name="search_cat_my_classes">என் வகுப்புகள்</string>
+    <string name="search_cat_goto">இங்கு செல்</string>
+    <string name="search_open_fmt">%1$s திற</string>
+    <string name="search_unnamed_student">(பெயரிடப்படாத மாணவர்)</string>
+    <string name="search_untitled_notice">(தலைப்பில்லா அறிவிப்பு)</string>
+    <string name="search_untitled_event">(தலைப்பில்லா நிகழ்வு)</string>
+    <string name="search_class_teacher">வகுப்பு ஆசிரியர்</string>
+</resources>

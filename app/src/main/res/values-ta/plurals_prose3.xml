@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plural forms for the counts added in the interpolated-copy wave.
+     English tolerates "%d day(s)"; hi/ta/te do not. -->
+<resources>
+    <plurals name="att_saved_marks">
+        <item quantity="one">%1$d குறிப்பு சேமிக்கப்பட்டது.</item>
+        <item quantity="other">%1$d குறிப்புகள் சேமிக்கப்பட்டன.</item>
+    </plurals>
+    <plurals name="ptm_marked_delivered">
+        <item quantity="one">%1$d மாணவருக்கு வழங்கியதாகக் குறிக்கப்பட்டது.</item>
+        <item quantity="other">%1$d மாணவர்களுக்கு வழங்கியதாகக் குறிக்கப்பட்டது.</item>
+    </plurals>
+    <plurals name="myatt_submit_for_days">
+        <item quantity="one">%1$d நாளுக்குச் சமர்ப்பிக்கவும்</item>
+        <item quantity="other">%1$d நாட்களுக்குச் சமர்ப்பிக்கவும்</item>
+    </plurals>
+    <plurals name="marks_saved_for">
+        <item quantity="one">%1$d மாணவரின் மதிப்பெண்கள் சேமிக்கப்பட்டன</item>
+        <item quantity="other">%1$d மாணவர்களின் மதிப்பெண்கள் சேமிக்கப்பட்டன</item>
+    </plurals>
+</resources>

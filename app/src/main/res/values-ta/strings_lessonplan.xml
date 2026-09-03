@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lesson-plan optimistic-concurrency notice. -->
+<resources>
+    <string name="lp_conflict">திட்டம் வேறு இடத்தில் மாற்றப்பட்டது. மீளேற்றுகிறது…</string>
+</resources>

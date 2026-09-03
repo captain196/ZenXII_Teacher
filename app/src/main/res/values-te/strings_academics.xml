@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3b: lesson plan, marks entry, results, student profile. -->
+<resources>
+    <string name="lp_title">పాఠ ప్రణాళిక</string>
+    <string name="lp_no_periods">ఈరోజు పీరియడ్‌లు షెడ్యూల్ కాలేదు</string>
+    <string name="lp_done">పూర్తి</string>
+    <string name="lp_skip">దాటవేయి</string>
+    <string name="common_edit">సవరించు</string>
+    <string name="lp_topic">అంశం</string>
+    <string name="lp_no_topic">— అంశం లేదు —</string>
+    <string name="lp_no_topics_curriculum">పాఠ్యాంశంలో అంశాలు కనబడలేదు</string>
+    <string name="lp_notes">గమనికలు</string>
+    <string name="lp_notes_hint">ఈ పీరియడ్ గురించి గుర్తుంచుకోవలసినది…</string>
+    <string name="common_status">స్థితి</string>
+    <string name="lp_reschedule_to">తిరిగి షెడ్యూల్ (YYYY-MM-DD)</string>
+    <string name="lp_period_no">పీరియడ్ #</string>
+    <string name="common_save">సేవ్ చేయి</string>
+    <string name="lesson_status_planned">ప్రణాళిక</string>
+    <string name="lesson_status_completed">పూర్తయింది</string>
+    <string name="lesson_status_skipped">దాటవేయబడింది</string>
+    <string name="lesson_status_rescheduled">తిరిగి షెడ్యూల్</string>
+    <string name="marks_save">మార్కులు సేవ్ చేయండి</string>
+    <string name="marks_discard_q">సేవ్ చేయని మార్కులను విస్మరించాలా?</string>
+    <string name="common_discard">విస్మరించు</string>
+    <string name="marks_select_exam_subject">పరీక్ష మరియు సబ్జెక్ట్ ఎంచుకోండి</string>
+    <string name="marks_select_hint">మార్కుల నమోదు ప్రారంభించడానికి పరీక్ష మరియు సబ్జెక్ట్ ఎంచుకోండి</string>
+    <string name="marks_unsaved">సేవ్ చేయని మార్పులు</string>
+    <string name="marks_entry">మార్కుల నమోదు</string>
+    <string name="common_class">తరగతి</string>
+    <string name="common_exam">పరీక్ష</string>
+    <string name="marks_max">గరిష్ఠ మార్కులు</string>
+    <string name="marks_theory">థియరీ:</string>
+    <string name="marks_practical">ప్రాక్టికల్:</string>
+    <string name="marks_total">మొత్తం:</string>
+    <string name="marks_absent_short">గైర</string>
+    <string name="results_select">తరగతి మరియు పరీక్ష ఎంచుకోండి</string>
+    <string name="results_select_hint">ప్రచురించిన ఫలితాలు చూడటానికి పరీక్ష ఎంచుకోండి</string>
+    <string name="results_not_published">ఫలితాలు ఇంకా ప్రచురించలేదు</string>
+    <string name="results_draft">ఈ పరీక్ష ఫలితాలు ఇంకా డ్రాఫ్ట్‌లో ఉన్నాయి, ప్రచురించలేదు.</string>
+    <string name="results_no_breakdown">సబ్జెక్ట్ వారీ వివరాలు అందుబాటులో లేవు</string>
+    <string name="stu_profile">విద్యార్థి ప్రొఫైల్</string>
+    <string name="stu_id">విద్యార్థి ID</string>
+    <string name="stu_father">తండ్రి పేరు</string>
+    <string name="stu_mother">తల్లి పేరు</string>
+    <string name="stu_dob">పుట్టిన తేదీ</string>
+    <string name="stu_gender">లింగం</string>
+    <string name="stu_admission_date">ప్రవేశ తేదీ</string>
+    <string name="stu_fees_hdr">ఫీజు</string>
+    <string name="stu_monthly_status">నెలవారీ స్థితి</string>
+</resources>

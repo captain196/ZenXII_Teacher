@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Counted months / vacancies. -->
+<resources>
+    <plurals name="fees_months_count">
+        <item quantity="one">%1$d மாதம்</item>
+        <item quantity="other">%1$d மாதங்கள்</item>
+    </plurals>
+    <plurals name="rec_vacancies_count">
+        <item quantity="one">%1$d காலியிடம்</item>
+        <item quantity="other">%1$d காலியிடங்கள்</item>
+    </plurals>
+</resources>

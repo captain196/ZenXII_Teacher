@@ -6,6 +6,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.schoolsync.teacher.util.localizedString
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
+import com.schoolsync.teacher.R
 
 /**
  * Phase 1 + 2 — HTTP-only attendance writer.
@@ -21,7 +25,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class AttendanceApiRepository @Inject constructor(
-    private val api: ApiService
+    private val api: ApiService,
+    @ApplicationContext private val ctx: Context,
 ) {
     companion object { private const val TAG = "AttendanceApiRepo" }
 
@@ -180,13 +185,13 @@ class AttendanceApiRepository @Inject constructor(
             JSONObject(it).optString("message", "")
         }.getOrNull() } ?: ""
         return when (code()) {
-            400 -> AttendanceApiError.ReasonRequired(msg.ifBlank { "Reason required (≥10 chars)" })
-            403 -> AttendanceApiError.Forbidden(msg.ifBlank { "Not authorized for this class." })
-            404 -> AttendanceApiError.NotFound(msg.ifBlank { "Not found." })
-            409 -> AttendanceApiError.Conflict(msg.ifBlank { "Conflict." })
-            422 -> AttendanceApiError.Holiday(msg.ifBlank { "Cannot mark on a holiday." })
-            423 -> AttendanceApiError.Locked(msg.ifBlank { "Attendance is locked." })
-            else -> AttendanceApiError.Network(msg.ifBlank { "Network error (${code()})" })
+            400 -> AttendanceApiError.ReasonRequired(msg.ifBlank { ctx.localizedString(R.string.attapi_reason_required) })
+            403 -> AttendanceApiError.Forbidden(msg.ifBlank { ctx.localizedString(R.string.attapi_forbidden) })
+            404 -> AttendanceApiError.NotFound(msg.ifBlank { ctx.localizedString(R.string.attapi_not_found) })
+            409 -> AttendanceApiError.Conflict(msg.ifBlank { ctx.localizedString(R.string.attapi_conflict) })
+            422 -> AttendanceApiError.Holiday(msg.ifBlank { ctx.localizedString(R.string.attapi_holiday) })
+            423 -> AttendanceApiError.Locked(msg.ifBlank { ctx.localizedString(R.string.attapi_locked) })
+            else -> AttendanceApiError.Network(msg.ifBlank { ctx.localizedString(R.string.attapi_network_fmt, code()) })
         }
     }
 }

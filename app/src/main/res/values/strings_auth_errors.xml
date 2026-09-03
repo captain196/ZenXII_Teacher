@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firebase Auth failures, mapped by error code instead of leaking the raw provider message. -->
+<resources>
+    <string name="err_auth_invalid">Incorrect ID or password. Please check and try again.</string>
+    <string name="err_auth_disabled">This account has been disabled. Please contact the school office.</string>
+    <string name="err_auth_too_many">Too many attempts. Please wait a few minutes and try again.</string>
+    <string name="err_account_deactivated">Your account has been deactivated. Please contact the school office.</string>
+    <string name="err_staff_record_missing">Your staff record could not be found. Please contact the school office.</string>
+</resources>

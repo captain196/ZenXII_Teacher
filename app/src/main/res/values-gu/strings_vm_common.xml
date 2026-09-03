@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViewModel-level messages: auth, dashboard, attendance, marks, my attendance. -->
+<resources>
+    <string name="vm_teacher_id_required">શિક્ષક ID જરૂરી છે</string>
+    <string name="vm_password_required">પાસવર્ડ જરૂરી છે</string>
+    <string name="vm_login_failed">લૉગિન નિષ્ફળ</string>
+    <string name="vm_error_occurred">એક ભૂલ થઈ</string>
+    <string name="vm_reset_failed">રીસેટ નિષ્ફળ.</string>
+    <string name="vm_pw_length">પાસવર્ડ 8–72 અક્ષરનો હોવો જોઈએ.</string>
+    <string name="vm_pw_upper">એક મોટો અક્ષર હોવો જોઈએ.</string>
+    <string name="vm_pw_lower">એક નાનો અક્ષર હોવો જોઈએ.</string>
+    <string name="vm_pw_digit">એક અંક હોવો જોઈએ.</string>
+    <string name="vm_pw_mismatch">પાસવર્ડ મેળ ખાતા નથી.</string>
+    <string name="vm_logout_failed">લૉગઆઉટ નિષ્ફળ</string>
+    <string name="vm_not_logged_in">લૉગ ઇન નથી</string>
+    <string name="vm_no_session">તમારી શાળા માટે હજી કોઈ સક્રિય શૈક્ષણિક સત્ર નથી. રિફ્રેશ માટે ખેંચો.</string>
+    <string name="vm_dash_load_error">તમારું ડેશબોર્ડ લોડ થઈ શક્યું નહીં — કનેક્શન તપાસો અને રિફ્રેશ માટે ખેંચો.</string>
+    <string name="vm_dash_load_failed">ડેશબોર્ડ લોડ કરવામાં નિષ્ફળ</string>
+    <string name="vm_stat_classes">વર્ગો</string>
+    <string name="vm_substitute">અવેજી</string>
+    <string name="vm_att_load_failed">હાજરી લોડ કરવામાં નિષ્ફળ</string>
+    <string name="vm_att_past_month">પાછલા મહિનાના સંપાદન માટે સુધારા વિનંતી જરૂરી છે. દાખલ કરવા કોઈ બંધ ખાના પર ટૅપ કરો.</string>
+    <string name="vm_att_date_changed">નોંધવાનું શરૂ કર્યા પછી તારીખ બદલાઈ. આજની શીટ ફરી લોડ થઈ રહી છે — કૃપા કરી ફરી તપાસીને સાચવો.</string>
+    <string name="vm_att_not_authorized">આ વર્ગ માટે અધિકૃત નથી.</string>
+    <string name="vm_att_holiday">આજે રજા છે — હાજરી નોંધી શકાતી નથી.</string>
+    <string name="vm_conflict_refresh">સંઘર્ષ — રિફ્રેશ કરીને ફરી પ્રયાસ કરો.</string>
+    <string name="vm_not_found">મળ્યું નથી.</string>
+    <string name="vm_save_failed">સાચવવામાં નિષ્ફળ</string>
+    <string name="vm_correction_exists">એક બાકી સુધારો પહેલેથી છે.</string>
+    <string name="vm_reason_min">કારણ 10+ અક્ષરનું હોવું જોઈએ.</string>
+    <string name="vm_submit_failed">મોકલવામાં નિષ્ફળ</string>
+    <string name="vm_requests_load_failed">વિનંતીઓ લોડ કરવામાં નિષ્ફળ</string>
+    <string name="vm_marks_invalid">અમાન્ય</string>
+    <string name="vm_marks_fix_errors">સાચવતાં પહેલાં કૃપા કરી ચકાસણી ભૂલો સુધારો</string>
+    <string name="vm_marks_saved_offline">ઑફલાઇન સાચવ્યું — ઑનલાઇન થતાં સિંક થશે</string>
+    <string name="vm_marks_save_failed">ગુણ સાચવવામાં નિષ્ફળ</string>
+    <string name="vm_myatt_load_failed">હાજરી લોડ થઈ શકી નહીં.</string>
+    <string name="vm_unexpected_error">અનપેક્ષિત ભૂલ</string>
+    <string name="vm_reg_load_failed">તમારી વિનંતીઓ લોડ થઈ શકી નહીં.</string>
+    <string name="vm_reg_submit_failed">વિનંતી મોકલી શકાઈ નહીં.</string>
+</resources>

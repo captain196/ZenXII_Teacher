@@ -34,6 +34,10 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
+import com.schoolsync.teacher.util.localizedPlural
 
 data class HomeworkClassSection(
     val className: String,
@@ -131,7 +135,10 @@ class HomeworkTeacherViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
     private val studentRepository: StudentRepository,
     private val tokenManager: TokenManager,
-    private val homeworkFirestoreRepo: HomeworkFirestoreRepository
+    private val homeworkFirestoreRepo: HomeworkFirestoreRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object {
@@ -394,15 +401,15 @@ class HomeworkTeacherViewModel @Inject constructor(
         val hwId = form.editingHwId ?: return
 
         if (form.title.isBlank()) {
-            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Title is required")) }
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error(appContext.localizedString(R.string.vm_hw_title_required))) }
             return
         }
         if (form.subject.isBlank()) {
-            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Subject is required")) }
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error(appContext.localizedString(R.string.vm_hw_subject_required))) }
             return
         }
         if (form.dueDate.isBlank()) {
-            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Due date is required")) }
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error(appContext.localizedString(R.string.vm_hw_due_required))) }
             return
         }
 
@@ -436,12 +443,12 @@ class HomeworkTeacherViewModel @Inject constructor(
                             selectedHomework = patched ?: st.selectedHomework
                         )
                     }
-                    _events.emit(HomeworkEvent.Success("Homework updated"))
+                    _events.emit(HomeworkEvent.Success(appContext.localizedString(R.string.vm_hw_updated)))
                     loadHomework()
                 },
                 onFailure = { e ->
                     _uiState.update { it.copy(formState = it.formState.copy(isSubmitting = false)) }
-                    _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update homework"))
+                    _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_hw_update_failed)))
                 }
             )
         }
@@ -461,11 +468,11 @@ class HomeworkTeacherViewModel @Inject constructor(
                             ?.copy(status = "closed")
                         st.copy(selectedHomework = patched ?: st.selectedHomework)
                     }
-                    _events.emit(HomeworkEvent.Success("Homework closed"))
+                    _events.emit(HomeworkEvent.Success(appContext.localizedString(R.string.vm_hw_closed)))
                     loadHomework()
                 },
                 onFailure = { e ->
-                    _events.emit(HomeworkEvent.Error(e.message ?: "Failed to close homework"))
+                    _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_hw_close_failed)))
                 }
             )
         }
@@ -622,18 +629,18 @@ class HomeworkTeacherViewModel @Inject constructor(
         if (form.isSubmitting) return
 
         if (form.title.isBlank()) {
-            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Title is required")) }
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error(appContext.localizedString(R.string.vm_hw_title_required))) }
             return
         }
         if (form.subject.isBlank()) {
-            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Subject is required")) }
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error(appContext.localizedString(R.string.vm_hw_subject_required))) }
             return
         }
         if (form.dueDate.isBlank()) {
             // Was silently falling back to today via .ifBlank — making it
             // impossible to spot a missed picker selection. Force the
             // teacher to pick explicitly.
-            viewModelScope.launch { _events.emit(HomeworkEvent.Error("Due date is required")) }
+            viewModelScope.launch { _events.emit(HomeworkEvent.Error(appContext.localizedString(R.string.vm_hw_due_required))) }
             return
         }
 
@@ -682,7 +689,7 @@ class HomeworkTeacherViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Attachment upload failed; rolling back ${uploaded.size} prior uploads", e)
-                uploadError = e.message ?: "Attachment upload failed"
+                uploadError = e.message ?: appContext.localizedString(R.string.vm_attach_failed)
             }
 
             if (uploadError != null) {
@@ -699,7 +706,7 @@ class HomeworkTeacherViewModel @Inject constructor(
                         )
                     )
                 }
-                _events.emit(HomeworkEvent.Error("Could not upload attachments: $uploadError"))
+                _events.emit(HomeworkEvent.Error(appContext.localizedString(R.string.hw_upload_attach_failed_fmt, uploadError)))
                 return@launch
             }
 
@@ -735,7 +742,7 @@ class HomeworkTeacherViewModel @Inject constructor(
                                 formState = HomeworkFormState()
                             )
                         }
-                        _events.emit(HomeworkEvent.Success("Homework created successfully"))
+                        _events.emit(HomeworkEvent.Success(appContext.localizedString(R.string.vm_hw_created)))
                         loadHomework() // Refresh list
                     },
                     onFailure = { e ->
@@ -746,7 +753,7 @@ class HomeworkTeacherViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(formState = it.formState.copy(isSubmitting = false))
                         }
-                        _events.emit(HomeworkEvent.Error(e.message ?: "Failed to create homework"))
+                        _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_hw_create_failed)))
                     }
                 )
             } catch (e: Exception) {
@@ -755,7 +762,7 @@ class HomeworkTeacherViewModel @Inject constructor(
                     HomeworkAttachmentUploader.deleteByPath(att.storagePath)
                 }
                 _uiState.update { it.copy(formState = it.formState.copy(isSubmitting = false)) }
-                _events.emit(HomeworkEvent.Error(e.message ?: "Failed to create homework"))
+                _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_hw_create_failed)))
             }
         }
     }
@@ -843,34 +850,35 @@ class HomeworkTeacherViewModel @Inject constructor(
                 homeworkFirestoreRepo.deleteHomework(hw.hwId).fold(
                     onSuccess = {
                         Log.d(TAG, "Homework + ${submissions.size} submissions (failed=$failedSubDeletes) + ${markDocs.size} teacherMarks (failed=$failedMarkDeletes) deleted: ${hw.hwId}")
-                        val msg = buildString {
-                            append("Homework deleted")
+                        // Built from localized parts rather than appended English
+                        // fragments — the fragments carried real words (" submission(s)",
+                        // " failed") that no amount of appending would translate.
+                        val parts = buildList {
                             if (submissions.isNotEmpty()) {
-                                append(" (${submissions.size} submission(s)")
-                                if (failedSubDeletes > 0) append(", $failedSubDeletes failed")
+                                add(appContext.localizedPlural(R.plurals.hw_del_submissions, submissions.size, submissions.size))
+                                if (failedSubDeletes > 0)
+                                    add(appContext.localizedString(R.string.hw_del_failed, failedSubDeletes))
                             }
                             if (markDocs.isNotEmpty()) {
-                                if (submissions.isNotEmpty()) {
-                                    append(", ${markDocs.size} mark(s)")
-                                    if (failedMarkDeletes > 0) append(", $failedMarkDeletes failed")
-                                    append(")")
-                                } else {
-                                    append(" (${markDocs.size} mark(s)")
-                                    if (failedMarkDeletes > 0) append(", $failedMarkDeletes failed")
-                                    append(")")
-                                }
-                            } else if (submissions.isNotEmpty()) append(")")
+                                add(appContext.localizedPlural(R.plurals.hw_del_marks, markDocs.size, markDocs.size))
+                                if (failedMarkDeletes > 0)
+                                    add(appContext.localizedString(R.string.hw_del_failed, failedMarkDeletes))
+                            }
                         }
+                        val base = appContext.localizedString(R.string.vm_hw_deleted)
+                        val msg = if (parts.isEmpty()) base
+                                  else appContext.localizedString(
+                                      R.string.hw_deleted_detail, base, parts.joinToString(", "))
                         _events.emit(HomeworkEvent.Success(msg))
                         _uiState.update { it.copy(selectedHomework = null, showDetailSheet = false) }
                         loadHomework()
                     },
                     onFailure = { e ->
-                        _events.emit(HomeworkEvent.Error(e.message ?: "Failed to delete"))
+                        _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_delete_failed)))
                     }
                 )
             } catch (e: Exception) {
-                _events.emit(HomeworkEvent.Error(e.message ?: "Failed to delete"))
+                _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_delete_failed)))
             }
         }
     }
@@ -1001,9 +1009,9 @@ class HomeworkTeacherViewModel @Inject constructor(
                 // PERMISSION_DENIED on the submissions listener was previously
                 // invisible to the teacher. Drop stale-iteration emissions.
                 if (submissionListenerVersion.get() != myVersion) return@launch
-                Log.e(TAG, "Failed to load submissions", e)
+                Log.e(TAG, appContext.localizedString(R.string.vm_hw_submissions_failed), e)
                 _uiState.update { it.copy(isLoadingSubmissions = false) }
-                _events.emit(HomeworkEvent.Error(e.message ?: "Failed to load submissions"))
+                _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_hw_submissions_failed)))
             }
         }
     }
@@ -1059,11 +1067,11 @@ class HomeworkTeacherViewModel @Inject constructor(
                         loadSubmissions(hw)
                     },
                     onFailure = { e ->
-                        _events.emit(HomeworkEvent.Error(e.message ?: "Failed to save mark"))
+                        _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_hw_mark_failed)))
                     }
                 )
             } catch (e: Exception) {
-                _events.emit(HomeworkEvent.Error(e.message ?: "Failed to update status"))
+                _events.emit(HomeworkEvent.Error(e.message ?: appContext.localizedString(R.string.vm_hw_status_failed)))
             } finally {
                 _uiState.update { it.copy(savingStatusIds = it.savingStatusIds - studentId) }
             }

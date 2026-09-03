@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transport-layer failures, in the staff member's language. -->
+<resources>
+    <string name="err_no_internet">No internet connection. Please reconnect and try again.</string>
+    <string name="err_server_timeout">The school server took too long to respond. Please try again in a moment.</string>
+    <string name="err_session_expired">Your session has expired. Please log out and log in again.</string>
+    <string name="err_not_found">We couldn\'t find that on the server. Please refresh and try again.</string>
+    <string name="err_server_unavailable">The school server is temporarily unavailable. Please try again shortly.</string>
+    <string name="err_action_paused">The school has temporarily paused this action (year-end close or period lock). Please try again shortly or contact the school office.</string>
+    <string name="err_cannot_reach_server">Couldn\'t reach the school server. Please check your connection and try again.</string>
+</resources>

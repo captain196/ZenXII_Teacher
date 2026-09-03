@@ -117,6 +117,9 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import com.schoolsync.teacher.ui.theme.glassCard
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.res.pluralStringResource
 
 @Composable
 fun GalleryTeacherScreen(
@@ -248,7 +251,7 @@ private fun GalleryErrorState(
             Icon(Icons.Filled.CloudOff, null, tint = ErrorRed, modifier = Modifier.size(44.dp))
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "Couldn't load",
+                text = stringResource(R.string.gal_load_error),
                 style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold
@@ -273,7 +276,7 @@ private fun GalleryErrorState(
             ) {
                 Icon(Icons.Filled.Refresh, null, tint = Teal, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Retry", style = MaterialTheme.typography.labelLarge, color = Teal, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.common_retry), style = MaterialTheme.typography.labelLarge, color = Teal, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -307,7 +310,7 @@ private fun AlbumsPanel(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Gallery",
+                    text = stringResource(R.string.nav_gallery),
                     style = MaterialTheme.typography.headlineMedium,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
@@ -319,7 +322,7 @@ private fun AlbumsPanel(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
                 }
                 IconButton(
                     onClick = onCreateAlbum,
@@ -328,7 +331,7 @@ private fun AlbumsPanel(
                         .clip(RoundedCornerShape(8.dp))
                         .background(Teal.copy(alpha = 0.15f))
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = "Create Album", tint = Teal)
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.gal_create_album), tint = Teal)
                 }
             }
         }
@@ -364,12 +367,12 @@ private fun AlbumsPanel(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "No albums yet",
+                        text = stringResource(R.string.gal_no_albums),
                         style = MaterialTheme.typography.titleMedium,
                         color = TextSecondary
                     )
                     Text(
-                        text = "Create your first album",
+                        text = stringResource(R.string.gal_create_first),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary
                     )
@@ -461,7 +464,7 @@ private fun AlbumCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "${album.mediaCount} items",
+                    text = pluralStringResource(R.plurals.gal_items_count, album.mediaCount, album.mediaCount),
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     fontSize = 10.sp
@@ -500,7 +503,7 @@ private fun MediaPanel(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBackClick, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = TextSecondary)
+                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = TextSecondary)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
@@ -533,7 +536,7 @@ private fun MediaPanel(
                 ) {
                     Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Upload", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text(stringResource(R.string.common_upload), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 }
             }
 
@@ -568,12 +571,12 @@ private fun MediaPanel(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No media in this album",
+                            text = stringResource(R.string.gal_no_media),
                             style = MaterialTheme.typography.titleMedium,
                             color = TextSecondary
                         )
                         Text(
-                            text = "Upload images or videos to get started",
+                            text = stringResource(R.string.gal_upload_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextTertiary
                         )
@@ -616,12 +619,12 @@ private fun MediaPanel(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Select an album",
+                        text = stringResource(R.string.gal_select_album),
                         style = MaterialTheme.typography.titleLarge,
                         color = TextSecondary
                     )
                     Text(
-                        text = "Choose an album from the left to view its media",
+                        text = stringResource(R.string.gal_select_album_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextTertiary
                     )
@@ -697,7 +700,7 @@ private fun MediaCard(media: GalleryMedia, onClick: () -> Unit) {
             ) {
                 Icon(
                     Icons.Filled.Videocam,
-                    contentDescription = "Video",
+                    contentDescription = stringResource(R.string.gal_video),
                     tint = Teal,
                     modifier = Modifier.size(14.dp)
                 )
@@ -742,7 +745,7 @@ private fun CreateAlbumDialog(
     AlertDialog(
         onDismissRequest = { if (!isCreating) onDismiss() },
         title = {
-            Text("Create Album", color = TextPrimary, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.gal_create_album), color = TextPrimary, fontWeight = FontWeight.Bold)
         },
         text = {
             Column(
@@ -752,7 +755,7 @@ private fun CreateAlbumDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Title *") },
+                    label = { Text(stringResource(R.string.gal_title_required)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = galleryTextFieldColors(),
@@ -761,7 +764,7 @@ private fun CreateAlbumDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description") },
+                    label = { Text(stringResource(R.string.common_description)) },
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                     colors = galleryTextFieldColors(),
@@ -770,9 +773,9 @@ private fun CreateAlbumDialog(
                 OutlinedTextField(
                     value = category,
                     onValueChange = { category = it },
-                    label = { Text("Category") },
+                    label = { Text(stringResource(R.string.common_category)) },
                     singleLine = true,
-                    placeholder = { Text("e.g., Events, Sports, Academics", color = TextTertiary) },
+                    placeholder = { Text(stringResource(R.string.gal_category_hint), color = TextTertiary) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = galleryTextFieldColors(),
                     shape = RoundedCornerShape(10.dp)
@@ -797,7 +800,7 @@ private fun CreateAlbumDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Create")
+                Text(stringResource(R.string.common_create))
             }
         },
         dismissButton = {
@@ -805,7 +808,7 @@ private fun CreateAlbumDialog(
                 onClick = onDismiss,
                 enabled = !isCreating
             ) {
-                Text("Cancel", color = TextSecondary)
+                Text(stringResource(R.string.common_cancel), color = TextSecondary)
             }
         },
         containerColor = SurfaceDark,
@@ -849,7 +852,7 @@ private fun UploadMediaDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Upload Media",
+                    stringResource(R.string.gal_upload_media),
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -863,7 +866,7 @@ private fun UploadMediaDialog(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
-                        contentDescription = if (isUploading) "Cancel upload" else "Close",
+                        contentDescription = if (isUploading) stringResource(R.string.gal_cancel_upload) else stringResource(R.string.common_close),
                         tint = TextSecondary
                     )
                 }
@@ -879,7 +882,7 @@ private fun UploadMediaDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Type:", color = TextSecondary, fontSize = 13.sp)
+                    Text(stringResource(R.string.gal_type_prefix), color = TextSecondary, fontSize = 13.sp)
                     TextButton(
                         onClick = { isVideo = false; pickedUri = null },
                         enabled = !isUploading,
@@ -889,7 +892,7 @@ private fun UploadMediaDialog(
                     ) {
                         Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Image", fontWeight = if (!isVideo) FontWeight.Bold else FontWeight.Normal)
+                        Text(stringResource(R.string.gal_image), fontWeight = if (!isVideo) FontWeight.Bold else FontWeight.Normal)
                     }
                     TextButton(
                         onClick = { isVideo = true; pickedUri = null },
@@ -900,7 +903,7 @@ private fun UploadMediaDialog(
                     ) {
                         Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Video", fontWeight = if (isVideo) FontWeight.Bold else FontWeight.Normal)
+                        Text(stringResource(R.string.gal_video), fontWeight = if (isVideo) FontWeight.Bold else FontWeight.Normal)
                     }
                 }
 
@@ -927,7 +930,7 @@ private fun UploadMediaDialog(
                     if (uri != null) {
                         AsyncImage(
                             model = uri,
-                            contentDescription = "Selected media",
+                            contentDescription = stringResource(R.string.story_selected_media),
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
@@ -941,7 +944,7 @@ private fun UploadMediaDialog(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Tap to choose ${if (isVideo) "video" else "photo"}",
+                                text = if (isVideo) stringResource(R.string.gal_tap_choose_video) else stringResource(R.string.gal_tap_choose_photo),
                                 color = TextSecondary,
                                 fontSize = 13.sp
                             )
@@ -952,7 +955,7 @@ private fun UploadMediaDialog(
                 OutlinedTextField(
                     value = caption,
                     onValueChange = { caption = it },
-                    label = { Text("Caption") },
+                    label = { Text(stringResource(R.string.story_caption)) },
                     maxLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                     colors = galleryTextFieldColors(),
@@ -989,14 +992,14 @@ private fun UploadMediaDialog(
                     when {
                         isCompressing -> "Compressing $compressPercent%"
                         isUploading   -> "Uploading..."
-                        else          -> "Upload"
+                        else          -> stringResource(R.string.common_upload)
                     }
                 )
             }
         },
         dismissButton = {
             TextButton(onClick = { if (isUploading) onCancelUpload() else onDismiss() }) {
-                Text(if (isUploading) "Cancel upload" else "Cancel", color = TextSecondary)
+                Text(if (isUploading) stringResource(R.string.gal_cancel_upload) else stringResource(R.string.common_cancel), color = TextSecondary)
             }
         },
         containerColor = SurfaceDark,
@@ -1182,7 +1185,7 @@ private fun GalleryMediaPagerViewer(
                                     )
                             )
                         } else if (!isVideo) {
-                            Text("No preview available", color = TextSecondary)
+                            Text(stringResource(R.string.gal_no_preview), color = TextSecondary)
                         }
                         // Play affordance — shown over a poster frame, or centered
                         // on the dark page for a poster-less video.
@@ -1197,7 +1200,7 @@ private fun GalleryMediaPagerViewer(
                             ) {
                                 Icon(
                                     Icons.Filled.PlayCircle,
-                                    contentDescription = "Play video",
+                                    contentDescription = stringResource(R.string.gal_play_video),
                                     tint = Color.White,
                                     modifier = Modifier.size(48.dp)
                                 )
@@ -1227,7 +1230,7 @@ private fun GalleryMediaPagerViewer(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_close), tint = Color.White)
                     }
                     Text(
                         text = "${pagerState.currentPage + 1} / ${media.size}",
@@ -1361,7 +1364,7 @@ private fun GalleryVideoPlayer(url: String) {
 
         if (failed) {
             Text(
-                text = "This video couldn't be played.",
+                text = stringResource(R.string.gal_video_error),
                 color = Color.White
             )
         } else if (isBuffering) {

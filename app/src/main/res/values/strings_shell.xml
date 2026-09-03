@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 1: app shell — navigation, splash/walkthrough, auth, profile,
+     search, messages. -->
+<resources>
+    <string name="nav_home">Home</string>
+    <string name="nav_attendance_short">Attend.</string>
+    <string name="nav_marks">Marks</string>
+    <string name="nav_students">Students</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_my_attendance_short">My Att.</string>
+    <string name="nav_results">Results</string>
+    <string name="nav_homework_short">HW</string>
+    <string name="nav_fees">Fees</string>
+    <string name="nav_flags">Flags</string>
+    <string name="nav_stories">Stories</string>
+    <string name="nav_timetable_short">Time</string>
+    <string name="nav_plans">Plans</string>
+    <string name="nav_notices">Notices</string>
+    <string name="nav_events">Events</string>
+    <string name="nav_ptm" translatable="false">PTM</string>
+    <string name="nav_leave">Leave</string>
+    <string name="nav_gallery">Gallery</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_pay">Pay</string>
+    <string name="nav_review">Review</string>
+    <string name="nav_jobs">Jobs</string>
+    <string name="nav_more">More</string>
+    <string name="common_back">Back</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_done">Done</string>
+    <string name="common_copy">Copy</string>
+    <string name="common_copied">Copied</string>
+    <string name="common_call">Call</string>
+    <string name="common_email">Email</string>
+    <string name="common_phone">Phone</string>
+    <string name="common_admin">Admin</string>
+    <string name="common_whatsapp" translatable="false">WhatsApp</string>
+    <string name="common_skip">Skip</string>
+    <string name="common_sign_out">Sign out</string>
+    <string name="login_app_subtitle">Teacher</string>
+    <string name="login_welcome_back">Welcome Back</string>
+    <string name="login_sign_in_to_continue">Sign in to continue</string>
+    <string name="login_teacher_id">Teacher ID</string>
+    <string name="login_enter_teacher_id">Enter your Teacher ID</string>
+    <string name="login_password">Password</string>
+    <string name="login_enter_password">Enter your password</string>
+    <string name="login_sign_in">Sign In</string>
+    <string name="login_forgot_password">Forgot password?</string>
+    <string name="fcp_title">Set a new password</string>
+    <string name="fcp_reset_by_admin">Your password was reset by an administrator. Choose a new password to continue.</string>
+    <string name="fcp_new_password">New password</string>
+    <string name="fcp_confirm_new_password">Confirm new password</string>
+    <string name="fcp_password_rule">Use 8–72 characters with an uppercase letter, a lowercase letter, and a digit.</string>
+    <string name="fcp_save_continue">Save and continue</string>
+    <string name="fcp_sign_out_instead">Sign out instead</string>
+    <string name="fp_admin_only">Passwords can only be reset by your school\'s admin. Enter your Teacher ID to see who to contact.</string>
+    <string name="fp_id_hint">e.g. STA0001</string>
+    <string name="fp_look_up">Look up</string>
+    <string name="fp_no_dialer">No dialer app found.</string>
+    <string name="fp_no_whatsapp">Couldn\'t open WhatsApp.</string>
+    <string name="fp_no_email">No email app found.</string>
+    <string name="profile_card_personal">Personal</string>
+    <string name="profile_card_employment">Employment</string>
+    <string name="profile_card_bank">Bank</string>
+    <string name="profile_card_contact">Contact</string>
+    <string name="profile_card_statutory">Statutory IDs</string>
+    <string name="profile_card_address">Address</string>
+    <string name="profile_card_qualification">Qualification</string>
+    <string name="profile_logout">Log out</string>
+    <string name="profile_logout_q">Log out?</string>
+    <string name="profile_logout_msg">You\'ll need to sign in again next time.</string>
+    <string name="msg_coming_soon_badge">COMING SOON</string>
+    <string name="msg_coming_soon_title">Messaging Coming Soon</string>
+    <string name="msg_coming_soon_body">We\'re building a better way to communicate with parents and students. Until messaging returns, please use Circulars to broadcast updates and check Notices for school-wide announcements.</string>
+    <string name="msg_conversations_preserved">Existing conversations are safely preserved and will become available again when messaging returns.</string>
+    <string name="wt_smart_attendance">Smart Attendance</string>
+    <string name="wt_marks_results">Marks &amp; Results</string>
+    <string name="wt_stay_connected">Stay Connected</string>
+    <string name="splash_school_management">SCHOOL MANAGEMENT</string>
+    <string name="splash_teacher_portal">Teacher Portal</string>
+</resources>

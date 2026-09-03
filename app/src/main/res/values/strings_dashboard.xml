@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2a: dashboard - quick actions, module grid, today's schedule. -->
+<resources>
+    <string name="dash_quick_actions">Quick actions</string>
+    <string name="dash_upcoming_events">Upcoming events</string>
+    <string name="dash_all_modules">All modules</string>
+    <string name="common_search">Search</string>
+    <string name="dash_schedule_error">Couldn\'t load your schedule</string>
+    <string name="common_retry">Retry</string>
+    <string name="dash_in_class_now">In class now</string>
+    <string name="common_view_all">View all</string>
+    <string name="dash_take_attendance">Take Attendance</string>
+    <string name="dash_add_homework">Add Homework</string>
+    <string name="dash_enter_marks">Enter Marks</string>
+    <string name="dash_post_notice">Post Notice</string>
+    <string name="dash_clock_in">Clock In</string>
+    <string name="dash_red_flags">Red Flags</string>
+    <string name="dash_apply_leave">Apply Leave</string>
+    <string name="dash_no_upcoming_events">No upcoming events</string>
+    <string name="mod_attendance">Attendance</string>
+    <string name="mod_homework">Homework</string>
+    <string name="mod_timetable">Timetable</string>
+    <string name="mod_my_attendance">My Attendance</string>
+    <string name="mod_lesson_plan">Lesson Plan</string>
+    <string name="mod_payslips">Payslips</string>
+    <string name="att_unmarked">Unmarked</string>
+</resources>

@@ -29,6 +29,8 @@ import com.schoolsync.teacher.ui.theme.GradientBackground
 import com.schoolsync.teacher.ui.theme.Teal
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 /**
  * MessagesScreen — Coming Soon variant.
@@ -87,7 +89,7 @@ fun MessagesScreen() {
                     color = Teal.copy(alpha = 0.14f)
                 ) {
                     Text(
-                        text = "COMING SOON",
+                        text = stringResource(R.string.msg_coming_soon_badge),
                         color = Teal,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -100,7 +102,7 @@ fun MessagesScreen() {
 
                 // Title
                 Text(
-                    text = "Messaging Coming Soon",
+                    text = stringResource(R.string.msg_coming_soon_title),
                     color = TextPrimary,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
@@ -112,9 +114,7 @@ fun MessagesScreen() {
 
                 // Body copy
                 Text(
-                    text = "We're building a better way to communicate with parents and " +
-                            "students. Until messaging returns, please use Circulars to " +
-                            "broadcast updates and check Notices for school-wide announcements.",
+                    text = stringResource(R.string.msg_coming_soon_body),
                     color = TextSecondary,
                     fontSize = 14.sp,
                     lineHeight = 22.sp,
@@ -134,8 +134,7 @@ fun MessagesScreen() {
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Existing conversations are safely preserved and will become " +
-                                "available again when messaging returns.",
+                        text = stringResource(R.string.msg_conversations_preserved),
                         color = TextSecondary,
                         fontSize = 12.sp,
                         lineHeight = 18.sp,

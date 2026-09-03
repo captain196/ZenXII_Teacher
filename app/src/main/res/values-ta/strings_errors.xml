@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transport-layer failures, in the staff member's language. -->
+<resources>
+    <string name="err_no_internet">இணைய இணைப்பு இல்லை. மீண்டும் இணைத்து முயற்சிக்கவும்.</string>
+    <string name="err_server_timeout">பள்ளி சேவையகம் பதிலளிக்க அதிக நேரம் எடுத்தது. சிறிது நேரம் கழித்து முயற்சிக்கவும்.</string>
+    <string name="err_session_expired">உங்கள் அமர்வு காலாவதியானது. வெளியேறி மீண்டும் உள்நுழையவும்.</string>
+    <string name="err_not_found">அதைச் சேவையகத்தில் காண முடியவில்லை. புதுப்பித்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="err_server_unavailable">பள்ளி சேவையகம் தற்காலிகமாகக் கிடைக்கவில்லை. விரைவில் மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="err_action_paused">பள்ளி இந்தச் செயலைத் தற்காலிகமாக நிறுத்தியுள்ளது (ஆண்டு இறுதி மூடல் அல்லது காலப் பூட்டு). விரைவில் மீண்டும் முயற்சிக்கவும் அல்லது பள்ளி அலுவலகத்தைத் தொடர்பு கொள்ளவும்.</string>
+    <string name="err_cannot_reach_server">பள்ளி சேவையகத்தை அடைய முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.</string>
+</resources>

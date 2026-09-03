@@ -29,6 +29,10 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /**
  * StaffAttendanceViewModel — holds UI state and orchestrates the location
@@ -52,6 +56,9 @@ class StaffAttendanceViewModel @Inject constructor(
     private val schoolRepo: SchoolFirestoreRepository,
     private val integrityProvider: PlayIntegrityTokenProvider,
     private val leaveRepo: LeaveFirestoreRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(StaffAttendanceUiState())
@@ -82,7 +89,7 @@ class StaffAttendanceViewModel @Inject constructor(
                     // hit an error. `error` (the red action banner) stays reserved
                     // for explicit punch attempts.
                     val se = e as? StaffAttendanceError
-                        ?: StaffAttendanceError.Network(e.message ?: "Couldn't load attendance.")
+                        ?: StaffAttendanceError.Network(e.message ?: appContext.localizedString(R.string.vm_myatt_load_failed))
                     _ui.update { it.copy(loading = false, loadError = se) }
                 }
         }
@@ -118,7 +125,7 @@ class StaffAttendanceViewModel @Inject constructor(
             val start = runCatching { fmt.parse(doc.startDate) }.getOrNull() ?: continue
             val end = runCatching { fmt.parse(doc.endDate.ifBlank { doc.startDate }) }.getOrNull() ?: start
             if (end.before(start)) continue
-            val label = doc.leaveType.ifBlank { "Leave" }
+            val label = doc.leaveType.ifBlank { appContext.localizedString(R.string.myatt_on_leave_short) }
             val cal = java.util.Calendar.getInstance().apply { time = start }
             var guard = 0
             while (!cal.time.after(end) && guard < 400) {   // guard against runaway ranges
@@ -322,7 +329,7 @@ class StaffAttendanceViewModel @Inject constructor(
     fun consumeResult() { _ui.update { it.copy(lastResult = null, error = null, gpsError = null) } }
 
     private fun Throwable.asStaffError(): StaffAttendanceError =
-        this as? StaffAttendanceError ?: StaffAttendanceError.Network(message ?: "Unexpected error")
+        this as? StaffAttendanceError ?: StaffAttendanceError.Network(message ?: appContext.localizedString(R.string.vm_unexpected_error))
 
     private fun deviceInfo(): Map<String, String> = mapOf(
         "model" to Build.MODEL,

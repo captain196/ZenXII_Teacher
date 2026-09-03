@@ -1,6 +1,10 @@
 package com.schoolsync.teacher.ui.profile
 
 import androidx.compose.foundation.background
+import android.app.Activity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,11 +54,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.service.NotificationChannels
+import com.schoolsync.teacher.util.LocaleManager
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -78,6 +89,7 @@ fun MyProfileScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val c = LocalAppColors.current
+    val context = LocalContext.current
 
     // Once the session is cleared, hand off to the caller to return to Login.
     LaunchedEffect(state.logoutSuccess) {
@@ -211,7 +223,7 @@ fun MyProfileScreen(
                         Icon(Icons.Filled.Class, null, tint = profileAccent, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Class Teacher  \u00B7  " + state.classTeacherSections.joinToString(", "),
+                            text = stringResource(R.string.profile_class_teacher_prefix, state.classTeacherSections.joinToString(", ")),
                             style = MaterialTheme.typography.labelMedium,
                             color = profileAccent,
                             fontWeight = FontWeight.SemiBold,
@@ -235,69 +247,69 @@ fun MyProfileScreen(
                 ) {
                     // Left column
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        InfoCard("Personal", Icons.Filled.Person, profileAccent, listOfNotNull(
-                            f("Name", state.cachedName),
-                            f("Gender", doc?.gender),
-                            f("DOB", doc?.dob),
-                            f("Marital Status", doc?.maritalStatus),
-                            f("Father's Name", doc?.fatherName),
+                        InfoCard(stringResource(R.string.profile_card_personal), Icons.Filled.Person, profileAccent, listOfNotNull(
+                            f(stringResource(R.string.prof_f_name), state.cachedName),
+                            f(stringResource(R.string.prof_f_gender), doc?.gender),
+                            f(stringResource(R.string.prof_f_dob), doc?.dob),
+                            f(stringResource(R.string.profile_marital_status), doc?.maritalStatus),
+                            f(stringResource(R.string.profile_fathers_name), doc?.fatherName),
                         ))
 
-                        InfoCard("Employment", Icons.Filled.Work, c.info, listOfNotNull(
-                            f("Designation", doc?.designation?.ifEmpty { doc.position }),
-                            f("Department", doc?.department ?: state.cachedDepartment),
-                            f("Type", doc?.employmentType),
-                            f("Joined", doc?.dateOfJoining ?: doc?.joiningDate),
-                            f("Subjects", doc?.teaching_subjects?.joinToString(", ")),
+                        InfoCard(stringResource(R.string.profile_card_employment), Icons.Filled.Work, c.info, listOfNotNull(
+                            f(stringResource(R.string.prof_f_designation), doc?.designation?.ifEmpty { doc.position }),
+                            f(stringResource(R.string.prof_f_department), doc?.department ?: state.cachedDepartment),
+                            f(stringResource(R.string.prof_f_type), doc?.employmentType),
+                            f(stringResource(R.string.prof_f_joined), doc?.dateOfJoining ?: doc?.joiningDate),
+                            f(stringResource(R.string.prof_f_subjects), doc?.teaching_subjects?.joinToString(", ")),
                         ))
 
                         val bank = bankDetails
                         if (bank != null && bank.isNotEmpty()) {
-                            InfoCard("Bank", Icons.Filled.AccountBalance, c.slateBluePrimary, listOfNotNull(
-                                f("Bank", bank["bankName"]?.toString()),
-                                f("Holder", bank["accountHolderName"]?.toString()),
-                                f("Account", maskAcct(bank["accountNumber"]?.toString())),
-                                f("IFSC", bank["ifscCode"]?.toString()),
+                            InfoCard(stringResource(R.string.profile_card_bank), Icons.Filled.AccountBalance, c.slateBluePrimary, listOfNotNull(
+                                f(stringResource(R.string.prof_f_bank), bank["bankName"]?.toString()),
+                                f(stringResource(R.string.prof_f_holder), bank["accountHolderName"]?.toString()),
+                                f(stringResource(R.string.prof_f_account), maskAcct(bank["accountNumber"]?.toString())),
+                                f("IFSC"  /* i18n-ignore: statutory identifier */, bank["ifscCode"]?.toString()),
                             ))
                         }
                     }
 
                     // Right column
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        InfoCard("Contact", Icons.Filled.Phone, c.success, listOfNotNull(
-                            f("Email", doc?.email ?: state.cachedEmail),
-                            f("Phone", doc?.phone ?: state.cachedPhone),
-                            f("Alt. Phone", doc?.altPhone),
-                            f("Emergency", buildEmergency(doc?.emergencyContact)),
+                        InfoCard(stringResource(R.string.profile_card_contact), Icons.Filled.Phone, c.success, listOfNotNull(
+                            f(stringResource(R.string.prof_f_email), doc?.email ?: state.cachedEmail),
+                            f(stringResource(R.string.prof_f_phone), doc?.phone ?: state.cachedPhone),
+                            f(stringResource(R.string.profile_alt_phone), doc?.altPhone),
+                            f(stringResource(R.string.prof_f_emergency), buildEmergency(doc?.emergencyContact)),
                         ))
 
                         val hasStat = listOf(panNumber, aadharNumber, pfNumber, esiNumber)
                             .any { !it.isNullOrBlank() }
                         if (hasStat) {
-                            InfoCard("Statutory IDs", Icons.Filled.CreditCard, c.warning, listOfNotNull(
-                                f("PAN", panNumber),
-                                f("Aadhar", aadharNumber),
-                                f("PF / UAN", pfNumber),
-                                f("ESI", esiNumber),
+                            InfoCard(stringResource(R.string.profile_card_statutory), Icons.Filled.CreditCard, c.warning, listOfNotNull(
+                                f("PAN"  /* i18n-ignore: statutory identifier */, panNumber),
+                                f("Aadhar"  /* i18n-ignore: statutory identifier */, aadharNumber),
+                                f("PF / UAN"  /* i18n-ignore: statutory acronyms */, pfNumber),
+                                f("ESI"  /* i18n-ignore: statutory identifier */, esiNumber),
                             ))
                         }
 
                         val addr = doc?.addressMap
                         val permAddr = doc?.permanentAddress
                         if (addr != null) {
-                            InfoCard("Address", Icons.Filled.Home, c.error, listOfNotNull(
-                                f("Current", flatAddr(addr)),
-                                if (permAddr != null && permAddr.isNotEmpty()) f("Permanent", flatAddr(permAddr)) else null,
+                            InfoCard(stringResource(R.string.profile_card_address), Icons.Filled.Home, c.error, listOfNotNull(
+                                f(stringResource(R.string.prof_f_current), flatAddr(addr)),
+                                if (permAddr != null && permAddr.isNotEmpty()) f(stringResource(R.string.prof_f_permanent), flatAddr(permAddr)) else null,
                             ))
                         }
 
                         val qual = doc?.qualificationDetails
                         if (qual != null) {
-                            InfoCard("Qualification", Icons.Filled.School, profileAccent, listOfNotNull(
-                                f("Degree", qual["highestQualification"]?.toString()),
-                                f("University", qual["university"]?.toString()),
-                                f("Year", qual["yearOfPassing"]?.toString()),
-                                f("Experience", qual["experience"]?.toString()?.let { "${it} yrs" }),
+                            InfoCard(stringResource(R.string.profile_card_qualification), Icons.Filled.School, profileAccent, listOfNotNull(
+                                f(stringResource(R.string.prof_f_degree), qual["highestQualification"]?.toString()),
+                                f(stringResource(R.string.prof_f_university), qual["university"]?.toString()),
+                                f(stringResource(R.string.prof_f_year), qual["yearOfPassing"]?.toString()),
+                                f(stringResource(R.string.prof_f_experience), qual["experience"]?.toString()?.let { stringResource(R.string.prof_years_fmt, it) }),
                             ))
                         }
                     }
@@ -321,7 +333,67 @@ fun MyProfileScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // ── Log out (only place logout lives; removed from sidebar) ──
+                // -- Language --------------------------------------------
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { viewModel.toggleLanguage() }
+                        .padding(horizontal = 4.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Language,
+                        contentDescription = null,
+                        tint = c.textSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.settings_language),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = c.textPrimary
+                    )
+                    Text(
+                        // Endonym, never a translated language name: a staff
+                        // member who reads only Gujarati can find "ગુજરાતી"
+                        // but not the word "Gujarati".
+                        text = LocaleManager.labelFor(LocaleManager.effectiveTag(context)),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = c.textTertiary
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = state.showLanguage,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    LanguagePicker(
+                        currentTag = LocaleManager.effectiveTag(context),
+                        onSelect = { tag ->
+                            if (tag != LocaleManager.effectiveTag(context)) {
+                                // 1. Persist locally with commit() -- recreate()
+                                //    is about to read this back synchronously.
+                                LocaleManager.setLanguage(context, tag)
+                                // 2. Re-create the notification channels so their
+                                //    names/descriptions come back in the new
+                                //    language; the OS caches the strings it was
+                                //    given at creation time.
+                                NotificationChannels.ensureChannels(context)
+                                // 3. Tell the server, without waiting for it.
+                                viewModel.mirrorLanguage(tag)
+                                // 4. Re-run attachBaseContext with the new tag.
+                                (context as? Activity)?.recreate()
+                            }
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                // -- Log out (only place logout lives; removed from sidebar) --
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -339,7 +411,7 @@ fun MyProfileScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Log out",
+                        text = stringResource(R.string.profile_logout),
                         style = MaterialTheme.typography.labelLarge,
                         color = c.error,
                         fontWeight = FontWeight.SemiBold
@@ -376,14 +448,14 @@ private fun LogoutDialog(
             Text(text = "👋", fontSize = 36.sp)
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "Log out?",
+                text = stringResource(R.string.profile_logout_q),
                 style = MaterialTheme.typography.titleMedium,
                 color = c.textPrimary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "You’ll need to sign in again next time.",
+                text = stringResource(R.string.profile_logout_msg),
                 style = MaterialTheme.typography.bodySmall,
                 color = c.textSecondary,
                 textAlign = TextAlign.Center
@@ -404,7 +476,7 @@ private fun LogoutDialog(
                     ),
                     contentPadding = PaddingValues(vertical = 12.dp)
                 ) {
-                    Text("Cancel", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.common_cancel), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 }
                 Button(
                     onClick = onConfirm,
@@ -424,7 +496,7 @@ private fun LogoutDialog(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Log out", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.profile_logout), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -547,7 +619,7 @@ private fun AssignmentsCard(assignments: List<ClassAssignment>, c: AppColors) {
             }
             Spacer(Modifier.width(8.dp))
             Text(
-                "My Assignments",
+                stringResource(R.string.profile_my_assignments),
                 style = MaterialTheme.typography.labelLarge,
                 color = c.textPrimary,
                 fontWeight = FontWeight.SemiBold,
@@ -584,7 +656,7 @@ private fun AssignmentsCard(assignments: List<ClassAssignment>, c: AppColors) {
                 )
                 val isCT = items.any { it.classTeacher }
                 if (isCT) {
-                    Chip("Class Teacher", c.accent, c.accent.copy(alpha = 0.18f))
+                    Chip(stringResource(R.string.search_class_teacher), c.accent, c.accent.copy(alpha = 0.18f))
                 }
             }
 
@@ -643,4 +715,69 @@ private fun flatAddr(addr: Map<String, Any>?): String? {
 private fun maskAcct(acct: String?): String? {
     if (acct.isNullOrBlank()) return null
     return if (acct.length > 4) "****${acct.takeLast(4)}" else acct
+}
+
+/**
+ * Language picker.
+ *
+ * A vertical list, not a chip row: six options in Tamil, Telugu and Devanagari
+ * will not fit side by side on a 5-inch screen, and clipping in dialogs and
+ * lists is already the most repeated UI bug in this app.
+ *
+ * Every option is labelled by its **endonym** -- its name in its own language --
+ * so the labels are deliberately NOT translated strings: they are identical in
+ * every locale.
+ */
+@Composable
+private fun LanguagePicker(
+    currentTag: String,
+    onSelect: (String) -> Unit
+) {
+    val c = LocalAppColors.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        LocaleManager.SUPPORTED.forEach { (tag, endonym) ->
+            val isSelected = currentTag == tag
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .then(
+                        if (isSelected) {
+                            Modifier
+                                .background(c.accentSurface)
+                                .border(1.dp, c.accent, RoundedCornerShape(14.dp))
+                        } else {
+                            Modifier
+                                .background(Color.Transparent)
+                                .border(1.dp, c.divider, RoundedCornerShape(14.dp))
+                        }
+                    )
+                    .clickable { onSelect(tag) }
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = endonym,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) c.accent else c.textPrimary
+                )
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = c.accent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
 }

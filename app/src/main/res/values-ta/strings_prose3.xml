@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave: interpolated/concatenated UI copy that no position pattern could
+     see, because the literal was assembled into a val or passed positionally.
+     Found by the widened prose sweep (audit.py HOLE 8). -->
+<resources>
+    <string name="att_saved_rejected_fmt">%1$d சேமிக்கப்பட்டன · %2$d நிராகரிக்கப்பட்டன (குறிப்புகளைப் பார்க்கவும்).</string>
+    <string name="att_correction_submitted_fmt">திருத்தம் சமர்ப்பிக்கப்பட்டது (#%1$s)</string>
+    <string name="ptm_hosting_fmt">%1$s ஐ நடத்துகிறீர்கள்</string>
+    <string name="ptm_mark_all_delivered_fmt">அனைத்து %1$d ஐயும் வழங்கியதாகக் குறிக்கவும்</string>
+    <string name="ptm_roll_fmt">வரிசை #%1$s</string>
+    <string name="ptm_parent_fmt">பெற்றோர்: %1$s</string>
+    <string name="marks_theory_max_fmt">கோட்பாடு (%1$s)</string>
+    <string name="marks_practical_max_fmt">செய்முறை (%1$s)</string>
+    <string name="marks_total_header">மொத்தம்</string>
+    <string name="marks_theory_a11y_fmt">%1$s, வரிசை %2$s இன் கோட்பாட்டு மதிப்பெண்கள்</string>
+    <string name="marks_practical_a11y_fmt">%1$s, வரிசை %2$s இன் செய்முறை மதிப்பெண்கள்</string>
+    <string name="fp_no_contact_teacher_fmt">"%1$s" க்கான தொடர்பு எதுவும் இல்லை. உங்கள் ஆசிரியர் ID ஐச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="search_no_results_for_fmt">"%1$s" க்கு முடிவுகள் இல்லை</string>
+    <string name="dash_covering_period_fmt">%1$s க்கு பதிலாக — ப%2$d %3$s</string>
+    <string name="dash_covering_periods_fmt">%1$s க்கு பதிலாக — %2$s</string>
+    <string name="students_subject_fmt">பாடம்: %1$s</string>
+    <string name="students_assigned">ஒதுக்கப்பட்டது</string>
+    <string name="story_by_fmt">%1$s இன் ஸ்டோரி</string>
+    <string name="hw_due_today_fmt2">இன்று நிலுவை, %1$s IST</string>
+    <string name="hw_due_tomorrow_fmt2">நாளை நிலுவை, %1$s IST</string>
+    <string name="hw_due_on_fmt2">%1$s அன்று நிலுவை, %2$s IST</string>
+    <string name="hw_upload_attach_failed_fmt">இணைப்புகளைப் பதிவேற்ற முடியவில்லை: %1$s</string>
+    <string name="leave_withdraw_confirm_fmt">இது %2$s - %3$s க்கான உங்கள் நிலுவையிலுள்ள %1$s கோரிக்கையைத் திரும்பப் பெறும்.</string>
+    <string name="leave_applying_half_fmt">%3$s அன்று அரை-நாள் %1$s (%2$s) க்கு விண்ணப்பம்</string>
+    <string name="leave_applying_one_fmt">%2$s அன்று %1$s க்கு விண்ணப்பம் (1 நாள்)</string>
+    <string name="leave_type_default">விடுப்பு</string>
+    <string name="leave_half_morning">காலை</string>
+    <string name="leave_half_afternoon">மதியம்</string>
+    <string name="leave_pending_requests_fmt">நிலுவை கோரிக்கைகள் (%1$d)</string>
+    <string name="leave_processed_count_fmt">செயலாக்கப்பட்டது (%1$d)</string>
+    <string name="leave_processed_by_fmt">%1$s ஆல் செயலாக்கப்பட்டது</string>
+    <string name="flag_raised_for_fmt">%1$s க்காக கொடி எழுப்பப்பட்டது</string>
+    <string name="flag_raised_toast">🚩 கொடி எழுப்பப்பட்டது</string>
+</resources>

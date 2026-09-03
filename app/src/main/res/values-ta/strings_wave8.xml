@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 8: lambda-slot placeholders (HOLE 13) + the F: prefix, found on device. -->
+<resources>
+    <string name="common_search_hint">தேடு...</string>
+    <string name="common_saving">சேமிக்கிறது...</string>
+    <string name="students_father_fmt">தந்தை: %1$s</string>
+</resources>

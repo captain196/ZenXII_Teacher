@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Leave tabs and allotment labels. -->
+<resources>
+    <string name="leave_tab_my">मेरा अवकाश</string>
+    <string name="leave_tab_student">छात्र अवकाश</string>
+    <string name="leave_allotted">आवंटित %1$s</string>
+    <string name="leave_allotted_carried">आवंटित %1$s + %2$s अग्रेषित</string>
+</resources>

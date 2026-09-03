@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fees average across N months; recruitment vacancy label. -->
+<resources>
+    <string name="fees_avg_across">%1$s%% across %2$s</string>
+    <string name="rec_vacancies_label">Vacancies</string>
+</resources>

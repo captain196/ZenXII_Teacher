@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 4b: red flags - list, quick-flag sheet, canonical severity/type. -->
+<resources>
+    <string name="rf_new">New Flag</string>
+    <string name="rf_loading">Loading flags...</string>
+    <string name="rf_view_all">View All</string>
+    <string name="rf_add">Add flag</string>
+    <string name="rf_delete_q">Delete this flag?</string>
+    <string name="rf_resolved">RESOLVED</string>
+    <string name="rf_tpl_late_hw">Late HW</string>
+    <string name="rf_tpl_behaviour">Behaviour</string>
+    <string name="rf_tpl_low_perf">Low performance</string>
+    <string name="rf_quick_reason">Quick reason</string>
+    <string name="common_severity">Severity</string>
+    <string name="common_message">Message</string>
+    <string name="rf_no_subject_note">No subject is assigned to you for this class — this flag will be filed without a subject. Ask an admin to set up your subject assignment.</string>
+    <string name="rf_subject_required">Subject is required on this screen.</string>
+    <string name="common_undo">UNDO</string>
+    <string name="rf_more_options">▸ More options</string>
+    <string name="rf_hide_options">▾ Hide options</string>
+    <string name="flag_severity_low">Low</string>
+    <string name="flag_severity_medium">Medium</string>
+    <string name="flag_severity_high">High</string>
+    <string name="flag_type_homework">Homework</string>
+    <string name="flag_type_behavior">Behaviour</string>
+    <string name="flag_type_performance">Performance</string>
+</resources>

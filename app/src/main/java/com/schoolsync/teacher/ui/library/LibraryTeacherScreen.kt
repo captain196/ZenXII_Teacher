@@ -77,6 +77,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
+import androidx.compose.ui.res.pluralStringResource
+import com.schoolsync.teacher.util.DisplayFormat
 
 @Composable
 fun LibraryTeacherScreen(
@@ -126,7 +130,7 @@ fun LibraryTeacherScreen(
                             CircularProgressIndicator(color = Teal)
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Loading library...",
+                                stringResource(R.string.lib_loading),
                                 color = TextSecondary,
                                 style = MaterialTheme.typography.bodyMedium
                             )
@@ -147,11 +151,11 @@ fun LibraryTeacherScreen(
         state.error?.let { error ->
             AlertDialog(
                 onDismissRequest = viewModel::clearError,
-                title = { Text("Error", color = TextPrimary) },
+                title = { Text(stringResource(R.string.common_error), color = TextPrimary) },
                 text = { Text(error, color = TextSecondary) },
                 confirmButton = {
                     TextButton(onClick = viewModel::clearError) {
-                        Text("OK", color = Teal)
+                        Text(stringResource(R.string.common_ok), color = Teal)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -181,7 +185,7 @@ private fun LibraryTopBar(onRefresh: () -> Unit) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Library",
+                text = stringResource(R.string.nav_library),
                 style = MaterialTheme.typography.headlineSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -189,7 +193,7 @@ private fun LibraryTopBar(onRefresh: () -> Unit) {
         }
 
         IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = TextSecondary)
+            Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh), tint = TextSecondary)
         }
     }
 }
@@ -296,7 +300,7 @@ private fun LibrarySearchBar(
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = { Text("Search books by title...") },
+        placeholder = { Text(stringResource(R.string.lib_search_hint)) },
         leadingIcon = {
             Icon(
                 Icons.Filled.Search,
@@ -351,8 +355,8 @@ private fun CatalogTab(
     if (books.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.LibraryBooks,
-            title = "No books found",
-            subtitle = "The library catalogue is empty",
+            title = stringResource(R.string.lib_no_books),
+            subtitle = stringResource(R.string.lib_catalogue_empty),
             modifier = modifier
         )
     } else {
@@ -411,7 +415,7 @@ private fun BookCard(book: LibraryBookDoc) {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = book.authors.joinToString(", ").ifBlank { "Unknown Author" },
+                text = book.authors.joinToString(", ").ifBlank { stringResource(R.string.lib_unknown_author) },
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 maxLines = 1,
@@ -443,7 +447,7 @@ private fun BookCard(book: LibraryBookDoc) {
                 // Shelf location
                 if (book.shelf.isNotBlank()) {
                     Text(
-                        text = "Shelf: ${book.shelf}",
+                        text = stringResource(R.string.lib_shelf_fmt, book.shelf),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         fontSize = 10.sp
@@ -480,7 +484,7 @@ private fun BookCard(book: LibraryBookDoc) {
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "copies",
+                text = stringResource(R.string.lib_copies_label),
                 style = MaterialTheme.typography.labelSmall,
                 color = TextTertiary,
                 fontSize = 9.sp
@@ -499,8 +503,8 @@ private fun IssuedTab(
     if (issues.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.AutoStories,
-            title = "No issued books",
-            subtitle = "No books are currently issued",
+            title = stringResource(R.string.lib_no_issued),
+            subtitle = stringResource(R.string.lib_no_issued_hint),
             modifier = modifier
         )
     } else {
@@ -526,8 +530,8 @@ private fun OverdueTab(
     if (issues.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.Warning,
-            title = "No overdue books",
-            subtitle = "All books have been returned on time",
+            title = stringResource(R.string.lib_no_overdue),
+            subtitle = stringResource(R.string.lib_no_overdue_hint),
             modifier = modifier
         )
     } else {
@@ -593,7 +597,7 @@ private fun IssueCard(issue: LibraryIssueDoc, isOverdue: Boolean) {
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = issue.bookTitle.ifBlank { "Unknown Book" },
+                text = issue.bookTitle.ifBlank { stringResource(R.string.lib_unknown_book) },
                 style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
@@ -615,7 +619,7 @@ private fun IssueCard(issue: LibraryIssueDoc, isOverdue: Boolean) {
             ) {
                 if (issue.issueDate.isNotBlank()) {
                     Text(
-                        text = "Issued: ${issue.issueDate}",
+                        text = stringResource(R.string.lib_issued_fmt, issue.issueDate),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         fontSize = 10.sp
@@ -623,7 +627,7 @@ private fun IssueCard(issue: LibraryIssueDoc, isOverdue: Boolean) {
                 }
                 if (issue.dueDate.isNotBlank()) {
                     Text(
-                        text = "Due: ${issue.dueDate}",
+                        text = stringResource(R.string.lib_due_fmt, issue.dueDate),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isOverdue) ErrorRed else TextTertiary,
                         fontWeight = if (isOverdue) FontWeight.SemiBold else FontWeight.Normal,
@@ -653,7 +657,8 @@ private fun IssueCard(issue: LibraryIssueDoc, isOverdue: Boolean) {
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (daysOverdue == 1L) "day" else "days",
+                            text = pluralStringResource(
+                                R.plurals.lib_overdue_days_unit, daysOverdue.toInt()),
                             style = MaterialTheme.typography.labelSmall,
                             color = ErrorRed.copy(alpha = 0.8f),
                             fontSize = 9.sp
@@ -668,7 +673,7 @@ private fun IssueCard(issue: LibraryIssueDoc, isOverdue: Boolean) {
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = "Issued",
+                        text = stringResource(R.string.lib_issued),
                         style = MaterialTheme.typography.labelSmall,
                         color = accentColor,
                         fontWeight = FontWeight.SemiBold,
@@ -680,7 +685,7 @@ private fun IssueCard(issue: LibraryIssueDoc, isOverdue: Boolean) {
                     if (daysLeft >= 0) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = if (daysLeft == 0L) "Due today" else "$daysLeft days left",
+                            text = if (daysLeft == 0L) stringResource(R.string.lib_due_today) else pluralStringResource(R.plurals.lib_days_left, daysLeft.toInt(), daysLeft.toInt()),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (daysLeft <= 2) WarningAmber else TextTertiary,
                             fontWeight = if (daysLeft <= 2) FontWeight.SemiBold else FontWeight.Normal,
@@ -703,8 +708,8 @@ private fun FinesTab(
     if (fines.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.MonetizationOn,
-            title = "No pending fines",
-            subtitle = "All fines have been cleared",
+            title = stringResource(R.string.lib_no_fines),
+            subtitle = stringResource(R.string.lib_no_fines_hint),
             modifier = modifier
         )
     } else {
@@ -730,18 +735,18 @@ private fun FinesTab(
                 ) {
                     Column {
                         Text(
-                            text = "Total Pending",
+                            text = stringResource(R.string.lib_total_pending),
                             style = MaterialTheme.typography.labelMedium,
                             color = WarningAmber.copy(alpha = 0.8f)
                         )
                         Text(
-                            text = "${fines.size} fines",
+                            text = pluralStringResource(R.plurals.lib_fines_count, fines.size, fines.size),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextTertiary
                         )
                     }
                     Text(
-                        text = String.format("%.2f", totalPending),
+                        text = DisplayFormat.currency(totalPending),
                         style = MaterialTheme.typography.headlineSmall,
                         color = WarningAmber,
                         fontWeight = FontWeight.Bold
@@ -794,7 +799,7 @@ private fun FineCard(fine: LibraryFineDoc) {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = fine.bookTitle.ifBlank { "Book: ${fine.bookId}" },
+                text = fine.bookTitle.ifBlank { stringResource(R.string.lib_book_id_fmt, fine.bookId) },
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 maxLines = 1,
@@ -822,7 +827,7 @@ private fun FineCard(fine: LibraryFineDoc) {
         // Amount
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = String.format("%.2f", fine.fineAmount),
+                text = DisplayFormat.currency(fine.fineAmount),
                 style = MaterialTheme.typography.titleMedium,
                 color = WarningAmber,
                 fontWeight = FontWeight.Bold
@@ -849,9 +854,9 @@ private fun FineCard(fine: LibraryFineDoc) {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 private val dateFormats = listOf(
-    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()),
-    SimpleDateFormat("dd-MM-yyyy", Locale.getDefault()),
-    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    SimpleDateFormat("yyyy-MM-dd", Locale.ROOT),  // machine parser — server-written
+    SimpleDateFormat("dd-MM-yyyy", Locale.ROOT),   // machine parser
+    SimpleDateFormat("dd/MM/yyyy", Locale.ROOT)    // machine parser
 )
 
 private fun parseDate(dateStr: String): Date? {

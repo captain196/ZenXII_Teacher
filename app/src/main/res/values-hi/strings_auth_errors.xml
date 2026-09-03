@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firebase Auth failures, mapped by error code instead of leaking the raw provider message. -->
+<resources>
+    <string name="err_auth_invalid">ID या पासवर्ड गलत है। कृपया जाँचकर पुनः प्रयास करें।</string>
+    <string name="err_auth_disabled">यह खाता निष्क्रिय कर दिया गया है। कृपया विद्यालय कार्यालय से संपर्क करें।</string>
+    <string name="err_auth_too_many">बहुत अधिक प्रयास। कृपया कुछ मिनट प्रतीक्षा कर पुनः प्रयास करें।</string>
+    <string name="err_account_deactivated">आपका खाता निष्क्रिय कर दिया गया है। कृपया विद्यालय कार्यालय से संपर्क करें।</string>
+    <string name="err_staff_record_missing">आपका स्टाफ़ रिकॉर्ड नहीं मिला। कृपया विद्यालय कार्यालय से संपर्क करें।</string>
+</resources>

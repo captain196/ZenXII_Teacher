@@ -81,10 +81,10 @@ class RedFlagRepository @Inject constructor(
     /** Match admin's flagId format: RF_YYYYMMDD_HHMMSS_xxxxxx */
     private fun newFlagId(): String {
         val c = Calendar.getInstance()
-        val ymd = "%04d%02d%02d".format(
+        val ymd = String.format(java.util.Locale.ROOT, "%04d%02d%02d", 
             c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH)
         )
-        val hms = "%02d%02d%02d".format(
+        val hms = String.format(java.util.Locale.ROOT, "%02d%02d%02d", 
             c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), c.get(Calendar.SECOND)
         )
         val suffix = UUID.randomUUID().toString().replace("-", "").take(6)

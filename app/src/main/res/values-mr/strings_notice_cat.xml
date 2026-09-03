@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notice category chips. The VALUE stays the English wire string (compared
+     at NoticesViewModel:151 and written at :144); only the label localizes. -->
+<resources>
+    <string name="notice_cat_all">सर्व</string>
+    <string name="notice_cat_general">सामान्य</string>
+    <string name="notice_cat_academic">शैक्षणिक</string>
+    <string name="notice_cat_event">कार्यक्रम</string>
+    <string name="notice_cat_holiday">सुट्टी</string>
+    <string name="notice_cat_exam">परीक्षा</string>
+    <string name="notice_cat_fee">शुल्क</string>
+    <string name="notice_cat_policy">धोरण</string>
+    <string name="notice_cat_administrative">प्रशासकीय</string>
+    <string name="notice_cat_emergency">आणीबाणी</string>
+    <string name="notice_cat_recruitment">भरती</string>
+</resources>

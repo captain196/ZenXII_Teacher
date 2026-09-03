@@ -62,6 +62,8 @@ import com.schoolsync.teacher.ui.theme.TealSurface
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 @Composable
 @ReadOnlyComposable
@@ -117,7 +119,7 @@ private fun TopBar(onRefresh: () -> Unit, isLoading: Boolean) {
     ) {
         Icon(Icons.Filled.WorkspacePremium, null, tint = Teal, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(10.dp))
-        Text("My Appraisals", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+        Text(stringResource(R.string.appr_title), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
         Spacer(Modifier.weight(1f))
         IconButton(onClick = onRefresh, enabled = !isLoading) {
             Icon(Icons.Filled.Refresh, "Refresh", tint = if (isLoading) TextTertiary else Teal)
@@ -129,8 +131,8 @@ private fun TopBar(onRefresh: () -> Unit, isLoading: Boolean) {
 private fun EmptyState() {
     com.schoolsync.teacher.ui.components.EmptyStatePro(
         icon = Icons.Filled.WorkspacePremium,
-        title = "No appraisals yet",
-        description = "Submitted performance reviews from HR will appear here.",
+        title = stringResource(R.string.appr_none),
+        description = stringResource(R.string.appr_none_hint),
     )
 }
 
@@ -150,7 +152,7 @@ private fun AppraisalCard(a: AppraisalDoc, expanded: Boolean, onToggle: () -> Un
             Column(Modifier.weight(1f)) {
                 Text(a.period.ifEmpty { a.appraisalType }, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                 Spacer(Modifier.height(2.dp))
-                Text("${a.appraisalType} • Reviewer: ${a.reviewerName}", fontSize = 12.sp, color = TextSecondary)
+                Text(stringResource(R.string.appr_type_reviewer, a.appraisalType, a.reviewerName), fontSize = 12.sp, color = TextSecondary)
                 Spacer(Modifier.height(6.dp))
                 StarRow(a.overallRating)
             }
@@ -166,37 +168,37 @@ private fun AppraisalCard(a: AppraisalDoc, expanded: Boolean, onToggle: () -> Un
             Column(Modifier.padding(top = 12.dp)) {
                 Divider(color = DividerColor)
                 Spacer(Modifier.height(10.dp))
-                SectionHeader("Ratings (out of 10)")
-                RatingBar("Teaching quality", a.teachingQuality)
-                RatingBar("Punctuality", a.punctuality)
-                RatingBar("Student feedback", a.studentFeedback)
-                RatingBar("Initiative", a.initiative)
-                RatingBar("Teamwork", a.teamwork)
+                SectionHeader(stringResource(R.string.appr_ratings))
+                RatingBar(stringResource(R.string.appr_teaching), a.teachingQuality)
+                RatingBar(stringResource(R.string.appr_punctuality), a.punctuality)
+                RatingBar(stringResource(R.string.appr_student_feedback), a.studentFeedback)
+                RatingBar(stringResource(R.string.appr_initiative), a.initiative)
+                RatingBar(stringResource(R.string.appr_teamwork), a.teamwork)
                 Spacer(Modifier.height(6.dp))
-                RatingBar("Overall", a.overallRating, emphasis = true)
+                RatingBar(stringResource(R.string.appr_overall), a.overallRating, emphasis = true)
                 if (a.strengths.isNotBlank()) {
                     Spacer(Modifier.height(12.dp))
-                    SectionHeader("Strengths")
+                    SectionHeader(stringResource(R.string.appr_strengths))
                     Text(a.strengths, color = TextPrimary, fontSize = 13.sp)
                 }
                 if (a.areasOfImprovement.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    SectionHeader("Areas of improvement")
+                    SectionHeader(stringResource(R.string.appr_improvement))
                     Text(a.areasOfImprovement, color = TextPrimary, fontSize = 13.sp)
                 }
                 if (a.goals.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    SectionHeader("Goals")
+                    SectionHeader(stringResource(R.string.appr_goals))
                     Text(a.goals, color = TextPrimary, fontSize = 13.sp)
                 }
                 if (a.comments.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    SectionHeader("Reviewer comments")
+                    SectionHeader(stringResource(R.string.appr_reviewer_comments))
                     Text(a.comments, color = TextPrimary, fontSize = 13.sp)
                 }
                 if (a.recommendation.isNotBlank() && a.recommendation != "none") {
                     Spacer(Modifier.height(10.dp))
-                    SectionHeader("Recommendation")
+                    SectionHeader(stringResource(R.string.appr_recommendation))
                     Text(a.recommendation.replaceFirstChar { it.uppercase() }, color = Teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -223,7 +225,7 @@ private fun RatingBar(label: String, value: Double, emphasis: Boolean = false) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, color = TextSecondary, fontSize = 13.sp, fontWeight = if (emphasis) FontWeight.SemiBold else FontWeight.Normal)
             Text(
-                "${"%.1f".format(value)}/10",
+                "${String.format(java.util.Locale.ROOT, "%.1f", value)}/10",
                 color = if (emphasis) Teal else TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = if (emphasis) FontWeight.SemiBold else FontWeight.Normal

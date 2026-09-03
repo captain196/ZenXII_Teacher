@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transport-layer failures, in the staff member's language. -->
+<resources>
+    <string name="err_no_internet">इंटरनेट कनेक्शन नहीं है। कृपया दोबारा जुड़कर प्रयास करें।</string>
+    <string name="err_server_timeout">विद्यालय सर्वर ने उत्तर देने में बहुत समय लिया। कृपया थोड़ी देर बाद प्रयास करें।</string>
+    <string name="err_session_expired">आपका सत्र समाप्त हो गया है। कृपया लॉग आउट करके फिर लॉग इन करें।</string>
+    <string name="err_not_found">वह सर्वर पर नहीं मिला। कृपया रीफ़्रेश करके प्रयास करें।</string>
+    <string name="err_server_unavailable">विद्यालय सर्वर अस्थायी रूप से अनुपलब्ध है। कृपया शीघ्र ही पुनः प्रयास करें।</string>
+    <string name="err_action_paused">विद्यालय ने यह क्रिया अस्थायी रूप से रोक दी है (वर्षांत समापन या अवधि लॉक)। कृपया शीघ्र पुनः प्रयास करें या विद्यालय कार्यालय से संपर्क करें।</string>
+    <string name="err_cannot_reach_server">विद्यालय सर्वर तक नहीं पहुँच सके। कृपया अपना कनेक्शन जाँचकर पुनः प्रयास करें।</string>
+</resources>

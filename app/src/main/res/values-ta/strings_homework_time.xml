@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Homework due/submitted time labels (plain functions -> Context-based). -->
+<resources>
+    <string name="hw_submitted_min_ago">%1$d நிமிடங்களுக்கு முன் சமர்ப்பிக்கப்பட்டது</string>
+    <string name="hw_submitted_today">இன்று சமர்ப்பிக்கப்பட்டது, %1$s</string>
+    <string name="hw_submitted_yesterday">நேற்று சமர்ப்பிக்கப்பட்டது, %1$s</string>
+    <string name="hw_submitted_on">%1$s அன்று சமர்ப்பிக்கப்பட்டது, %2$s IST</string>
+    <string name="hw_past_due_fmt">கெடு முடிந்தது · %1$s</string>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remaining interpolated copy (multi-arg / conditional) as format strings. -->
+<resources>
+    <string name="appr_type_reviewer">%1$s • సమీక్షకుడు: %2$s</string>
+    <string name="ev_view_all_photos">అన్ని ఫోటోలు చూడండి (%1$d)</string>
+    <string name="fees_cleared_pending">%2$dలో %1$d పూర్తి · %3$s బకాయి</string>
+    <string name="gal_tap_choose_video">వీడియో ఎంచుకోవడానికి నొక్కండి</string>
+    <string name="gal_tap_choose_photo">ఫోటో ఎంచుకోవడానికి నొక్కండి</string>
+    <string name="marks_class_max">%1$s - %2$s | గరిష్ఠం: %3$s</string>
+    <string name="results_row_summary">రోల్ %1$s · %2$s · %3$s</string>
+    <string name="myatt_today_is">ఈరోజు %1$s</string>
+    <string name="myatt_accuracy">ఖచ్చితత్వం ± %1$s మీ</string>
+    <string name="myatt_from_school">పాఠశాల నుండి %1$s</string>
+    <string name="myatt_done_times">ఈరోజుకి అంతా పూర్తయింది · %1$s — %2$s</string>
+    <string name="myatt_recorded_status">ఈరోజు హాజరు ఇప్పటికే నమోదైంది (%1$s).</string>
+    <string name="myatt_opens_at">చెక్-ఇన్ %1$s కు తెరుచుకుంటుంది.</string>
+    <string name="myatt_ontime_by">సమయానికి — %1$s లోపు క్లాక్ ఇన్ చేయండి%2$s</string>
+    <string name="myatt_marked_late">మీరు ఆలస్యంగా గుర్తించబడతారు (+%1$d నిమి.)%2$s</string>
+    <string name="myatt_closed_after">చెక్-ఇన్ సమయం ముగిసింది (%1$s తర్వాత). బదులుగా క్రమబద్ధీకరణ దాఖలు చేయండి.</string>
+    <string name="myatt_campus_fallback">క్యాంపస్</string>
+    <string name="myatt_until">%1$s వరకు</string>
+    <string name="myatt_working_since_fmt">%1$s నుండి పని</string>
+    <string name="myatt_out_at">, బయట %1$s</string>
+    <string name="reg_my_requests_n">నా అభ్యర్థనలు (%1$d)</string>
+    <string name="reg_couldnt_refresh">రిఫ్రెష్ చేయలేకపోయాము: %1$s</string>
+    <string name="reg_applied_label">దరఖాస్తు: %1$s</string>
+    <string name="myatt_full_day_suffix"> · పూర్తి రోజు %1$s గం.</string>
+</resources>

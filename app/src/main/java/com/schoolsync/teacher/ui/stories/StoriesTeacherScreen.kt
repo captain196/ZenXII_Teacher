@@ -133,13 +133,15 @@ import com.schoolsync.teacher.ui.theme.glassCard
 import com.schoolsync.teacher.util.StoryVideoCache
 import com.schoolsync.teacher.util.toRelativeTime
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 @Composable
 fun StoriesTeacherScreen(
     /** (authorId, storyId?) — storyId names a specific story to open on. */
     onOpenViewer: (authorId: String, storyId: String?) -> Unit = { _, _ -> },
     canEdit: Boolean = true,
-    /** True when we arrived here from the Dashboard's "Your story" + — open the
+    /** True when we arrived here from the Dashboard's stringResource(R.string.story_your_story) + — open the
      *  upload dialog immediately instead of making them find it again. */
     openUploadOnEntry: Boolean = false,
     onUploadOpenConsumed: () -> Unit = {},
@@ -187,7 +189,7 @@ fun StoriesTeacherScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // The tray — "Your story" first (and it's the post entry), then
+                // The tray — stringResource(R.string.story_your_story) first (and it's the post entry), then
                 // everyone else. Own stories are SPLIT OUT of the general list:
                 // they used to render both as a ring here and as a card in the
                 // grid below, ~200px apart, in two visual languages.
@@ -201,11 +203,11 @@ fun StoriesTeacherScreen(
                     canPost = canEdit,
                     onOpenStory = { authorId -> onOpenViewer(authorId, null) },
                     onCreateStory = viewModel::toggleUploadDialog,
-                    title = "Stories",
+                    title = stringResource(R.string.nav_stories),
                     showWhenEmpty = true
                 )
 
-                // "Your stories" header + New story + Archived entries.
+                // stringResource(R.string.story_your_stories) header + New story + Archived entries.
                 StoriesTopBar(
                     archivedCount = state.archivedStories.size,
                     canPost = canEdit,
@@ -257,11 +259,11 @@ fun StoriesTeacherScreen(
         state.error?.let { error ->
             AlertDialog(
                 onDismissRequest = viewModel::clearError,
-                title = { Text("Error", color = TextPrimary) },
+                title = { Text(stringResource(R.string.common_error), color = TextPrimary) },
                 text = { Text(error, color = TextSecondary) },
                 confirmButton = {
                     TextButton(onClick = viewModel::clearError) {
-                        Text("OK", color = Teal)
+                        Text(stringResource(R.string.common_ok), color = Teal)
                     }
                 },
                 containerColor = SurfaceDark,
@@ -313,7 +315,7 @@ private fun StoriesTopBar(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Your stories",
+                text = stringResource(R.string.story_your_stories),
                 style = MaterialTheme.typography.headlineSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -337,7 +339,7 @@ private fun StoriesTopBar(
                     Icon(Icons.Filled.Add, contentDescription = null, tint = BgStart, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        "New story",
+                        stringResource(R.string.story_new_story),
                         style = MaterialTheme.typography.labelLarge,
                         color = BgStart,
                         fontWeight = FontWeight.SemiBold
@@ -358,7 +360,7 @@ private fun StoriesTopBar(
                 ) {
                     Icon(Icons.Filled.Timer, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Archived", style = MaterialTheme.typography.labelLarge, color = TextPrimary)
+                    Text(stringResource(R.string.story_archived), style = MaterialTheme.typography.labelLarge, color = TextPrimary)
                     Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
@@ -393,7 +395,7 @@ private fun StoriesGridContent(
                 CircularProgressIndicator(color = Teal)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Loading stories...",
+                    stringResource(R.string.story_loading),
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -410,13 +412,13 @@ private fun StoriesGridContent(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = if (hasArchived) "No active stories" else "No stories yet",
+                    text = if (hasArchived) stringResource(R.string.story_none_active) else stringResource(R.string.story_none_yet),
                     style = MaterialTheme.typography.titleMedium,
                     color = TextSecondary
                 )
                 Text(
-                    text = if (hasArchived) "Your past stories are in Archived above."
-                           else "Tap + to upload your first story",
+                    text = if (hasArchived) stringResource(R.string.story_past_in_archive)
+                           else stringResource(R.string.story_first_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )
@@ -428,7 +430,7 @@ private fun StoriesGridContent(
             modifier = modifier.padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            // Bottom padding clears the "New Story" FAB so the last row
+            // Bottom padding clears the stringResource(R.string.story_new) FAB so the last row
             // is never hidden behind it.
             contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
         ) {
@@ -489,7 +491,7 @@ private fun StoryCard(
             if (tileUrl.isNotBlank() && !tileFailed) {
                 AsyncImage(
                     model = tileUrl,
-                    contentDescription = story.caption.ifBlank { "Story" },
+                    contentDescription = story.caption.ifBlank { stringResource(R.string.story_generic) },
                     modifier = Modifier
                         .fillMaxSize()
                         .let { if (isExpired) it.background(Color.Black.copy(alpha = 0.4f)) else it },
@@ -557,7 +559,7 @@ private fun StoryCard(
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "Expired",
+                            text = stringResource(R.string.story_expired),
                             style = MaterialTheme.typography.labelSmall,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold,
@@ -650,7 +652,7 @@ private fun StoryCard(
                 IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                     Icon(
                         Icons.Filled.Delete,
-                        contentDescription = "Delete story",
+                        contentDescription = stringResource(R.string.story_delete),
                         tint = ErrorRed.copy(alpha = 0.7f),
                         modifier = Modifier.size(17.dp)
                     )
@@ -665,7 +667,7 @@ private fun StoryCard(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "Tap to see who viewed",
+                    text = stringResource(R.string.story_tap_to_see_viewers),
                     style = MaterialTheme.typography.labelSmall,
                     color = Teal.copy(alpha = 0.9f),
                     fontSize = 10.sp
@@ -736,7 +738,7 @@ private fun UploadStoryDialog(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("New Story", color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.story_new), color = TextPrimary, fontWeight = FontWeight.Bold)
             }
         },
         text = {
@@ -781,7 +783,7 @@ private fun UploadStoryDialog(
                             .build()
                         AsyncImage(
                             model = request,
-                            contentDescription = "Selected media",
+                            contentDescription = stringResource(R.string.story_selected_media),
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
@@ -809,7 +811,7 @@ private fun UploadStoryDialog(
                             ) {
                                 Icon(
                                     Icons.Filled.Close,
-                                    contentDescription = "Remove media",
+                                    contentDescription = stringResource(R.string.story_remove_media),
                                     tint = Color.White,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -837,7 +839,7 @@ private fun UploadStoryDialog(
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    "Tap to replace",
+                                    stringResource(R.string.story_tap_replace),
                                     color = Color.White,
                                     style = MaterialTheme.typography.labelSmall
                                 )
@@ -871,7 +873,7 @@ private fun UploadStoryDialog(
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         when {
-                                            posterPending -> "Preparing preview…"
+                                            posterPending -> stringResource(R.string.story_preparing_preview)
                                             isCompressing -> "Compressing… $mediaUploadPercent%"
                                             else -> "Uploading… $mediaUploadPercent%"
                                         },
@@ -899,14 +901,14 @@ private fun UploadStoryDialog(
                             }
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                "Add photo or video",
+                                stringResource(R.string.story_add_media),
                                 color = TextPrimary,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                "Tap to choose from your gallery",
+                                stringResource(R.string.story_choose_gallery),
                                 color = TextSecondary,
                                 style = MaterialTheme.typography.labelMedium
                             )
@@ -928,7 +930,7 @@ private fun UploadStoryDialog(
                 // Explicit, always-visible visibility choice. "Whole
                 // school" = empty target set (all parents). Otherwise
                 // scoped to the selected class-sections. Defaults to the
-                // teacher's class-teacher section(s). The "Whole school"
+                // teacher's class-teacher section(s). The stringResource(R.string.story_whole_school)
                 // option is always shown so the picker is never blank.
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -940,7 +942,7 @@ private fun UploadStoryDialog(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "Who can see this story?",
+                            text = stringResource(R.string.story_who_can_see),
                             style = MaterialTheme.typography.titleSmall,
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold
@@ -960,7 +962,7 @@ private fun UploadStoryDialog(
                         FilterChip(
                             selected = wholeSchool,
                             onClick = onSelectWholeSchool,
-                            label = { Text("Whole school") },
+                            label = { Text(stringResource(R.string.story_whole_school)) },
                             leadingIcon = {
                                 Icon(
                                     if (wholeSchool) Icons.Filled.Check else Icons.Filled.Public,
@@ -1004,11 +1006,11 @@ private fun UploadStoryDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = if (selectedAudience.isEmpty())
-                            "Everyone in your school will see this story."
+                            stringResource(R.string.story_aud_all)
                         else if (audienceOptions.isEmpty())
-                            "You have no assigned class-sections yet — this will post to the whole school."
+                            stringResource(R.string.story_aud_none)
                         else
-                            "Only parents of the selected class-section(s) will see this story.",
+                            stringResource(R.string.story_aud_selected),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary
                     )
@@ -1017,8 +1019,8 @@ private fun UploadStoryDialog(
                 OutlinedTextField(
                     value = caption,
                     onValueChange = onCaptionChange,
-                    label = { Text("Caption") },
-                    placeholder = { Text("Write a caption…  (optional)", color = TextTertiary) },
+                    label = { Text(stringResource(R.string.story_caption)) },
+                    placeholder = { Text(stringResource(R.string.story_caption_hint), color = TextTertiary) },
                     minLines = 2,
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
@@ -1055,8 +1057,8 @@ private fun UploadStoryDialog(
                 Text(
                     when {
                         isUploading -> "Sharing…"
-                        posterPending -> "Preparing preview…"
-                        else -> "Share Story"
+                        posterPending -> stringResource(R.string.story_preparing_preview)
+                        else -> stringResource(R.string.story_share)
                     },
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1067,7 +1069,7 @@ private fun UploadStoryDialog(
                 onClick = onDismiss,
                 enabled = !isUploading
             ) {
-                Text("Cancel", color = TextSecondary)
+                Text(stringResource(R.string.common_cancel), color = TextSecondary)
             }
         },
         // Landscape: opt out of the narrow platform default width so the
@@ -1163,13 +1165,13 @@ private fun ArchivedGalleryOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onClose, modifier = Modifier.size(38.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextPrimary)
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_close), tint = TextPrimary)
                 }
                 Spacer(Modifier.width(4.dp))
                 Icon(Icons.Filled.Timer, contentDescription = null, tint = Teal, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Archived",
+                    text = stringResource(R.string.story_archived),
                     style = MaterialTheme.typography.headlineSmall,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
@@ -1224,7 +1226,7 @@ private fun ArchivedThumb(story: Story, viewCount: Int, onClick: () -> Unit) {
                     model = coil.request.ImageRequest.Builder(LocalContext.current)
                         .data(archivedTileUrl)
                         .crossfade(true).build(),
-                    contentDescription = story.caption.ifBlank { "Story" },
+                    contentDescription = story.caption.ifBlank { stringResource(R.string.story_generic) },
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                     onError = { archivedTileFailed = true }
@@ -1323,7 +1325,7 @@ private fun ArchivedStoryViewer(
                     } else {
                         AsyncImage(
                             model = story.mediaUrl,
-                            contentDescription = story.caption.ifBlank { "Story" },
+                            contentDescription = story.caption.ifBlank { stringResource(R.string.story_generic) },
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -1364,7 +1366,7 @@ private fun ArchivedStoryViewer(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_close), tint = Color.White)
                 }
                 Text(
                     text = "${pagerState.currentPage + 1} / ${stories.size}",
@@ -1374,25 +1376,26 @@ private fun ArchivedStoryViewer(
                 )
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Color.White)
+                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.nav_more), tint = Color.White)
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
-                            text = { Text("Details") },
+                            text = { Text(stringResource(R.string.common_details)) },
                             leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
                             onClick = { menuOpen = false; detailsFor = current }
                         )
                         DropdownMenuItem(
-                            text = { Text("Download") },
+                            text = { Text(stringResource(R.string.common_download)) },
                             leadingIcon = { Icon(Icons.Filled.Download, contentDescription = null) },
                             onClick = {
                                 menuOpen = false
-                                android.widget.Toast.makeText(context, "Saving…", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, context.getString(R.string.att_saving), android.widget.Toast.LENGTH_SHORT).show()
                                 scope.launch {
                                     val ok = downloadStoryMedia(context, current)
                                     android.widget.Toast.makeText(
                                         context,
-                                        if (ok) "Saved to your gallery" else "Download failed",
+                                        if (ok) context.getString(R.string.story_saved_gallery)
+                                        else context.getString(R.string.common_download_failed),
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
                                 }
@@ -1439,14 +1442,14 @@ private fun ArchivedDetailsSheet(story: Story, onDismiss: () -> Unit) {
                     .navigationBarsPadding()
                     .padding(20.dp)
             ) {
-                Text("Story details", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.story_details), style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(14.dp))
-                DetailRow("Type", story.type.replaceFirstChar { it.uppercase() })
-                if (story.caption.isNotBlank()) DetailRow("Caption", story.caption)
-                if (story.createdAt > 0) DetailRow("Posted", story.createdAt.toRelativeTime())
-                DetailRow("Views", story.viewCount.toString())
+                DetailRow(stringResource(R.string.common_type), story.type.replaceFirstChar { it.uppercase() })
+                if (story.caption.isNotBlank()) DetailRow(stringResource(R.string.story_caption), story.caption)
+                if (story.createdAt > 0) DetailRow(stringResource(R.string.story_posted), story.createdAt.toRelativeTime())
+                DetailRow(stringResource(R.string.story_views), story.viewCount.toString())
                 val reactionTotal = story.reactionCounts.values.sum()
-                DetailRow("Reactions", reactionTotal.toString())
+                DetailRow(stringResource(R.string.story_reactions), reactionTotal.toString())
                 val breakdown = story.reactionCounts.filterValues { it > 0 }.entries.sortedByDescending { it.value }
                 if (breakdown.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
@@ -1463,9 +1466,9 @@ private fun ArchivedDetailsSheet(story: Story, onDismiss: () -> Unit) {
                         }
                     }
                 }
-                val audience = if (StorySharedConfig.isWholeSchool(story.audienceClassKeys)) "Whole school"
+                val audience = if (StorySharedConfig.isWholeSchool(story.audienceClassKeys)) stringResource(R.string.story_whole_school)
                     else story.audienceClassKeys.joinToString(", ")
-                DetailRow("Audience", audience)
+                DetailRow(stringResource(R.string.story_audience), audience)
                 Spacer(Modifier.height(10.dp))
             }
         }
@@ -1492,7 +1495,7 @@ private suspend fun downloadStoryMedia(context: android.content.Context, story: 
             val isVideo = story.type == "video"
             val mime = if (isVideo) "video/mp4" else "image/jpeg"
             val ext = if (isVideo) "mp4" else "jpg"
-            val name = "ZenXii_Story_${System.currentTimeMillis()}.$ext"
+            val name = "ZenXii_Story_${System.currentTimeMillis()}.$ext"  // i18n-ignore: saved filename
             val resolver = context.contentResolver
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {

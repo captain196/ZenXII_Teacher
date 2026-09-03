@@ -151,4 +151,68 @@ object LocaleManager {
         cfg.setLocales(LocaleList(locale))   // API 24; minSdk is 24, so no legacy branch
         return base.createConfigurationContext(cfg)
     }
+
+    /**
+     * A Context that resolves resources in the CURRENTLY chosen language,
+     * re-read on every call.
+     *
+     * This exists because [wrap] is only applied in `attachBaseContext`, which
+     * runs once per Context creation. An Activity is re-created on a language
+     * change so it picks the new language up — but the **Application object is
+     * not**. Anything holding `@ApplicationContext` therefore keeps whatever
+     * locale the process started in, and every ViewModel-produced string stays
+     * in the old language until the process is killed.
+     *
+     * Found on device: after choosing Tamil on a device running the en-XA
+     * pseudolocale, the dashboard rendered in Tamil but its ViewModel-supplied
+     * stat labels came back as pseudolocale text.
+     *
+     * Unlike [wrap] this has no `Locale.setDefault` side effect — it is called
+     * per string, and mutating the process default that often would be wrong.
+     */
+    // Cached: this is called once per getString, and createConfigurationContext
+    // allocates a whole Context each time. Keyed on the tag so a language change
+    // invalidates it naturally.
+    @Volatile private var resCacheTag: String? = null
+    @Volatile private var resCache: Context? = null
+
+    fun resContext(base: Context): Context {
+        val tag = storedTag(base)
+        if (tag.isEmpty()) return base
+        resCache?.let { if (resCacheTag == tag) return it }
+        val locale = Locale.forLanguageTag(tag)
+        if (base.resources.configuration.locales[0] == locale) return base
+        val cfg = Configuration(base.resources.configuration)
+        cfg.setLocales(LocaleList(locale))
+        val ctx = base.createConfigurationContext(cfg)
+        resCacheTag = tag
+        resCache = ctx
+        return ctx
+    }
 }
+
+/**
+ * `getString` that always resolves in the app's chosen language.
+ *
+ * Use this instead of `Context.getString` anywhere the Context might be the
+ * application one — i.e. in every ViewModel. See [LocaleManager.resContext].
+ */
+fun Context.localizedString(@androidx.annotation.StringRes id: Int, vararg args: Any): String =
+    if (args.isEmpty()) LocaleManager.resContext(this).getString(id)
+    else LocaleManager.resContext(this).getString(id, *args)
+
+
+/**
+ * `getQuantityString` that always resolves in the app's chosen language.
+ *
+ * `context.resources` is the raw Resources of that Context, so on the
+ * application Context it stays at the process-start locale — the same trap
+ * [localizedString] exists for. A plurals lookup needs the correction just as
+ * much as a string does, and gets it wrong more visibly: the singular/plural
+ * rule itself comes from the resolved locale.
+ */
+fun Context.localizedPlural(
+    @androidx.annotation.PluralsRes id: Int,
+    quantity: Int,
+    vararg args: Any,
+): String = LocaleManager.resContext(this).resources.getQuantityString(id, quantity, *args)

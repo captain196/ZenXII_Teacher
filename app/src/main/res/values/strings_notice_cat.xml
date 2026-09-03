@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notice category chips. The VALUE stays the English wire string (compared
+     at NoticesViewModel:151 and written at :144); only the label localizes. -->
+<resources>
+    <string name="notice_cat_all">All</string>
+    <string name="notice_cat_general">General</string>
+    <string name="notice_cat_academic">Academic</string>
+    <string name="notice_cat_event">Event</string>
+    <string name="notice_cat_holiday">Holiday</string>
+    <string name="notice_cat_exam">Exam</string>
+    <string name="notice_cat_fee">Fee</string>
+    <string name="notice_cat_policy">Policy</string>
+    <string name="notice_cat_administrative">Administrative</string>
+    <string name="notice_cat_emergency">Emergency</string>
+    <string name="notice_cat_recruitment">Recruitment</string>
+</resources>

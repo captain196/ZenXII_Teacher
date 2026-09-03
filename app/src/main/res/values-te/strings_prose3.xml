@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave: interpolated/concatenated UI copy that no position pattern could
+     see, because the literal was assembled into a val or passed positionally.
+     Found by the widened prose sweep (audit.py HOLE 8). -->
+<resources>
+    <string name="att_saved_rejected_fmt">%1$d సేవ్ · %2$d తిరస్కరించబడ్డాయి (గమనికలు చూడండి).</string>
+    <string name="att_correction_submitted_fmt">సవరణ సమర్పించబడింది (#%1$s)</string>
+    <string name="ptm_hosting_fmt">%1$s నిర్వహిస్తున్నారు</string>
+    <string name="ptm_mark_all_delivered_fmt">అన్నీ %1$d అందించినట్లు గుర్తించండి</string>
+    <string name="ptm_roll_fmt">రోల్ #%1$s</string>
+    <string name="ptm_parent_fmt">తల్లిదండ్రులు: %1$s</string>
+    <string name="marks_theory_max_fmt">సిద్ధాంతం (%1$s)</string>
+    <string name="marks_practical_max_fmt">ప్రయోగాత్మకం (%1$s)</string>
+    <string name="marks_total_header">మొత్తం</string>
+    <string name="marks_theory_a11y_fmt">%1$s, రోల్ %2$s సిద్ధాంత మార్కులు</string>
+    <string name="marks_practical_a11y_fmt">%1$s, రోల్ %2$s ప్రయోగాత్మక మార్కులు</string>
+    <string name="fp_no_contact_teacher_fmt">"%1$s" కోసం సంప్రదింపు కనుగొనబడలేదు. మీ ఉపాధ్యాయ ID తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.</string>
+    <string name="search_no_results_for_fmt">"%1$s" కోసం ఫలితాలు లేవు</string>
+    <string name="dash_covering_period_fmt">%1$s కోసం ప్రత్యామ్నాయం — పి%2$d %3$s</string>
+    <string name="dash_covering_periods_fmt">%1$s కోసం ప్రత్యామ్నాయం — %2$s</string>
+    <string name="students_subject_fmt">సబ్జెక్ట్: %1$s</string>
+    <string name="students_assigned">కేటాయించబడింది</string>
+    <string name="story_by_fmt">%1$s స్టోరీ</string>
+    <string name="hw_due_today_fmt2">ఈరోజు గడువు, %1$s IST</string>
+    <string name="hw_due_tomorrow_fmt2">రేపు గడువు, %1$s IST</string>
+    <string name="hw_due_on_fmt2">%1$s న గడువు, %2$s IST</string>
+    <string name="hw_upload_attach_failed_fmt">జోడింపులను అప్‌లోడ్ చేయలేకపోయాము: %1$s</string>
+    <string name="leave_withdraw_confirm_fmt">ఇది %2$s - %3$s కోసం మీ పెండింగ్ %1$s అభ్యర్థనను ఉపసంహరిస్తుంది.</string>
+    <string name="leave_applying_half_fmt">%3$s న సగం-రోజు %1$s (%2$s) కోసం దరఖాస్తు</string>
+    <string name="leave_applying_one_fmt">%2$s న %1$s కోసం దరఖాస్తు (1 రోజు)</string>
+    <string name="leave_type_default">సెలవు</string>
+    <string name="leave_half_morning">ఉదయం</string>
+    <string name="leave_half_afternoon">మధ్యాహ్నం</string>
+    <string name="leave_pending_requests_fmt">పెండింగ్ అభ్యర్థనలు (%1$d)</string>
+    <string name="leave_processed_count_fmt">ప్రాసెస్ చేయబడింది (%1$d)</string>
+    <string name="leave_processed_by_fmt">%1$s ద్వారా ప్రాసెస్ చేయబడింది</string>
+    <string name="flag_raised_for_fmt">%1$s కోసం ఫ్లాగ్ లేవనెత్తబడింది</string>
+    <string name="flag_raised_toast">🚩 ఫ్లాగ్ లేవనెత్తబడింది</string>
+</resources>

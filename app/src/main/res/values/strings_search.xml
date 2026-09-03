@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Topbar search: section headers and result placeholders. -->
+<resources>
+    <string name="search_cat_my_classes">My Classes</string>
+    <string name="search_cat_goto">Go to</string>
+    <string name="search_open_fmt">Open %1$s</string>
+    <string name="search_unnamed_student">(Unnamed student)</string>
+    <string name="search_untitled_notice">(Untitled notice)</string>
+    <string name="search_untitled_event">(Untitled event)</string>
+    <string name="search_class_teacher">Class Teacher</string>
+</resources>

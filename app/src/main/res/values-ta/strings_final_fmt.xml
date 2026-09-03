@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Final interpolated copy: geofence hint and homework delete summary. -->
+<resources>
+    <string name="myatt_outside_geofence">நீங்கள் %2$s இலிருந்து %1$s தொலைவில் — வருகை பதிவுக்கு அருகில் வாருங்கள்.</string>
+    <string name="hw_deleted_detail">%1$s (%2$s)</string>
+    <string name="hw_del_failed">%1$d தோல்வி</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Final interpolated copy: geofence hint and homework delete summary. -->
+<resources>
+    <string name="myatt_outside_geofence">आप %2$s से %1$s दूर हैं — क्लॉक इन हेतु पास जाएँ।</string>
+    <string name="hw_deleted_detail">%1$s (%2$s)</string>
+    <string name="hw_del_failed">%1$d विफल</string>
+</resources>

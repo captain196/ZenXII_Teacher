@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Remaining interpolated copy (multi-arg / conditional) as format strings. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="appr_type_reviewer">%1$s • Reviewer: %2$s</string>
+    <string name="ev_view_all_photos">View all photos (%1$d)</string>
+    <string name="fees_cleared_pending" tools:ignore="PluralsCandidate">%1$d of %2$d cleared · %3$s pending</string>
+    <string name="gal_tap_choose_video">Tap to choose video</string>
+    <string name="gal_tap_choose_photo">Tap to choose photo</string>
+    <string name="marks_class_max">%1$s - %2$s | Max: %3$s</string>
+    <string name="results_row_summary">Roll %1$s · %2$s · %3$s</string>
+    <string name="myatt_today_is">Today is a %1$s</string>
+    <string name="myatt_accuracy">Accuracy ± %1$s m</string>
+    <string name="myatt_from_school">%1$s from school</string>
+    <string name="myatt_done_times">All done for today · %1$s — %2$s</string>
+    <string name="myatt_recorded_status">Attendance already recorded today (%1$s).</string>
+    <string name="myatt_opens_at">Check-in opens at %1$s.</string>
+    <string name="myatt_ontime_by">On time — clock in by %1$s%2$s</string>
+    <string name="myatt_marked_late">You\'ll be marked Late (+%1$d min)%2$s</string>
+    <string name="myatt_closed_after">Check-in window closed (after %1$s). File a regularization instead.</string>
+    <string name="myatt_campus_fallback">campus</string>
+    <string name="myatt_until">until %1$s</string>
+    <string name="myatt_working_since_fmt">Working since %1$s</string>
+    <string name="myatt_out_at">, out %1$s</string>
+    <string name="reg_my_requests_n">My Requests (%1$d)</string>
+    <string name="reg_couldnt_refresh">Couldn\'t refresh: %1$s</string>
+    <string name="reg_applied_label">Applied: %1$s</string>
+    <string name="myatt_full_day_suffix"> · Full day %1$sh</string>
+</resources>

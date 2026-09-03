@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Login branding-panel feature bullets (wide layout only). -->
+<resources>
+    <string name="login_feature_attendance">సెకన్లలో హాజరు తీసుకోండి</string>
+    <string name="login_feature_marks">ఆటో-లెక్కింపుతో మార్కులు అప్‌లోడ్ చేయండి</string>
+    <string name="login_feature_communicate">తల్లిదండ్రులతో తక్షణమే సంభాషించండి</string>
+</resources>

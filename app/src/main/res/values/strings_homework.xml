@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3a: homework - list, composer, grading panel. -->
+<resources>
+    <string name="hw_create_new">Create new homework</string>
+    <string name="hw_new">New Homework</string>
+    <string name="hw_delete_q">Delete Homework?</string>
+    <string name="common_delete">Delete</string>
+    <string name="hw_all_subjects">All Subjects</string>
+    <string name="hw_loading">Loading homework...</string>
+    <string name="hw_none">No homework assigned</string>
+    <string name="hw_none_hint">Tap + to create new homework</string>
+    <string name="hw_past_due">Past due</string>
+    <string name="hw_closed">Closed</string>
+    <string name="hw_has_attachments">Has attachments</string>
+    <string name="hw_edit">Edit homework</string>
+    <string name="hw_close_stop">Close homework (stop submissions)</string>
+    <string name="hw_close_panel">Close panel</string>
+    <string name="hw_submitted">Submitted</string>
+    <string name="hw_attachments_hdr">ATTACHMENTS</string>
+    <string name="common_open">Open</string>
+    <string name="hw_student_response">Student\'s response:</string>
+    <string name="hw_score">Score</string>
+    <string name="hw_score_hint">e.g. 8</string>
+    <string name="hw_score_range">Score must be 0–200</string>
+    <string name="hw_remark">Remark</string>
+    <string name="hw_remark_hint">e.g. Good work, keep it up!</string>
+    <string name="common_close">Close</string>
+    <string name="common_title">Title</string>
+    <string name="hw_title_hint">e.g. Chapter 4 — Exercise 3</string>
+    <string name="common_details">Details</string>
+    <string name="hw_details_hint">What should students do?</string>
+    <string name="common_subject">Subject</string>
+    <string name="hw_due_date">Due date</string>
+    <string name="common_tomorrow">Tomorrow</string>
+    <string name="hw_in_3_days">In 3 days</string>
+    <string name="hw_next_week">Next week</string>
+    <string name="common_pick_date">Pick date</string>
+    <string name="common_dismiss">Dismiss</string>
+    <string name="hw_remove_attachment">Remove attachment</string>
+</resources>

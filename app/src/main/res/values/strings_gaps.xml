@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings hidden from the audit by the escape-sequence / conditional detector holes. -->
+<resources>
+    <string name="att_all_marked">All marked ✓</string>
+    <string name="login_tagline">Manage your classes, attendance, and marks\nall in one place.</string>
+    <string name="common_hide">Hide</string>
+    <string name="common_show">Show</string>
+    <string name="ev_view_gallery">View gallery</string>
+    <string name="fees_select_class">Select a class</string>
+    <string name="common_collapse">Collapse</string>
+    <string name="common_expand">Expand</string>
+    <string name="gal_cancel_upload">Cancel upload</string>
+    <string name="file_type_image">Image</string>
+    <string name="file_type_document">Document</string>
+    <string name="leave_no_balances">Leave balances not configured yet.\nContact your admin to set up leave types.</string>
+    <string name="lib_due_today">Due today</string>
+    <string name="reg_clock_in_time">Clock In time</string>
+    <string name="reg_clock_out_time">Clock Out time</string>
+    <string name="reg_switch_clock">Switch to clock</string>
+    <string name="reg_switch_keyboard">Switch to keyboard entry</string>
+    <string name="profile_class_teacher_prefix">Class Teacher  ·  %1$s</string>
+    <string name="rf_all_flags">All Flags</string>
+    <string name="rf_none_student">No flags for this student</string>
+    <string name="rf_none_class">No flags in this class</string>
+    <string name="results_no_rank">Rank not available</string>
+    <string name="results_collapse_subjects">Collapse subjects</string>
+    <string name="results_expand_subjects">Expand subjects</string>
+    <string name="wt_desc_attendance">Take attendance digitally with one tap.\nTrack patterns and generate reports effortlessly.</string>
+    <string name="wt_desc_marks">Upload marks, auto-calculate grades, and\nshare results with parents instantly.</string>
+    <string name="wt_desc_connected">Communicate with parents, share notices,\nand manage leave requests all in one place.</string>
+    <string name="wt_get_started">Get Started</string>
+    <string name="wt_next">Next</string>
+    <string name="story_unmute">Unmute</string>
+    <string name="story_mute">Mute</string>
+    <string name="story_none_active">No active stories</string>
+    <string name="story_none_yet">No stories yet</string>
+    <string name="story_past_in_archive">Your past stories are in Archived above.</string>
+    <string name="tt_lunch">Lunch</string>
+    <string name="tt_break">Break</string>
+    <string name="fees_yearly_short">Yearly</string>
+</resources>

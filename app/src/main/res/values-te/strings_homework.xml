@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3a: homework - list, composer, grading panel. -->
+<resources>
+    <string name="hw_create_new">కొత్త హోంవర్క్ సృష్టించండి</string>
+    <string name="hw_new">కొత్త హోంవర్క్</string>
+    <string name="hw_delete_q">హోంవర్క్ తొలగించాలా?</string>
+    <string name="common_delete">తొలగించు</string>
+    <string name="hw_all_subjects">అన్ని సబ్జెక్టులు</string>
+    <string name="hw_loading">హోంవర్క్ లోడ్ అవుతోంది...</string>
+    <string name="hw_none">హోంవర్క్ కేటాయించలేదు</string>
+    <string name="hw_none_hint">కొత్త హోంవర్క్ సృష్టించడానికి + నొక్కండి</string>
+    <string name="hw_past_due">గడువు దాటింది</string>
+    <string name="hw_closed">మూసివేయబడింది</string>
+    <string name="hw_has_attachments">అటాచ్‌మెంట్‌లు ఉన్నాయి</string>
+    <string name="hw_edit">హోంవర్క్ సవరించండి</string>
+    <string name="hw_close_stop">హోంవర్క్ మూసివేయండి (సమర్పణ ఆపండి)</string>
+    <string name="hw_close_panel">ప్యానెల్ మూసివేయండి</string>
+    <string name="hw_submitted">సమర్పించారు</string>
+    <string name="hw_attachments_hdr">అటాచ్‌మెంట్‌లు</string>
+    <string name="common_open">తెరవండి</string>
+    <string name="hw_student_response">విద్యార్థి సమాధానం:</string>
+    <string name="hw_score">స్కోరు</string>
+    <string name="hw_score_hint">ఉదా. 8</string>
+    <string name="hw_score_range">స్కోరు 0–200 మధ్య ఉండాలి</string>
+    <string name="hw_remark">వ్యాఖ్య</string>
+    <string name="hw_remark_hint">ఉదా. మంచి పని, ఇలాగే కొనసాగించండి!</string>
+    <string name="common_close">మూసివేయి</string>
+    <string name="common_title">శీర్షిక</string>
+    <string name="hw_title_hint">ఉదా. అధ్యాయం 4 — వ్యాయామం 3</string>
+    <string name="common_details">వివరాలు</string>
+    <string name="hw_details_hint">విద్యార్థులు ఏమి చేయాలి?</string>
+    <string name="common_subject">సబ్జెక్ట్</string>
+    <string name="hw_due_date">గడువు తేదీ</string>
+    <string name="common_tomorrow">రేపు</string>
+    <string name="hw_in_3_days">3 రోజుల్లో</string>
+    <string name="hw_next_week">వచ్చే వారం</string>
+    <string name="common_pick_date">తేదీని ఎంచుకోండి</string>
+    <string name="common_dismiss">తీసివేయి</string>
+    <string name="hw_remove_attachment">అటాచ్‌మెంట్ తీసివేయండి</string>
+</resources>

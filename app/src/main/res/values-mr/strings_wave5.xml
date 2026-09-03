@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 5: found on device / by the widened position audit (HOLE 10-11). -->
+<resources>
+    <string name="lib_copies_label">प्रती</string>
+    <string name="story_reacted_label">प्रतिक्रिया दिली</string>
+    <string name="students_class_fallback">वर्ग</string>
+</resources>

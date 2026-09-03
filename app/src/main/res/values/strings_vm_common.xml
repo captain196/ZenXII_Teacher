@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViewModel-level messages: auth, dashboard, attendance, marks, my attendance. -->
+<resources>
+    <string name="vm_teacher_id_required">Teacher ID is required</string>
+    <string name="vm_password_required">Password is required</string>
+    <string name="vm_login_failed">Login failed</string>
+    <string name="vm_error_occurred">An error occurred</string>
+    <string name="vm_reset_failed">Reset failed.</string>
+    <string name="vm_pw_length">Password must be 8–72 characters.</string>
+    <string name="vm_pw_upper">Must include an uppercase letter.</string>
+    <string name="vm_pw_lower">Must include a lowercase letter.</string>
+    <string name="vm_pw_digit">Must include a digit.</string>
+    <string name="vm_pw_mismatch">Passwords do not match.</string>
+    <string name="vm_logout_failed">Logout failed</string>
+    <string name="vm_not_logged_in">Not logged in</string>
+    <string name="vm_no_session">No active academic session for your school yet. Pull to refresh.</string>
+    <string name="vm_dash_load_error">Couldn\'t load your dashboard — check your connection and pull to refresh.</string>
+    <string name="vm_dash_load_failed">Failed to load dashboard</string>
+    <string name="vm_stat_classes">Classes</string>
+    <string name="vm_substitute">Substitute</string>
+    <string name="vm_att_load_failed">Failed to load attendance</string>
+    <string name="vm_att_past_month">Past-month edits require a correction request. Tap any locked cell to file one.</string>
+    <string name="vm_att_date_changed">The date changed since you started marking. Reloading today\'s sheet — please re-check and save again.</string>
+    <string name="vm_att_not_authorized">Not authorized for this class.</string>
+    <string name="vm_att_holiday">Today is a holiday — attendance cannot be marked.</string>
+    <string name="vm_conflict_refresh">Conflict — refresh and retry.</string>
+    <string name="vm_not_found">Not found.</string>
+    <string name="vm_save_failed">Save failed</string>
+    <string name="vm_correction_exists">A pending correction already exists.</string>
+    <string name="vm_reason_min">Reason must be 10+ characters.</string>
+    <string name="vm_submit_failed">Failed to submit</string>
+    <string name="vm_requests_load_failed">Failed to load requests</string>
+    <string name="vm_marks_invalid">Invalid</string>
+    <string name="vm_marks_fix_errors">Please fix validation errors before saving</string>
+    <string name="vm_marks_saved_offline">Saved offline — will sync when online</string>
+    <string name="vm_marks_save_failed">Failed to save marks</string>
+    <string name="vm_myatt_load_failed">Couldn\'t load attendance.</string>
+    <string name="vm_unexpected_error">Unexpected error</string>
+    <string name="vm_reg_load_failed">Couldn\'t load your requests.</string>
+    <string name="vm_reg_submit_failed">Could not submit request.</string>
+</resources>

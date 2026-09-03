@@ -19,6 +19,10 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /**
  * One selectable audience target in the upload dialog — a concrete
@@ -27,7 +31,7 @@ import javax.inject.Inject
 data class AudienceOption(
     /** Canonical token (StorySharedConfig.audienceKey), e.g. "8-a". */
     val token: String,
-    /** Human label, e.g. "Class 8th Section A". */
+    /** Human label, e.g. "Class 8th Section A"  /* i18n-ignore: sample constant */. */
     val label: String,
     /** True if the teacher is the class-teacher of this section. */
     val isClassTeacher: Boolean
@@ -119,7 +123,10 @@ sealed class StoriesEvent {
 class StoriesTeacherViewModel @Inject constructor(
     private val storyRepo: StoryFirestoreRepository,
     private val teacherRepo: TeacherRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object {
@@ -238,8 +245,8 @@ class StoriesTeacherViewModel @Inject constructor(
     fun uploadStory() {
         val state = _uiState.value
         if (state.uploadUrl.isBlank()) {
-            com.schoolsync.teacher.util.debugLog("Stories.publish BLOCKED — uploadUrl blank")
-            viewModelScope.launch { _events.emit(StoriesEvent.Error("Media URL is required")) }
+            com.schoolsync.teacher.util.debugLog("Stories.publish BLOCKED — uploadUrl blank"  /* i18n-ignore: log */)
+            viewModelScope.launch { _events.emit(StoriesEvent.Error(appContext.localizedString(R.string.vm_story_media_required))) }
             return
         }
         // Backstop for the poster race. The Share button is already disabled
@@ -247,9 +254,9 @@ class StoriesTeacherViewModel @Inject constructor(
         // a queued tap) and a posterless video is unrecoverable from the doc
         // alone — so refuse here too rather than trusting the button.
         if (state.posterPending) {
-            com.schoolsync.teacher.util.debugLog("Stories.publish BLOCKED — poster still generating")
+            com.schoolsync.teacher.util.debugLog("Stories.publish BLOCKED — poster still generating"  /* i18n-ignore: log */)
             viewModelScope.launch {
-                _events.emit(StoriesEvent.Error("Still preparing the video preview — one moment."))
+                _events.emit(StoriesEvent.Error(appContext.localizedString(R.string.vm_story_preview_wait)))
             }
             return
         }
@@ -291,14 +298,14 @@ class StoriesTeacherViewModel @Inject constructor(
                                 posterFailed = false
                             )
                         }
-                        _events.emit(StoriesEvent.Success("Story uploaded successfully"))
+                        _events.emit(StoriesEvent.Success(appContext.localizedString(R.string.vm_story_uploaded)))
                         // No reload call — listener auto-pushes the new doc.
                     },
                     onFailure = { e ->
                         com.schoolsync.teacher.util.debugLog(
                             "Stories.publish FAILED: ${e.javaClass.simpleName}: ${e.message}"
                         )
-                        Log.e(TAG, "Failed to upload story", e)
+                        Log.e(TAG, appContext.localizedString(R.string.vm_story_upload_failed), e)
                         // Hardening #5 — Storage upload already happened
                         // (it landed during the picker step) but the
                         // Firestore write failed. Clean up the orphan.
@@ -315,11 +322,11 @@ class StoriesTeacherViewModel @Inject constructor(
                                 mediaUploadPercent = -1
                             )
                         }
-                        _events.emit(StoriesEvent.Error(e.message ?: "Failed to upload story"))
+                        _events.emit(StoriesEvent.Error(e.message ?: appContext.localizedString(R.string.vm_story_upload_failed)))
                     }
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to upload story", e)
+                Log.e(TAG, appContext.localizedString(R.string.vm_story_upload_failed), e)
                 if (storagePathToCleanup.isNotBlank()) {
                     com.schoolsync.teacher.util.StoryMediaUploader
                         .deleteByPath(storagePathToCleanup)
@@ -332,7 +339,7 @@ class StoriesTeacherViewModel @Inject constructor(
                         mediaUploadPercent = -1
                     )
                 }
-                _events.emit(StoriesEvent.Error(e.message ?: "Failed to upload story"))
+                _events.emit(StoriesEvent.Error(e.message ?: appContext.localizedString(R.string.vm_story_upload_failed)))
             }
         }
     }
@@ -378,15 +385,15 @@ class StoriesTeacherViewModel @Inject constructor(
             try {
                 storyRepo.deleteStory(story.storyId).fold(
                     onSuccess = {
-                        _events.emit(StoriesEvent.Success("Story deleted"))
+                        _events.emit(StoriesEvent.Success(appContext.localizedString(R.string.vm_story_deleted)))
                         // Listener removes the row automatically.
                     },
                     onFailure = { e ->
-                        _events.emit(StoriesEvent.Error(e.message ?: "Failed to delete"))
+                        _events.emit(StoriesEvent.Error(e.message ?: appContext.localizedString(R.string.vm_delete_failed)))
                     }
                 )
             } catch (e: Exception) {
-                _events.emit(StoriesEvent.Error(e.message ?: "Failed to delete"))
+                _events.emit(StoriesEvent.Error(e.message ?: appContext.localizedString(R.string.vm_delete_failed)))
             }
         }
     }
@@ -459,7 +466,7 @@ class StoriesTeacherViewModel @Inject constructor(
                 com.schoolsync.teacher.util.debugLog(
                     "Stories.pick IDENTITY BLANK schoolId='$schoolCode' teacherId='$teacherId'"
                 )
-                _events.emit(StoriesEvent.Error("Missing school or user — please re-login."))
+                _events.emit(StoriesEvent.Error(appContext.localizedString(R.string.vm_missing_school_user)))
                 return@launch
             }
             com.schoolsync.teacher.util.debugLog(
@@ -545,12 +552,11 @@ class StoriesTeacherViewModel @Inject constructor(
                                 // uploaded video the first time they open the
                                 // story's insights (backfillPosterIfMissing).
                                 _events.emit(StoriesEvent.Error(
-                                    "Couldn't make a preview frame — you can still post; " +
-                                    "the thumbnail will be generated shortly."
+                                    appContext.localizedString(R.string.vm_story_no_preview)
                                 ))
                             }
                         }
-                        _events.emit(StoriesEvent.Success("Media ready — tap Share Story to post"))
+                        _events.emit(StoriesEvent.Success(appContext.localizedString(R.string.vm_story_media_ready)))
                     }
                     is com.schoolsync.teacher.util.StoryMediaUploader.UploadProgress.Failed -> {
                         com.schoolsync.teacher.util.debugLog("Stories.upload FAILED: ${progress.reason}")

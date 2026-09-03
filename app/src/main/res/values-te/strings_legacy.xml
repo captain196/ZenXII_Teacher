@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-existing keys from strings.xml that had never been translated. -->
+<resources>
+    <string name="action_cancel">రద్దు</string>
+    <string name="action_change">మార్చు</string>
+    <string name="action_close">మూసివేయి</string>
+    <string name="action_delete">తొలగించు</string>
+    <string name="action_refresh">రిఫ్రెష్</string>
+    <string name="action_retry">మళ్లీ ప్రయత్నించండి</string>
+    <string name="action_send">పంపండి</string>
+    <string name="action_sending">పంపుతోంది…</string>
+    <string name="cd_back">వెనుకకు</string>
+    <string name="cd_delete_chat">చాట్ తొలగించండి</string>
+    <string name="cd_notifications">నోటిఫికేషన్‌లు</string>
+    <string name="cd_send">పంపండి</string>
+    <string name="dashboard_class_teacher_many">తరగతి ఉపాధ్యాయుడు · %1$s</string>
+    <string name="dashboard_class_teacher_one">తరగతి ఉపాధ్యాయుడు · %1$s</string>
+    <string name="dashboard_greeting">నమస్కారం, %1$s</string>
+    <string name="dashboard_no_classes_today">ఈరోజు తరగతులు షెడ్యూల్ కాలేదు</string>
+    <string name="dashboard_no_recent_activity">ఇటీవలి కార్యకలాపం లేదు</string>
+    <string name="dashboard_period_label">పి%1$d</string>
+    <string name="dashboard_recent_activity">ఇటీవలి కార్యకలాపం</string>
+    <string name="dashboard_title">డాష్‌బోర్డ్</string>
+    <string name="dashboard_today_schedule">ఈరోజు షెడ్యూల్</string>
+    <string name="messages_class_label">తరగతి %1$s</string>
+    <string name="messages_class_section">తరగతి %1$s %2$s</string>
+    <string name="messages_compose_to">%1$s కు సందేశం</string>
+    <string name="messages_delete_chat">చాట్ తొలగించండి</string>
+    <string name="messages_delete_confirm">%1$s తో ఈ సంభాషణను తొలగించాలా? ఇది మీ ఇన్‌బాక్స్ నుండి మాత్రమే తొలగించబడుతుంది — అవతలి వ్యక్తికి ఇది కనిపిస్తూనే ఉంటుంది.</string>
+    <string name="messages_delete_default_name">ఈ కాంటాక్ట్</string>
+    <string name="messages_input_placeholder">సందేశం టైప్ చేయండి…</string>
+    <string name="messages_new">కొత్త సందేశం</string>
+    <string name="messages_no_conversations">ఇంకా సంభాషణలు లేవు</string>
+    <string name="messages_no_matches">సరిపోలిక లేదు</string>
+    <string name="messages_no_students">విద్యార్థులు కనబడలేదు</string>
+    <string name="messages_parent_of">%1$s తల్లిదండ్రులు</string>
+    <string name="messages_search_placeholder">పేరు లేదా తరగతి ద్వారా వెతకండి</string>
+    <string name="messages_select_conversation">ఒక సంభాషణను ఎంచుకోండి</string>
+    <string name="messages_select_subtitle">చాట్ ప్రారంభించడానికి జాబితా నుండి తల్లిదండ్రులను ఎంచుకోండి</string>
+    <string name="messages_title">సందేశాలు</string>
+    <string name="messages_type_your_message">మీ సందేశం టైప్ చేయండి…</string>
+    <string name="notices_by_author">%1$s ద్వారా</string>
+    <string name="notices_empty">నోటీసులు లేవు</string>
+    <string name="notices_title">నోటీసులు</string>
+    <string name="notices_unread">చదవనివి</string>
+    <string name="stat_active">చురుకుగా</string>
+    <string name="stat_assigned">కేటాయించబడింది</string>
+    <string name="stat_classes">తరగతులు</string>
+    <string name="stat_flags">ఫ్లాగ్‌లు</string>
+    <string name="stat_hw_due">హోంవర్క్ గడువు</string>
+    <string name="stat_periods">పీరియడ్‌లు</string>
+    <string name="stat_today">ఈరోజు</string>
+    <string name="stat_today_lower">ఈరోజు</string>
+</resources>

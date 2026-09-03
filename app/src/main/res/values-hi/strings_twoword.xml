@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two-word UI copy the 3-word prose threshold used to hide. -->
+<resources>
+    <string name="common_submitting_ellipsis">भेजा जा रहा है…</string>
+    <string name="att_submit_request">अनुरोध भेजें</string>
+    <string name="att_correction_pending">सुधार लंबित</string>
+    <string name="ptm_meetings_title">अभिभावक-शिक्षक बैठकें</string>
+    <string name="ptm_meeting_single">अभिभावक-शिक्षक बैठक</string>
+    <string name="fees_unknown_student">अज्ञात छात्र</string>
+    <string name="fees_last_payment">अंतिम भुगतान:</string>
+    <string name="fees_just_reminded">अभी याद दिलाया</string>
+    <string name="marks_select_exam">परीक्षा चुनें</string>
+    <string name="marks_select_subject">विषय चुनें</string>
+    <string name="marks_col_roll_no">क्रमांक</string>
+    <string name="marks_col_student_id">छात्र (ID)</string>
+    <string name="myatt_extra_day">अतिरिक्त दिन</string>
+    <string name="myatt_not_marked">चिह्नित नहीं</string>
+    <string name="myatt_on_campus">परिसर में</string>
+    <string name="myatt_locating">स्थान खोजा जा रहा है…</string>
+    <string name="myatt_clocking_in">क्लॉक इन हो रहा है…</string>
+    <string name="myatt_clock_in">क्लॉक इन</string>
+    <string name="myatt_clocking_out">क्लॉक आउट हो रहा है…</string>
+    <string name="myatt_clock_out">क्लॉक आउट</string>
+    <string name="myatt_on_leave_short">अवकाश पर</string>
+    <string name="myatt_extra_work">अतिरिक्त कार्य</string>
+    <string name="reg_set_time">समय सेट करें</string>
+    <string name="login_hide_password">पासवर्ड छिपाएँ</string>
+    <string name="login_show_password">पासवर्ड दिखाएँ</string>
+    <string name="fp_your_school">आपका विद्यालय</string>
+    <string name="gal_upload_media">मीडिया अपलोड करें</string>
+    <string name="lib_loading">पुस्तकालय लोड हो रहा है...</string>
+    <string name="lib_unknown_author">अज्ञात लेखक</string>
+    <string name="lib_unknown_book">अज्ञात पुस्तक</string>
+    <string name="dash_todays_attendance">आज की उपस्थिति</string>
+    <string name="story_just_now">अभी</string>
+    <string name="story_search_viewers">दर्शक खोजें</string>
+    <string name="story_new_story">नई स्टोरी</string>
+    <string name="story_loading">स्टोरीज़ लोड हो रही हैं...</string>
+    <string name="story_preparing_preview">पूर्वावलोकन तैयार हो रहा है…</string>
+    <string name="story_share">स्टोरी साझा करें</string>
+    <string name="profile_marital_status">वैवाहिक स्थिति</string>
+    <string name="profile_fathers_name">पिता का नाम</string>
+    <string name="profile_alt_phone">वैकल्पिक फ़ोन</string>
+    <string name="profile_my_assignments">मेरी नियुक्तियाँ</string>
+    <string name="hw_submit_review">समीक्षा भेजें</string>
+    <string name="hw_edit_assignment">कार्य संपादित करें</string>
+    <string name="hw_new_assignment">नया कार्य</string>
+    <string name="hw_save_changes">बदलाव सहेजें</string>
+    <string name="hw_create_assignment">कार्य बनाएँ</string>
+    <string name="ev_untitled_event">शीर्षकहीन कार्यक्रम</string>
+    <string name="leave_type_label">अवकाश प्रकार</string>
+    <string name="rf_submit_flag">फ्लैग भेजें</string>
+</resources>

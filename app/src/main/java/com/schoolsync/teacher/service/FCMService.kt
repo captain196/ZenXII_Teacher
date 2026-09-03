@@ -1,5 +1,6 @@
 package com.schoolsync.teacher.service
 
+import com.schoolsync.teacher.util.LocaleManager
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -24,6 +25,15 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class FCMService : FirebaseMessagingService() {
+
+    /**
+     * The service builds notification text with getString() while the app may
+     * not be running at all, so without this every locally-composed push string
+     * falls back to English even though the app is in another language.
+     */
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(LocaleManager.wrap(base))
+    }
 
     companion object {
         private const val TAG = "FCMService"

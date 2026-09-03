@@ -134,9 +134,12 @@ class HomeworkDateLogicTest {
 
     // ── formatDueDateIST ─────────────────────────────────────────────────
 
+    // The blank case now resolves a string resource, so it moved to the
+    // Context-taking overload and is out of scope for a JVM test. What matters
+    // here — parsing and IST end-of-day — is on the pure overload below.
     @Test
-    fun formatDueDateIST_blank_returnsNoDueDate() {
-        assertEquals("No due date", formatDueDateIST(""))
+    fun formatDueDateIST_blank_returnsEmptyFromPureOverload() {
+        assertEquals("", formatDueDateIST(""))
     }
 
     @Test

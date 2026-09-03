@@ -216,7 +216,7 @@ object Constants {
         s = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFC)
         val digest = java.security.MessageDigest.getInstance("SHA-1")
             .digest(s.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }.substring(0, 16)
+        return digest.joinToString("") { String.format(java.util.Locale.ROOT, "%02x", it) }.substring(0, 16)
     }
 
     /**

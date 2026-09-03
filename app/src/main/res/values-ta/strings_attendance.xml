@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2b: class attendance - marking grid, edit windows, correction requests. -->
+<resources>
+    <string name="att_saving">சேமிக்கிறது…</string>
+    <string name="att_save">வருகையைச் சேமி</string>
+    <string name="common_error">பிழை</string>
+    <string name="common_ok">சரி</string>
+    <string name="common_refresh">புதுப்பி</string>
+    <string name="common_today">இன்று</string>
+    <string name="common_loading">ஏற்றுகிறது…</string>
+    <string name="att_arrival_time">வருகை நேரம்</string>
+    <string name="att_request_correction">திருத்தக் கோரிக்கை</string>
+    <string name="att_change_to">இதற்கு மாற்று:</string>
+    <string name="att_reason_min">காரணம் (10+ எழுத்து)</string>
+    <string name="att_discard_q">சேமிக்காத மாற்றங்களை நீக்கவா?</string>
+    <string name="att_discard_reload">நீக்கி மீளேற்று</string>
+    <string name="att_keep_editing">திருத்தத் தொடரவும்</string>
+    <string name="att_change_class">வகுப்பை மாற்று</string>
+    <string name="att_no_classes">வகுப்பு ஒதுக்கப்படவில்லை</string>
+    <string name="att_history">வரலாறு</string>
+    <string name="att_my_requests">என் கோரிக்கைகள்</string>
+    <string name="att_all_present">அனைவரும் வருகை</string>
+    <string name="att_all_absent">அனைவரும் வரவில்லை</string>
+    <string name="att_tap_to_change">மாற்ற தட்டவும்</string>
+    <string name="att_loading">வருகை ஏற்றப்படுகிறது…</string>
+    <string name="att_no_students">மாணவர்கள் இல்லை</string>
+    <string name="att_select_class">வருகையைக் காண வகுப்பைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="att_section_empty_pick">இந்தப் பிரிவில் சேர்க்கப்பட்ட மாணவர்கள் இல்லை. மேலே உள்ள தேர்விலிருந்து வேறு வகுப்பைத் தேர்ந்தெடுக்கவும்.</string>
+    <string name="att_section_empty">இந்தப் பிரிவில் இன்னும் மாணவர்கள் சேர்க்கப்படவில்லை.</string>
+    <string name="att_read_only">வகுப்பு ஆசிரியர்கள் மட்டுமே வருகையைப் பதிவு செய்ய முடியும். நீங்கள் படிக்க-மட்டும் பயன்முறையில் பார்க்கிறீர்கள்.</string>
+    <string name="att_my_corrections_title">என் திருத்தக் கோரிக்கைகள்</string>
+    <string name="att_my_corrections_sub">நீங்கள் தாக்கல் செய்த கோரிக்கைகளும் நிலையும்</string>
+    <string name="att_no_corrections">இன்னும் திருத்தக் கோரிக்கைகள் இல்லை</string>
+    <string name="att_no_corrections_hint">பூட்டப்பட்ட அல்லது கடந்த நாளுக்குத் தாக்கல் செய்யும் கோரிக்கைகள் இங்கே தோன்றும்.</string>
+    <string name="att_history_title">வருகை வரலாறு</string>
+    <string name="att_window_open">திறந்த</string>
+    <string name="att_window_open_desc">சுதந்திரமான திருத்தம். காரணம் தேவையில்லை.</string>
+    <string name="att_window_restricted">கட்டுப்படுத்தப்பட்ட</string>
+    <string name="att_window_restricted_desc">திருத்தத்திற்குக் காரணம் தேவை (10+ எழுத்து).</string>
+    <string name="att_window_locked">பூட்டப்பட்டது</string>
+    <string name="att_reason_hint">காரணம் (எ.கா. \'பேருந்து தாமத திருத்தம்\')</string>
+    <string name="att_prev_month">முந்தைய மாதம்</string>
+    <string name="att_all_p">அனை. P</string>
+    <string name="att_all_a">அனை. A</string>
+    <string name="att_next_month">அடுத்த மாதம்</string>
+    <string name="att_col_student">மாணவர்</string>
+</resources>

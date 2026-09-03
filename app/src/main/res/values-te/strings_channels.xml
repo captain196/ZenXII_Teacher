@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification channel names + descriptions. The OS caches these at
+     channel-creation time, so NotificationChannels.ensureChannels() must be
+     re-run after a language change for the tray to follow. -->
+<resources>
+    <string name="nch_general">సాధారణ</string>
+    <string name="nch_general_desc">ZenXii నుండి సాధారణ నోటిఫికేషన్‌లు</string>
+    <string name="nch_notices">నోటీసులు &amp; సర్క్యులర్లు</string>
+    <string name="nch_notices_desc">కొత్త నోటీసులు మరియు సర్క్యులర్లు</string>
+    <string name="nch_messages">సందేశాలు</string>
+    <string name="nch_messages_desc">చాట్ సందేశాలు</string>
+    <string name="nch_attendance">హాజరు</string>
+    <string name="nch_attendance_desc">హాజరు రిమైండర్‌లు మరియు అప్‌డేట్‌లు</string>
+    <string name="nch_leave">సెలవు</string>
+    <string name="nch_leave_desc">సెలవు అభ్యర్థన అప్‌డేట్‌లు</string>
+    <string name="nch_events">ఈవెంట్‌లు</string>
+    <string name="nch_events_desc">పాఠశాల ఈవెంట్‌లు</string>
+    <string name="nch_timetable">టైమ్‌టేబుల్</string>
+    <string name="nch_timetable_desc">ప్రత్యామ్నాయ కేటాయింపులు మరియు టైమ్‌టేబుల్ మార్పులు</string>
+    <string name="nch_gallery">గ్యాలరీ</string>
+    <string name="nch_gallery_desc">కొత్త ఫోటోలు మరియు ఆల్బమ్‌లు</string>
+    <string name="nch_stories">స్టోరీలు</string>
+    <string name="nch_stories_desc">కొత్త పాఠశాల స్టోరీలు</string>
+</resources>

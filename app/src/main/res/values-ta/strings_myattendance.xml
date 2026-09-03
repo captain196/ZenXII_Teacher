@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2c: my attendance - GPS punch, calendar, regularization requests. -->
+<resources>
+    <string name="myatt_clock_in_anyway">இருப்பினும் வருகை பதிவு</string>
+    <string name="common_not_now">இப்போது வேண்டாம்</string>
+    <string name="myatt_extra_work_warn">வருகை பதிவு செய்தால் இன்று கூடுதல் வேலையாகப் பதிவாகும், உங்கள் நிறுவனக் கொள்கைப்படி அந்நாளுக்கு கூடுதல் ஊதியம் சேர்க்கப்படும்.</string>
+    <string name="myatt_today_title">இன்றைய வருகை</string>
+    <string name="myatt_check_in">உள்நுழைவு</string>
+    <string name="myatt_check_out">வெளியேற்றம்</string>
+    <string name="myatt_working_duration">பணி நேரம்</string>
+    <string name="myatt_approx_location">தோராயமான இருப்பிடம் மட்டுமே — வருகைக்குத் துல்லியமான இருப்பிடத்தை இயக்கவும்.</string>
+    <string name="myatt_enable_precise">துல்லியத்தை இயக்கு</string>
+    <string name="myatt_getting_location">உங்கள் இருப்பிடம் பெறப்படுகிறது…</string>
+    <string name="myatt_calendar">வருகை நாட்காட்டி</string>
+    <string name="myatt_all_done">இன்றைக்கு எல்லாம் முடிந்தது</string>
+    <string name="myatt_regularize">வருகையை ஒழுங்குபடுத்து</string>
+    <string name="myatt_regularize_sub">வராத அல்லது தவறவிட்ட நாட்களுக்குத் திருத்தம் கோரவும்</string>
+    <string name="myatt_perm_blocked">இருப்பிட அனுமதி தடுக்கப்பட்டது</string>
+    <string name="myatt_perm_needed">இருப்பிட அனுமதி தேவை</string>
+    <string name="myatt_location_off">இருப்பிடம் அணைக்கப்பட்டுள்ளது</string>
+    <string name="myatt_weak_gps">பலவீனமான GPS சமிக்ஞை</string>
+    <string name="myatt_perm_required">அனுமதி தேவை</string>
+    <string name="reg_submitted">கோரிக்கை சமர்ப்பிக்கப்பட்டது</string>
+    <string name="reg_sent_to_admin">அனுமதிக்காக உங்கள் பள்ளி நிர்வாகிக்கு அனுப்பப்பட்டது</string>
+    <string name="common_add">சேர்</string>
+    <string name="reg_workday_dates">பணி நாள் தேதிகள்</string>
+    <string name="reg_timezone">நேர மண்டலம்</string>
+    <string name="reg_add_another">ஒழுங்குபடுத்த மற்றொரு கடந்த தேதியைச் சேர்க்கவும்:</string>
+    <string name="reg_new_date">புதிய தேதி</string>
+    <string name="reg_select_days">நாள்(கள்) தேர்ந்தெடுக்கவும்</string>
+    <string name="common_reason">காரணம்</string>
+    <string name="reg_reason_required">காரணம் / குறிப்பு (தேவை)</string>
+    <string name="common_submitting">சமர்ப்பிக்கிறது…</string>
+    <string name="reg_your_requests">உங்கள் கோரிக்கைகள்</string>
+    <string name="reg_no_requests">இன்னும் கோரிக்கைகள் இல்லை</string>
+    <string name="reg_file_request_tab">கோரிக்கை தாக்கல்</string>
+    <string name="reg_no_requests_hint">“கோரிக்கை தாக்கல்” தாவலிலிருந்து திருத்தத்தைத் தாக்கல் செய்யவும்.</string>
+    <string name="reg_admin_prefix">நிர்வாகி:</string>
+    <string name="reg_clock_in">வருகை பதிவு</string>
+    <string name="reg_clock_out">வெளியேற்றப் பதிவு</string>
+    <string name="common_set">அமை</string>
+</resources>

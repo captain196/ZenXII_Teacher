@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Final interpolated copy: geofence hint and homework delete summary. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="myatt_outside_geofence">You\'re %1$s from %2$s — move closer to clock in.</string>
+    <string name="hw_deleted_detail">%1$s (%2$s)</string>
+    <string name="hw_del_failed" tools:ignore="PluralsCandidate">%1$d failed</string>
+</resources>

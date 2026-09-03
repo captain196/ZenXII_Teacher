@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Login branding-panel feature bullets (wide layout only). -->
+<resources>
+    <string name="login_feature_attendance">நொடிகளில் வருகை எடுங்கள்</string>
+    <string name="login_feature_marks">தானியங்கு கணக்கீட்டுடன் மதிப்பெண்களைப் பதிவேற்றுங்கள்</string>
+    <string name="login_feature_communicate">பெற்றோருடன் உடனடியாகத் தொடர்பு கொள்ளுங்கள்</string>
+</resources>

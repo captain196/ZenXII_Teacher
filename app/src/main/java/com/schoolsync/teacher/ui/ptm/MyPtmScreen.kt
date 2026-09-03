@@ -56,6 +56,8 @@ import com.schoolsync.teacher.data.model.firestore.assignmentsForTeacher
 import com.schoolsync.teacher.data.model.firestore.windowEndTime
 import com.schoolsync.teacher.data.model.firestore.windowStartTime
 import com.schoolsync.teacher.data.repository.firestore.TeacherStudentView
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 @Composable
 fun MyPtmScreen(
@@ -80,13 +82,13 @@ fun MyPtmScreen(
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Parent-Teacher Meetings",
+                    stringResource(R.string.ptm_meetings_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = cs.onBackground,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    "Meet parents from your section",
+                    stringResource(R.string.ptm_subtitle),
                     style = MaterialTheme.typography.labelMedium,
                     color = cs.onSurfaceVariant
                 )
@@ -102,7 +104,7 @@ fun MyPtmScreen(
             }
             state.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    state.error ?: "Failed to load.",
+                    state.error ?: stringResource(R.string.vm_ptm_load_failed),
                     color = cs.error,
                     modifier = Modifier.padding(24.dp)
                 )
@@ -112,13 +114,13 @@ fun MyPtmScreen(
                     Icon(Icons.Filled.CalendarMonth, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(56.dp))
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "No upcoming PTMs",
+                        stringResource(R.string.ptm_none),
                         style = MaterialTheme.typography.titleMedium,
                         color = cs.onBackground,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "When the school schedules a PTM for a section you teach,\nit will appear here.",
+                        stringResource(R.string.ptm_none_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = cs.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)
@@ -208,7 +210,7 @@ private fun PtmCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    ptm.title.ifBlank { "Parent-Teacher Meeting" },
+                    ptm.title.ifBlank { stringResource(R.string.ptm_meeting_single) },
                     style = MaterialTheme.typography.titleSmall,
                     color = cs.onSurface,
                     fontWeight = FontWeight.SemiBold,
@@ -243,7 +245,7 @@ private fun PtmCard(
             IconButton(onClick = { expanded = !expanded }) {
                 Icon(
                     if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    contentDescription = if (expanded) stringResource(R.string.common_collapse) else stringResource(R.string.common_expand),
                     tint = cs.onSurfaceVariant
                 )
             }
@@ -252,15 +254,15 @@ private fun PtmCard(
         // Counts
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatPill("Applied",   applied,   cs.primary)
-            StatPill("Delivered", delivered, SuccessGreen)
-            if (noShow > 0) StatPill("No-show", noShow, cs.error)
+            StatPill(stringResource(R.string.ptm_applied),   applied,   cs.primary)
+            StatPill(stringResource(R.string.ptm_delivered), delivered, SuccessGreen)
+            if (noShow > 0) StatPill(stringResource(R.string.ptm_no_show), noShow, cs.error)
         }
 
         if (mySections.size > 1) {
             Spacer(Modifier.height(6.dp))
             Text(
-                "Hosting ${mySections.joinToString(", ")}",
+                stringResource(R.string.ptm_hosting_fmt, mySections.joinToString(", ")),
                 style = MaterialTheme.typography.labelSmall,
                 color = cs.onSurfaceVariant
             )
@@ -270,7 +272,7 @@ private fun PtmCard(
             Spacer(Modifier.height(10.dp))
             if (rows.isEmpty()) {
                 Text(
-                    "No applications yet for your section.",
+                    stringResource(R.string.ptm_no_applications),
                     style = MaterialTheme.typography.labelMedium,
                     color = cs.onSurfaceVariant
                 )
@@ -289,7 +291,7 @@ private fun PtmCard(
                         Icon(Icons.Filled.DoneAll, null, tint = cs.onPrimaryContainer, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "Mark all $applied delivered",
+                            stringResource(R.string.ptm_mark_all_delivered_fmt, applied),
                             style = MaterialTheme.typography.labelLarge,
                             color = cs.onPrimaryContainer,
                             fontWeight = FontWeight.SemiBold
@@ -385,14 +387,14 @@ private fun StudentRow(
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    rsvp.studentName.ifBlank { "(unnamed)" },
+                    rsvp.studentName.ifBlank { stringResource(R.string.search_unnamed_student) },
                     style = MaterialTheme.typography.titleSmall,
                     color = cs.onSurface,
                     fontWeight = FontWeight.SemiBold
                 )
                 val sub = listOfNotNull(
-                    rsvp.rollNo.takeIf { it.isNotBlank() }?.let { "Roll #$it" },
-                    rsvp.parentName.takeIf { it.isNotBlank() }?.let { "Parent: $it" }
+                    rsvp.rollNo.takeIf { it.isNotBlank() }?.let { stringResource(R.string.ptm_roll_fmt, it) },
+                    rsvp.parentName.takeIf { it.isNotBlank() }?.let { stringResource(R.string.ptm_parent_fmt, it) }
                 ).joinToString(" · ")
                 if (sub.isNotBlank()) {
                     Text(sub, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
@@ -441,13 +443,13 @@ private fun StudentRow(
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ActionChip(
-                    label = "Mark delivered",
+                    label = stringResource(R.string.ptm_mark_delivered),
                     icon = Icons.Filled.CheckCircle,
                     tint = SuccessGreen,
                     onClick = { onMarkDelivered(rsvp.studentId) }
                 )
                 ActionChip(
-                    label = "No-show",
+                    label = stringResource(R.string.ptm_no_show),
                     icon = Icons.Filled.Schedule,
                     tint = cs.error,
                     onClick = { onMarkNoShow(rsvp.studentId) }

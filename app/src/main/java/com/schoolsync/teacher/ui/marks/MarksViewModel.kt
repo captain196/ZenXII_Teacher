@@ -20,6 +20,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
+import com.schoolsync.teacher.util.localizedPlural
 
 data class ExamInfo(
     val examId: String,
@@ -72,7 +77,10 @@ class MarksViewModel @Inject constructor(
     private val teacherRepository: TeacherRepository,
     private val examFirestoreRepo: ExamFirestoreRepository,
     private val studentFirestoreRepo: StudentFirestoreRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     companion object {
@@ -334,12 +342,12 @@ class MarksViewModel @Inject constructor(
         updateMark(studentId) { mark ->
             val subject = _uiState.value.selectedSubject
             // Accept fractional input (marks are Double); toDoubleOrNull rejects a
-            // stray second '.' or non-numeric text as "Invalid".
+            // stray second '.' or non-numeric text as appContext.localizedString(R.string.vm_marks_invalid).
             val numVal = value.toDoubleOrNull()
             val error = when {
-                value.isNotEmpty() && numVal == null -> "Invalid"
+                value.isNotEmpty() && numVal == null -> appContext.localizedString(R.string.vm_marks_invalid)
                 numVal != null && subject != null && numVal > subject.maxTheory -> "Max ${subject.maxTheory}"
-                numVal != null && numVal < 0 -> "Invalid"
+                numVal != null && numVal < 0 -> appContext.localizedString(R.string.vm_marks_invalid)
                 else -> null
             }
             val newTotal = calculateTotal(value, mark.practical)
@@ -353,9 +361,9 @@ class MarksViewModel @Inject constructor(
             val subject = _uiState.value.selectedSubject
             val numVal = value.toDoubleOrNull()
             val error = when {
-                value.isNotEmpty() && numVal == null -> "Invalid"
+                value.isNotEmpty() && numVal == null -> appContext.localizedString(R.string.vm_marks_invalid)
                 numVal != null && subject != null && numVal > subject.maxPractical -> "Max ${subject.maxPractical}"
-                numVal != null && numVal < 0 -> "Invalid"
+                numVal != null && numVal < 0 -> appContext.localizedString(R.string.vm_marks_invalid)
                 else -> null
             }
             val newTotal = calculateTotal(mark.theory, value)
@@ -430,7 +438,7 @@ class MarksViewModel @Inject constructor(
         }
         if (hasErrors) {
             viewModelScope.launch {
-                _events.emit(MarksEvent.SaveError("Please fix validation errors before saving"))
+                _events.emit(MarksEvent.SaveError(appContext.localizedString(R.string.vm_marks_fix_errors)))
             }
             return
         }
@@ -486,24 +494,24 @@ class MarksViewModel @Inject constructor(
                     // is queued locally and will sync automatically.
                     Log.d(TAG, "Save not acked within ${SAVE_ACK_TIMEOUT_MS}ms — treating as offline-queued")
                     _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false) }
-                    _events.emit(MarksEvent.SaveSuccess("Saved offline — will sync when online"))
+                    _events.emit(MarksEvent.SaveSuccess(appContext.localizedString(R.string.vm_marks_saved_offline)))
                 } else {
                     result.fold(
                         onSuccess = { count ->
                             Log.d(TAG, "Firestore: saved marks for $count students")
                             _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false) }
-                            _events.emit(MarksEvent.SaveSuccess("Marks saved for $count students"))
+                            _events.emit(MarksEvent.SaveSuccess(appContext.localizedPlural(R.plurals.marks_saved_for, count, count)))
                         },
                         onFailure = { e ->
                             _uiState.update { it.copy(isSaving = false) }
-                            _events.emit(MarksEvent.SaveError(e.message ?: "Failed to save marks"))
+                            _events.emit(MarksEvent.SaveError(e.message ?: appContext.localizedString(R.string.vm_marks_save_failed)))
                         }
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to save marks", e)
+                Log.e(TAG, appContext.localizedString(R.string.vm_marks_save_failed), e)
                 _uiState.update { it.copy(isSaving = false) }
-                _events.emit(MarksEvent.SaveError(e.message ?: "Failed to save marks"))
+                _events.emit(MarksEvent.SaveError(e.message ?: appContext.localizedString(R.string.vm_marks_save_failed)))
             } finally {
                 saveInProgress = false
             }

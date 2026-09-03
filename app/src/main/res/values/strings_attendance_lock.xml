@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Attendance locked-window banner. -->
+<resources>
+    <string name="att_locked_by_fmt">Locked by %1$s. File a correction request.</string>
+    <string name="att_locked_generic">Locked. File a correction request to change marks.</string>
+</resources>

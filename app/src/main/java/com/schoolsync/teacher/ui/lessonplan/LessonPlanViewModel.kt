@@ -20,11 +20,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import androidx.annotation.StringRes
+import com.schoolsync.teacher.util.localizedString
 
 /** UI state for the daily lesson planner screen. */
 data class LessonPlanUiState(
     val date: String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
-    val dayLabel: String = SimpleDateFormat("EEEE, d MMM", Locale.US).format(Date()),
+    val dayLabel: String = SimpleDateFormat("EEEE, d MMM"  /* i18n-ignore: date pattern */, Locale.US).format(Date()),
     val rows: List<SlotWithPlan> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -37,7 +42,9 @@ data class LessonPlanUiState(
 )
 
 sealed interface LessonPlanEvent {
-    data class Saved(val message: String = "Saved") : LessonPlanEvent
+    // @StringRes, not String: this is a top-level declaration, so a default
+    // String would be resolved once per process and freeze the launch language.
+    data class Saved(@StringRes val messageRes: Int = R.string.vm_saved) : LessonPlanEvent
     data class Error(val message: String) : LessonPlanEvent
     data object Conflict : LessonPlanEvent       // 409-equivalent — view auto-reloads
 }
@@ -45,6 +52,9 @@ sealed interface LessonPlanEvent {
 @HiltViewModel
 class LessonPlanViewModel @Inject constructor(
     private val repo: LessonPlanFirestoreRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(LessonPlanUiState())
@@ -68,13 +78,13 @@ class LessonPlanViewModel @Inject constructor(
                         it.copy(
                             rows = rows,
                             isLoading = false,
-                            dayLabel = SimpleDateFormat("EEEE, d MMM", Locale.US)
+                            dayLabel = SimpleDateFormat("EEEE, d MMM"  /* i18n-ignore: date pattern */, Locale.US)
                                 .format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date) ?: Date())
                         )
                     }
                 },
                 onFailure = { e ->
-                    _ui.update { it.copy(isLoading = false, error = e.message ?: "Failed to load") }
+                    _ui.update { it.copy(isLoading = false, error = e.message ?: appContext.localizedString(R.string.vm_load_failed)) }
                 }
             )
         }
@@ -173,7 +183,7 @@ class LessonPlanViewModel @Inject constructor(
                     if (closeAfter) closeEdit()
                     load()
                 } else {
-                    _events.emit(LessonPlanEvent.Error(e.message ?: "Save failed"))
+                    _events.emit(LessonPlanEvent.Error(e.message ?: appContext.localizedString(R.string.vm_save_failed)))
                 }
             }
         )

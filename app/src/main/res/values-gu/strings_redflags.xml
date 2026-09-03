@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 4b: red flags - list, quick-flag sheet, canonical severity/type. -->
+<resources>
+    <string name="rf_new">નવો ફ્લેગ</string>
+    <string name="rf_loading">ફ્લેગ લોડ થઈ રહ્યા છે...</string>
+    <string name="rf_view_all">બધું જુઓ</string>
+    <string name="rf_add">ફ્લેગ ઉમેરો</string>
+    <string name="rf_delete_q">આ ફ્લેગ કાઢી નાખવો?</string>
+    <string name="rf_resolved">ઉકેલાયું</string>
+    <string name="rf_tpl_late_hw">મોડું ગૃહકાર્ય</string>
+    <string name="rf_tpl_behaviour">વર્તન</string>
+    <string name="rf_tpl_low_perf">ઓછું પ્રદર્શન</string>
+    <string name="rf_quick_reason">ઝડપી કારણ</string>
+    <string name="common_severity">ગંભીરતા</string>
+    <string name="common_message">સંદેશ</string>
+    <string name="rf_no_subject_note">આ વર્ગ માટે તમને કોઈ વિષય સોંપાયો નથી — આ ફ્લેગ વિષય વગર દાખલ થશે. તમારું વિષય સોંપણી સેટ કરવા એડમિનને કહો.</string>
+    <string name="rf_subject_required">આ સ્ક્રીન પર વિષય જરૂરી છે.</string>
+    <string name="common_undo">પાછું લો</string>
+    <string name="rf_more_options">▸ વધુ વિકલ્પો</string>
+    <string name="rf_hide_options">▾ વિકલ્પો છુપાવો</string>
+    <string name="flag_severity_low">ઓછી</string>
+    <string name="flag_severity_medium">મધ્યમ</string>
+    <string name="flag_severity_high">ઊંચી</string>
+    <string name="flag_type_homework">ગૃહકાર્ય</string>
+    <string name="flag_type_behavior">વર્તન</string>
+    <string name="flag_type_performance">પ્રદર્શન</string>
+</resources>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3b: lesson plan, marks entry, results, student profile. -->
+<resources>
+    <string name="lp_title">Lesson Planner</string>
+    <string name="lp_no_periods">No periods scheduled today</string>
+    <string name="lp_done">Done</string>
+    <string name="lp_skip">Skip</string>
+    <string name="common_edit">Edit</string>
+    <string name="lp_topic">Topic</string>
+    <string name="lp_no_topic">— No topic —</string>
+    <string name="lp_no_topics_curriculum">No topics found in curriculum</string>
+    <string name="lp_notes">Notes</string>
+    <string name="lp_notes_hint">Anything to remember about this period…</string>
+    <string name="common_status">Status</string>
+    <string name="lp_reschedule_to">Reschedule to (YYYY-MM-DD)</string>
+    <string name="lp_period_no">Period #</string>
+    <string name="common_save">Save</string>
+    <string name="lesson_status_planned">Planned</string>
+    <string name="lesson_status_completed">Completed</string>
+    <string name="lesson_status_skipped">Skipped</string>
+    <string name="lesson_status_rescheduled">Rescheduled</string>
+    <string name="marks_save">Save Marks</string>
+    <string name="marks_discard_q">Discard unsaved marks?</string>
+    <string name="common_discard">Discard</string>
+    <string name="marks_select_exam_subject">Select exam and subject</string>
+    <string name="marks_select_hint">Choose an exam and subject to start entering marks</string>
+    <string name="marks_unsaved">Unsaved changes</string>
+    <string name="marks_entry">Marks Entry</string>
+    <string name="common_class">Class</string>
+    <string name="common_exam">Exam</string>
+    <string name="marks_max">Max Marks</string>
+    <string name="marks_theory">Theory:</string>
+    <string name="marks_practical">Practical:</string>
+    <string name="marks_total">Total:</string>
+    <string name="marks_absent_short">AB</string>
+    <string name="results_select">Select class and exam</string>
+    <string name="results_select_hint">Choose an exam to view published results</string>
+    <string name="results_not_published">Results not published yet</string>
+    <string name="results_draft">This exam\'s results are still a draft and haven\'t been published.</string>
+    <string name="results_no_breakdown">No subject breakdown available</string>
+    <string name="stu_profile">Student Profile</string>
+    <string name="stu_id">Student ID</string>
+    <string name="stu_father">Father\'s Name</string>
+    <string name="stu_mother">Mother\'s Name</string>
+    <string name="stu_dob">Date of Birth</string>
+    <string name="stu_gender">Gender</string>
+    <string name="stu_admission_date">Admission Date</string>
+    <string name="stu_fees_hdr">FEES</string>
+    <string name="stu_monthly_status">Monthly Status</string>
+</resources>

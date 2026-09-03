@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English (source)
+     Teacher app foundation: canonical labels + language UI.
+     DISPLAY ONLY. The English source of the day/month/status names is
+     also a Firestore path segment, an RTDB key and a stored code — the
+     staff app WRITES these, so a translated form must never be sent
+     back. Read only via CanonicalLabels / StatusLabels at render. -->
+<resources>
+    <string name="attendance_status_absent">Absent</string>
+    <string name="attendance_status_holiday">Holiday</string>
+    <string name="attendance_status_late">Late</string>
+    <string name="attendance_status_leave">Leave</string>
+    <string name="attendance_status_present">Present</string>
+    <string name="attendance_status_vacation">Vacation</string>
+    <string name="day_friday">Friday</string>
+    <string name="day_monday">Monday</string>
+    <string name="day_saturday">Saturday</string>
+    <string name="day_sunday">Sunday</string>
+    <string name="day_thursday">Thursday</string>
+    <string name="day_tuesday">Tuesday</string>
+    <string name="day_wednesday">Wednesday</string>
+    <string name="lang_setup_continue">Continue</string>
+    <string name="lang_setup_subtitle">You can change this anytime in Profile</string>
+    <string name="lang_setup_title">Choose your language</string>
+    <string name="lang_sheet_title">Language</string>
+    <string name="leave_status_approved">Approved</string>
+    <string name="leave_status_cancelled">Cancelled</string>
+    <string name="leave_status_pending">Pending</string>
+    <string name="leave_status_rejected">Rejected</string>
+    <string name="month_april">April</string>
+    <string name="month_august">August</string>
+    <string name="month_december">December</string>
+    <string name="month_february">February</string>
+    <string name="month_january">January</string>
+    <string name="month_july">July</string>
+    <string name="month_june">June</string>
+    <string name="month_march">March</string>
+    <string name="month_may">May</string>
+    <string name="month_november">November</string>
+    <string name="month_october">October</string>
+    <string name="month_september">September</string>
+    <string name="settings_language">Language</string>
+
+    <!-- Always Hindi, never translated: on the first-run screen the app is
+         still in the device locale (usually English on Indian handsets). -->
+    <string name="lang_setup_title_alt" translatable="false">अपनी भाषा चुनें</string>
+</resources>

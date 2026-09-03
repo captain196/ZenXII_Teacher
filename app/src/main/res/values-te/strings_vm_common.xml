@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViewModel-level messages: auth, dashboard, attendance, marks, my attendance. -->
+<resources>
+    <string name="vm_teacher_id_required">ఉపాధ్యాయ ID అవసరం</string>
+    <string name="vm_password_required">పాస్‌వర్డ్ అవసరం</string>
+    <string name="vm_login_failed">లాగిన్ విఫలమైంది</string>
+    <string name="vm_error_occurred">ఒక లోపం సంభవించింది</string>
+    <string name="vm_reset_failed">రీసెట్ విఫలమైంది.</string>
+    <string name="vm_pw_length">పాస్‌వర్డ్ 8–72 అక్షరాలు ఉండాలి.</string>
+    <string name="vm_pw_upper">ఒక పెద్ద అక్షరం ఉండాలి.</string>
+    <string name="vm_pw_lower">ఒక చిన్న అక్షరం ఉండాలి.</string>
+    <string name="vm_pw_digit">ఒక అంకె ఉండాలి.</string>
+    <string name="vm_pw_mismatch">పాస్‌వర్డ్‌లు సరిపోలడం లేదు.</string>
+    <string name="vm_logout_failed">లాగ్ అవుట్ విఫలమైంది</string>
+    <string name="vm_not_logged_in">లాగిన్ కాలేదు</string>
+    <string name="vm_no_session">మీ పాఠశాలకు ఇంకా క్రియాశీల విద్యా సెషన్ లేదు. రిఫ్రెష్ కోసం లాగండి.</string>
+    <string name="vm_dash_load_error">మీ డాష్‌బోర్డ్‌ను లోడ్ చేయలేకపోయాము — కనెక్షన్ తనిఖీ చేసి రిఫ్రెష్ కోసం లాగండి.</string>
+    <string name="vm_dash_load_failed">డాష్‌బోర్డ్ లోడ్ చేయడంలో విఫలమైంది</string>
+    <string name="vm_stat_classes">తరగతులు</string>
+    <string name="vm_substitute">ప్రత్యామ్నాయం</string>
+    <string name="vm_att_load_failed">హాజరు లోడ్ చేయడంలో విఫలమైంది</string>
+    <string name="vm_att_past_month">గత నెల సవరణలకు సవరణ అభ్యర్థన అవసరం. దాఖలు చేయడానికి లాక్ చేసిన సెల్‌ను నొక్కండి.</string>
+    <string name="vm_att_date_changed">గుర్తించడం ప్రారంభించాక తేదీ మారింది. ఈరోజు షీట్ రీలోడ్ అవుతోంది — దయచేసి మళ్లీ తనిఖీ చేసి సేవ్ చేయండి.</string>
+    <string name="vm_att_not_authorized">ఈ తరగతికి అనుమతి లేదు.</string>
+    <string name="vm_att_holiday">ఈరోజు సెలవు — హాజరు నమోదు చేయలేరు.</string>
+    <string name="vm_conflict_refresh">వైరుధ్యం — రిఫ్రెష్ చేసి మళ్లీ ప్రయత్నించండి.</string>
+    <string name="vm_not_found">కనబడలేదు.</string>
+    <string name="vm_save_failed">సేవ్ విఫలమైంది</string>
+    <string name="vm_correction_exists">పెండింగ్‌లో ఒక సవరణ ఇప్పటికే ఉంది.</string>
+    <string name="vm_reason_min">కారణం 10+ అక్షరాలు ఉండాలి.</string>
+    <string name="vm_submit_failed">సమర్పించడంలో విఫలమైంది</string>
+    <string name="vm_requests_load_failed">అభ్యర్థనలు లోడ్ చేయడంలో విఫలమైంది</string>
+    <string name="vm_marks_invalid">చెల్లదు</string>
+    <string name="vm_marks_fix_errors">సేవ్ చేయడానికి ముందు ధ్రువీకరణ లోపాలను సరిచేయండి</string>
+    <string name="vm_marks_saved_offline">ఆఫ్‌లైన్‌లో సేవ్ చేయబడింది — ఆన్‌లైన్‌లో సింక్ అవుతుంది</string>
+    <string name="vm_marks_save_failed">మార్కులు సేవ్ చేయడంలో విఫలమైంది</string>
+    <string name="vm_myatt_load_failed">హాజరును లోడ్ చేయలేకపోయాము.</string>
+    <string name="vm_unexpected_error">ఊహించని లోపం</string>
+    <string name="vm_reg_load_failed">మీ అభ్యర్థనలను లోడ్ చేయలేకపోయాము.</string>
+    <string name="vm_reg_submit_failed">అభ్యర్థనను సమర్పించలేకపోయాము.</string>
+</resources>

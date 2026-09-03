@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 5 plurals: hand-rolled singular/plural pairs found on device.
+
+     tools:ignore="ImpliedQuantity": lib_overdue_days_unit is the bare
+     UNIT beside a number that LibraryTeacherScreen renders as its own
+     Text immediately before it, so 0/1 are already distinguishable and
+     a %d here would print the count twice. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <plurals name="lib_overdue_days_unit" tools:ignore="ImpliedQuantity">
+        <item quantity="one">दिन</item>
+        <item quantity="other">दिन</item>
+    </plurals>
+</resources>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 3b: lesson plan, marks entry, results, student profile. -->
+<resources>
+    <string name="lp_title">पाठ योजनाकार</string>
+    <string name="lp_no_periods">आज कोई कालांश निर्धारित नहीं</string>
+    <string name="lp_done">पूर्ण</string>
+    <string name="lp_skip">छोड़ें</string>
+    <string name="common_edit">संपादित करें</string>
+    <string name="lp_topic">विषय-वस्तु</string>
+    <string name="lp_no_topic">— कोई विषय-वस्तु नहीं —</string>
+    <string name="lp_no_topics_curriculum">पाठ्यक्रम में कोई विषय-वस्तु नहीं मिली</string>
+    <string name="lp_notes">टिप्पणियाँ</string>
+    <string name="lp_notes_hint">इस कालांश के बारे में याद रखने योग्य कुछ…</string>
+    <string name="common_status">स्थिति</string>
+    <string name="lp_reschedule_to">पुनर्निर्धारित करें (YYYY-MM-DD)</string>
+    <string name="lp_period_no">कालांश #</string>
+    <string name="common_save">सहेजें</string>
+    <string name="lesson_status_planned">नियोजित</string>
+    <string name="lesson_status_completed">पूर्ण</string>
+    <string name="lesson_status_skipped">छोड़ा गया</string>
+    <string name="lesson_status_rescheduled">पुनर्निर्धारित</string>
+    <string name="marks_save">अंक सहेजें</string>
+    <string name="marks_discard_q">बिना सहेजे अंक छोड़ें?</string>
+    <string name="common_discard">छोड़ें</string>
+    <string name="marks_select_exam_subject">परीक्षा और विषय चुनें</string>
+    <string name="marks_select_hint">अंक दर्ज करना शुरू करने हेतु परीक्षा और विषय चुनें</string>
+    <string name="marks_unsaved">बिना सहेजे बदलाव</string>
+    <string name="marks_entry">अंक प्रविष्टि</string>
+    <string name="common_class">कक्षा</string>
+    <string name="common_exam">परीक्षा</string>
+    <string name="marks_max">अधिकतम अंक</string>
+    <string name="marks_theory">सैद्धांतिक:</string>
+    <string name="marks_practical">प्रायोगिक:</string>
+    <string name="marks_total">कुल:</string>
+    <string name="marks_absent_short">अनु</string>
+    <string name="results_select">कक्षा और परीक्षा चुनें</string>
+    <string name="results_select_hint">प्रकाशित परिणाम देखने हेतु परीक्षा चुनें</string>
+    <string name="results_not_published">परिणाम अभी प्रकाशित नहीं</string>
+    <string name="results_draft">इस परीक्षा के परिणाम अभी मसौदा हैं और प्रकाशित नहीं हुए हैं।</string>
+    <string name="results_no_breakdown">विषयवार विवरण उपलब्ध नहीं</string>
+    <string name="stu_profile">छात्र प्रोफ़ाइल</string>
+    <string name="stu_id">छात्र ID</string>
+    <string name="stu_father">पिता का नाम</string>
+    <string name="stu_mother">माता का नाम</string>
+    <string name="stu_dob">जन्म तिथि</string>
+    <string name="stu_gender">लिंग</string>
+    <string name="stu_admission_date">प्रवेश तिथि</string>
+    <string name="stu_fees_hdr">शुल्क</string>
+    <string name="stu_monthly_status">मासिक स्थिति</string>
+</resources>

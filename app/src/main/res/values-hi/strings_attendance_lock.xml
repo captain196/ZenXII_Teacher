@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Attendance locked-window banner. -->
+<resources>
+    <string name="att_locked_by_fmt">%1$s द्वारा बंद। सुधार अनुरोध दर्ज करें।</string>
+    <string name="att_locked_generic">बंद। चिह्न बदलने हेतु सुधार अनुरोध दर्ज करें।</string>
+</resources>

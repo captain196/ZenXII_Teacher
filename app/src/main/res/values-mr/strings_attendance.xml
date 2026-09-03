@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 2b: class attendance - marking grid, edit windows, correction requests. -->
+<resources>
+    <string name="att_saving">जतन करत आहे…</string>
+    <string name="att_save">उपस्थिती जतन करा</string>
+    <string name="common_error">त्रुटी</string>
+    <string name="common_ok">ठीक आहे</string>
+    <string name="common_refresh">रिफ्रेश</string>
+    <string name="common_today">आज</string>
+    <string name="common_loading">लोड होत आहे…</string>
+    <string name="att_arrival_time">आगमन वेळ</string>
+    <string name="att_request_correction">दुरुस्तीची विनंती</string>
+    <string name="att_change_to">यात बदला:</string>
+    <string name="att_reason_min">कारण (10+ अक्षरे)</string>
+    <string name="att_discard_q">जतन न केलेले बदल टाकून द्यायचे?</string>
+    <string name="att_discard_reload">टाकून द्या व पुन्हा लोड करा</string>
+    <string name="att_keep_editing">संपादन सुरू ठेवा</string>
+    <string name="att_change_class">वर्ग बदला</string>
+    <string name="att_no_classes">कोणताही वर्ग नेमलेला नाही</string>
+    <string name="att_history">इतिहास</string>
+    <string name="att_my_requests">माझ्या विनंत्या</string>
+    <string name="att_all_present">सर्व उपस्थित</string>
+    <string name="att_all_absent">सर्व अनुपस्थित</string>
+    <string name="att_tap_to_change">बदलण्यासाठी टॅप करा</string>
+    <string name="att_loading">उपस्थिती लोड होत आहे…</string>
+    <string name="att_no_students">विद्यार्थी सापडले नाहीत</string>
+    <string name="att_select_class">उपस्थिती पाहण्यासाठी वर्ग निवडा</string>
+    <string name="att_section_empty_pick">या विभागात नोंदणीकृत विद्यार्थी नाहीत. वरील निवडकातून दुसरा वर्ग निवडा.</string>
+    <string name="att_section_empty">या विभागात अद्याप नोंदणीकृत विद्यार्थी नाहीत.</string>
+    <string name="att_read_only">फक्त वर्गशिक्षकच उपस्थिती नोंदवू शकतात. तुम्ही फक्त-वाचन मोडमध्ये पाहत आहात.</string>
+    <string name="att_my_corrections_title">माझ्या दुरुस्ती विनंत्या</string>
+    <string name="att_my_corrections_sub">तुम्ही दाखल केलेल्या विनंत्या व त्यांची स्थिती</string>
+    <string name="att_no_corrections">अद्याप दुरुस्ती विनंत्या नाहीत</string>
+    <string name="att_no_corrections_hint">बंद किंवा मागील दिवसासाठी दाखल केलेल्या विनंत्या येथे दिसतील.</string>
+    <string name="att_history_title">उपस्थिती इतिहास</string>
+    <string name="att_window_open">खुले</string>
+    <string name="att_window_open_desc">मुक्त संपादन. कारण आवश्यक नाही.</string>
+    <string name="att_window_restricted">प्रतिबंधित</string>
+    <string name="att_window_restricted_desc">संपादनासाठी कारण आवश्यक (10+ अक्षरे).</string>
+    <string name="att_window_locked">बंद</string>
+    <string name="att_reason_hint">कारण (उदा. \'बस उशीर दुरुस्ती\')</string>
+    <string name="att_prev_month">मागील महिना</string>
+    <string name="att_all_p">सर्व P</string>
+    <string name="att_all_a">सर्व A</string>
+    <string name="att_next_month">पुढील महिना</string>
+    <string name="att_col_student">विद्यार्थी</string>
+</resources>

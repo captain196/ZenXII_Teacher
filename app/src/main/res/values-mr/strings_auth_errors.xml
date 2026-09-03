@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firebase Auth failures, mapped by error code instead of leaking the raw provider message. -->
+<resources>
+    <string name="err_auth_invalid">ID किंवा पासवर्ड चुकीचा आहे. कृपया तपासून पुन्हा प्रयत्न करा.</string>
+    <string name="err_auth_disabled">हे खाते बंद केले आहे. कृपया शाळा कार्यालयाशी संपर्क साधा.</string>
+    <string name="err_auth_too_many">खूप जास्त प्रयत्न. कृपया काही मिनिटे थांबून पुन्हा प्रयत्न करा.</string>
+    <string name="err_account_deactivated">तुमचे खाते बंद केले आहे. कृपया शाळा कार्यालयाशी संपर्क साधा.</string>
+    <string name="err_staff_record_missing">तुमची कर्मचारी नोंद सापडली नाही. कृपया शाळा कार्यालयाशी संपर्क साधा.</string>
+</resources>

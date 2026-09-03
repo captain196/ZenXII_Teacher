@@ -56,6 +56,8 @@ import com.schoolsync.teacher.ui.theme.TextSecondary
 import com.schoolsync.teacher.ui.theme.TextTertiary
 import java.text.NumberFormat
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import com.schoolsync.teacher.R
 
 private fun fmtMoney(v: Double): String {
     val nf = NumberFormat.getNumberInstance(Locale("en", "IN"))
@@ -128,7 +130,7 @@ private fun PayslipsTopBar(onRefresh: () -> Unit, isLoading: Boolean) {
     ) {
         Icon(Icons.Filled.AccountBalanceWallet, null, tint = Teal, modifier = Modifier.size(24.dp))
         Spacer(Modifier.size(10.dp))
-        Text("My Payslips", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+        Text(stringResource(R.string.pay_title), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
         Spacer(Modifier.weight(1f))
         IconButton(onClick = onRefresh, enabled = !isLoading) {
             Icon(Icons.Filled.Refresh, "Refresh", tint = if (isLoading) TextTertiary else Teal)
@@ -140,8 +142,8 @@ private fun PayslipsTopBar(onRefresh: () -> Unit, isLoading: Boolean) {
 private fun EmptyState() {
     com.schoolsync.teacher.ui.components.EmptyStatePro(
         icon = Icons.Filled.AccountBalanceWallet,
-        title = "No payslips yet",
-        description = "Your monthly payslips will appear here once released by HR.",
+        title = stringResource(R.string.pay_none),
+        description = stringResource(R.string.pay_none_hint),
     )
 }
 
@@ -181,23 +183,23 @@ private fun PayslipCard(slip: SalarySlipDoc, expanded: Boolean, onToggle: () -> 
             Column(Modifier.padding(top = 12.dp)) {
                 Divider(color = DividerColor)
                 Spacer(Modifier.height(10.dp))
-                InfoRow("Working days", "${slip.workingDays}")
-                InfoRow("Present", "${slip.presentDays}")
-                InfoRow("Absent", "${slip.daysAbsent}")
-                if (slip.lwpDays > 0) InfoRow("LWP days", "${slip.lwpDays}")
-                if (slip.paidLeaveDays > 0) InfoRow("Paid leave", "${slip.paidLeaveDays}")
+                InfoRow(stringResource(R.string.pay_working_days), "${slip.workingDays}")
+                InfoRow(stringResource(R.string.pay_present_days), "${slip.presentDays}")
+                InfoRow(stringResource(R.string.pay_absent_days), "${slip.daysAbsent}")
+                if (slip.lwpDays > 0) InfoRow(stringResource(R.string.pay_lwp_days), "${slip.lwpDays}")
+                if (slip.paidLeaveDays > 0) InfoRow(stringResource(R.string.pay_paid_leave), "${slip.paidLeaveDays}")
                 Spacer(Modifier.height(10.dp))
-                SectionHeader("Earnings")
+                SectionHeader(stringResource(R.string.pay_earnings))
                 slip.earnings.forEach { (k, v) -> if (v != 0.0) InfoRow(prettify(k), fmtMoney(v)) }
-                InfoRow("Gross", fmtMoney(slip.grossEarnings), bold = true)
+                InfoRow(stringResource(R.string.pay_gross), fmtMoney(slip.grossEarnings), bold = true)
                 Spacer(Modifier.height(10.dp))
-                SectionHeader("Deductions")
+                SectionHeader(stringResource(R.string.pay_deductions))
                 slip.deductions.forEach { (k, v) -> if (v != 0.0) InfoRow(prettify(k), fmtMoney(v)) }
-                InfoRow("Total deductions", fmtMoney(slip.totalDeductions), bold = true)
+                InfoRow(stringResource(R.string.pay_total_deductions), fmtMoney(slip.totalDeductions), bold = true)
                 Spacer(Modifier.height(10.dp))
                 Divider(color = DividerColor)
                 Spacer(Modifier.height(10.dp))
-                InfoRow("Net payable", fmtMoney(slip.netPayable), bold = true, emphasis = true)
+                InfoRow(stringResource(R.string.pay_net_payable), fmtMoney(slip.netPayable), bold = true, emphasis = true)
             }
         }
     }

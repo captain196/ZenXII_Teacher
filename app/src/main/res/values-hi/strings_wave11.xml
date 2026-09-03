@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 11: user-visible ifBlank fallbacks found by the fallback sweep.
+     Wire values (low/active/general/pending) and groupBy keys deliberately excluded. -->
+<resources>
+    <string name="attapi_reason_required">कारण आवश्यक है (कम से कम 10 अक्षर)</string>
+    <string name="attapi_forbidden">इस कक्षा के लिए अधिकार नहीं है।</string>
+    <string name="attapi_not_found">नहीं मिला।</string>
+    <string name="attapi_conflict">विरोध।</string>
+    <string name="attapi_holiday">अवकाश के दिन चिह्नित नहीं कर सकते।</string>
+    <string name="attapi_locked">उपस्थिति लॉक है।</string>
+    <string name="attapi_network_fmt">नेटवर्क त्रुटि (%1$d)</string>
+    <string name="staffatt_session_expired">सत्र समाप्त। कृपया पुनः साइन इन करें।</string>
+    <string name="staffatt_not_permitted">अनुमति नहीं है।</string>
+    <string name="staffatt_gps_disabled">GPS उपस्थिति सक्षम नहीं है।</string>
+    <string name="staffatt_not_recorded">उपस्थिति दर्ज नहीं हो सकी।</string>
+    <string name="staffatt_invalid_request">अमान्य अनुरोध।</string>
+    <string name="staffatt_server_error">सर्वर त्रुटि। कृपया पुनः प्रयास करें।</string>
+    <string name="auth_reset_failed_fmt">रीसेट विफल (HTTP %1$d)।</string>
+    <string name="lib_book_id_fmt">पुस्तक: %1$s</string>
+    <string name="story_generic">स्टोरी</string>
+    <string name="story_viewer_generic">दर्शक</string>
+    <string name="lp_another_teacher">अन्य शिक्षक</string>
+    <string name="search_untitled_generic">(बिना शीर्षक)</string>
+</resources>

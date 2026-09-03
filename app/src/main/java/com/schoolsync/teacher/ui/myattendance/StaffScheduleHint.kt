@@ -47,5 +47,5 @@ fun staffCheckInHint(
 /** Minutes-of-day → "HH:mm". */
 fun fmtMinOfDay(min: Int): String {
     val m = ((min % 1440) + 1440) % 1440
-    return "%02d:%02d".format(m / 60, m % 60)
+    return String.format(java.util.Locale.ROOT, "%02d:%02d", m / 60, m % 60)
 }

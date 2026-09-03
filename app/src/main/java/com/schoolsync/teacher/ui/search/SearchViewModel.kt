@@ -18,15 +18,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.annotation.StringRes
+import com.schoolsync.teacher.R
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.util.localizedString
 
 /** Buckets a search hit falls into. `ordinal` drives the section order on screen. */
-enum class SearchCategory(val label: String, val emoji: String) {
-    STUDENT("Students", "🎓"),
-    CLASS("My Classes", "🏫"),
-    HOMEWORK("Homework", "📝"),
-    NOTICE("Notices", "📢"),
-    EVENT("Events", "🎉"),
-    FEATURE("Go to", "🧭"),
+enum class SearchCategory(@StringRes val labelRes: Int, val emoji: String) {
+    STUDENT(R.string.nav_students, "🎓"),
+    CLASS(R.string.search_cat_my_classes, "🏫"),
+    HOMEWORK(R.string.mod_homework, "📝"),
+    NOTICE(R.string.nav_notices, "📢"),
+    EVENT(R.string.nav_events, "🎉"),
+    FEATURE(R.string.search_cat_goto, "🧭"),
 }
 
 /** One row in the search results — carries the route to navigate to on tap. */
@@ -62,6 +67,9 @@ class SearchViewModel @Inject constructor(
     private val homeworkRepo: HomeworkFirestoreRepository,
     private val communicationRepo: CommunicationFirestoreRepository,
     private val eventRepo: EventsFirestoreRepository,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     /** A result plus its lowercased searchable text ("haystack"). */
@@ -124,10 +132,10 @@ class SearchViewModel @Inject constructor(
                     SearchResult(
                         id = "class_${a.className}_${a.section}_${a.subject}",
                         category = SearchCategory.CLASS,
-                        title = "Class $classLabel".trim(),
+                        title = appContext.localizedString(R.string.search_class_fmt, classLabel).trim(),
                         subtitle = listOfNotNull(
                             a.subject.ifBlank { null },
-                            if (a.classTeacher) "Class Teacher" else null
+                            if (a.classTeacher) appContext.localizedString(R.string.search_class_teacher) else null
                         ).joinToString(" · "),
                         emoji = SearchCategory.CLASS.emoji,
                         route = Route.Timetable.route,
@@ -150,7 +158,7 @@ class SearchViewModel @Inject constructor(
                     SearchResult(
                         id = "student_${sid.ifBlank { s.name }}",
                         category = SearchCategory.STUDENT,
-                        title = s.name.ifBlank { "(Unnamed student)" },
+                        title = s.name.ifBlank { appContext.localizedString(R.string.search_unnamed_student) },
                         subtitle = listOfNotNull(
                             "$cls $sec".trim().ifBlank { null },
                             s.rollNo.ifBlank { null }?.let { "Roll $it" }
@@ -176,7 +184,7 @@ class SearchViewModel @Inject constructor(
                     SearchResult(
                         id = "hw_${hw.id}",
                         category = SearchCategory.HOMEWORK,
-                        title = hw.title.ifBlank { "(Untitled)" },
+                        title = hw.title.ifBlank { appContext.localizedString(R.string.search_untitled_generic) },
                         subtitle = listOfNotNull(
                             hw.subject.ifBlank { null },
                             "${hw.className.removePrefix("Class ")} " +
@@ -195,7 +203,7 @@ class SearchViewModel @Inject constructor(
                     SearchResult(
                         id = "notice_${n.id}",
                         category = SearchCategory.NOTICE,
-                        title = n.title.ifBlank { "(Untitled notice)" },
+                        title = n.title.ifBlank { appContext.localizedString(R.string.search_untitled_notice) },
                         subtitle = n.author.ifBlank { n.category },
                         emoji = SearchCategory.NOTICE.emoji,
                         route = Route.Notices.route,
@@ -210,7 +218,7 @@ class SearchViewModel @Inject constructor(
                     SearchResult(
                         id = "event_${e.id}",
                         category = SearchCategory.EVENT,
-                        title = e.title.ifBlank { "(Untitled event)" },
+                        title = e.title.ifBlank { appContext.localizedString(R.string.search_untitled_event) },
                         subtitle = listOfNotNull(
                             e.startDate.ifBlank { null },
                             e.location.ifBlank { null }
@@ -231,53 +239,69 @@ class SearchViewModel @Inject constructor(
     /** Static catalogue of app features, each with synonyms for fuzzy recall. */
     private fun buildFeatureIndex(): List<Indexed> {
         fun feature(
-            title: String,
+            englishTitle: String,
+            @StringRes titleRes: Int,
             emoji: String,
             route: String,
             vararg keywords: String
-        ): Indexed = Indexed(
-            SearchResult(
-                id = "feat_$route",
-                category = SearchCategory.FEATURE,
-                title = title,
-                subtitle = "Open $title",
-                emoji = emoji,
-                route = route,
-            ),
-            haystack = (listOf(title) + keywords).joinToString(" ").lowercase()
-        )
+        ): Indexed {
+            val localized = appContext.localizedString(titleRes)
+            return Indexed(
+                SearchResult(
+                    id = "feat_$route",
+                    category = SearchCategory.FEATURE,
+                    title = localized,
+                    subtitle = appContext.localizedString(R.string.search_open_fmt, localized),
+                    emoji = emoji,
+                    route = route,
+                ),
+                // Both titles go in the haystack: the English one keeps every
+                // existing query working, the localized one lets a staff member
+                // search in the language the app is actually showing them. The
+                // `keywords` stay English synonyms - they are match-only and
+                // never rendered.
+                haystack = (listOf(englishTitle, localized) + keywords)
+                    .joinToString(" ").lowercase(java.util.Locale.ROOT)
+            )
+        }
+        // Every line below is `feature(englishTitle, titleRes, emoji, route, ...keywords)`.
+        // The trailing keywords are MATCH-ONLY English synonyms — never rendered —
+        // so they stay English on purpose. i18n-ignore
+        // Each feature() takes (englishTitle, titleRes, ...). The FIRST arg is the
+        // English haystack entry — deliberately English so existing queries keep
+        // matching; the titleRes beside it is what renders. i18n-ignore
         return listOf(
-            feature("Take Attendance", "📅", Route.Attendance.route,
+            feature("Take Attendance", R.string.dash_take_attendance, "📅", Route.Attendance.route,  // i18n-ignore: English haystack entry
                 "attendance", "present", "absent", "mark", "roll call"),
-            feature("Marks", "📊", Route.Marks.route,
+            feature("Marks", R.string.nav_marks, "📊", Route.Marks.route,  // i18n-ignore: English haystack entry
                 "marks", "grades", "grade", "score", "exam", "result", "assessment"),
-            feature("Homework", "📝", Route.Homework.route,
+            feature("Homework", R.string.mod_homework, "📝", Route.Homework.route,  // i18n-ignore: English haystack entry
                 "homework", "assignment", "assignments", "diary", "task", "work"),
-            feature("Timetable", "🗓️", Route.Timetable.route,
+            feature("Timetable", R.string.mod_timetable, "🗓️", Route.Timetable.route,  // i18n-ignore: English haystack entry
                 "timetable", "schedule", "routine", "periods", "class schedule"),
-            feature("Students", "🎓", Route.Students.route,
+            feature("Students", R.string.nav_students, "🎓", Route.Students.route,  // i18n-ignore: English haystack entry
                 "students", "student", "roster", "class list", "children", "pupils"),
-            feature("Chat", "💬", Route.Messages.route,
+            feature("Chat", R.string.nav_chat, "💬", Route.Messages.route,  // i18n-ignore: English haystack entry
                 "chat", "message", "messages", "parent", "conversation", "inbox"),
-            feature("Notices", "📢", Route.Notices.route,
+            feature("Notices", R.string.nav_notices, "📢", Route.Notices.route,  // i18n-ignore: English haystack entry
                 "notices", "notice", "circular", "circulars", "announcement", "news"),
-            feature("Leave", "🏖️", Route.Leave.route,
+            feature("Leave", R.string.nav_leave, "🏖️", Route.Leave.route,  // i18n-ignore: English haystack entry
                 "leave", "absence", "apply leave", "sick", "time off"),
-            feature("Red Flags", "🚩", Route.RedFlags.route,
+            feature("Red Flags", R.string.dash_red_flags, "🚩", Route.RedFlags.route,  // i18n-ignore: English haystack entry
                 "red flags", "flags", "discipline", "warning", "behaviour", "behavior"),
-            feature("My Attendance", "🕒", Route.MyAttendance.route,
+            feature("My Attendance", R.string.mod_my_attendance, "🕒", Route.MyAttendance.route,  // i18n-ignore: English haystack entry
                 "my attendance", "clock in", "punch", "check in", "self attendance"),
-            feature("Lesson Plan", "📖", Route.LessonPlan.route,
+            feature("Lesson Plan", R.string.mod_lesson_plan, "📖", Route.LessonPlan.route,  // i18n-ignore: English haystack entry
                 "lesson plan", "lesson", "plan", "syllabus", "topics", "today's lessons"),
-            feature("Gallery", "🖼️", Route.Gallery.route,
+            feature("Gallery", R.string.nav_gallery, "🖼️", Route.Gallery.route,  // i18n-ignore: English haystack entry
                 "gallery", "photos", "photo", "pictures", "album", "images"),
-            feature("Events", "🎉", Route.Events.route,
+            feature("Events", R.string.nav_events, "🎉", Route.Events.route,  // i18n-ignore: English haystack entry
                 "events", "event", "holiday", "celebration", "calendar"),
-            feature("Library", "📚", Route.Library.route,
+            feature("Library", R.string.nav_library, "📚", Route.Library.route,  // i18n-ignore: English haystack entry
                 "library", "books", "book", "borrow", "catalogue"),
-            feature("PTM", "👥", Route.Ptm.route,
+            feature("PTM", R.string.nav_ptm, "👥", Route.Ptm.route,  // i18n-ignore: English haystack entry
                 "ptm", "parent teacher meeting", "meeting", "appointment"),
-            feature("Payslips", "🧾", Route.Payslips.route,
+            feature("Payslips", R.string.mod_payslips, "🧾", Route.Payslips.route,  // i18n-ignore: English haystack entry
                 "payslip", "payslips", "salary", "pay", "income", "earnings"),
         )
     }

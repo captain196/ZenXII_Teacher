@@ -176,7 +176,10 @@ fun NoticesScreen(
                             onClick = { viewModel.selectCategory(category) },
                             label = {
                                 Text(
-                                    text = category,
+                                    // Display label only — `category` itself
+                                    // stays the English wire value.
+                                    text = com.schoolsync.teacher.util.CanonicalLabels
+                                        .noticeCategory(androidx.compose.ui.platform.LocalContext.current, category),
                                     fontSize = 11.sp,
                                     fontWeight = if (state.selectedCategory == category) FontWeight.SemiBold else FontWeight.Normal
                                 )
@@ -222,7 +225,7 @@ fun NoticesScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Couldn't refresh — showing saved notices. Tap to retry.",
+                            text = stringResource(R.string.not_refresh_failed),
                             color = c.error,
                             fontSize = 12.sp,
                             modifier = Modifier.weight(1f)
@@ -260,13 +263,13 @@ fun NoticesScreen(
                             )
                             Spacer(modifier = Modifier.height(sp.sm))
                             Text(
-                                text = "Couldn't load notices",
+                                text = stringResource(R.string.not_load_error),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = c.error,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "Check your connection and try again.",
+                                text = stringResource(R.string.not_check_connection),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = c.textSecondary
                             )
@@ -281,7 +284,7 @@ fun NoticesScreen(
                             ) {
                                 Icon(Icons.Filled.Refresh, contentDescription = null, tint = c.accent, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(sp.xs))
-                                Text("Retry", color = c.accent, fontWeight = FontWeight.SemiBold)
+                                Text(stringResource(R.string.common_retry), color = c.accent, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -402,6 +405,8 @@ private fun NoticeCard(
 
     // Outer card with left color-strip accent
     val readState = if (notice.isRead) "read" else "unread"
+    // Hoisted: Modifier.semantics {} is not a composable scope.
+    val noticeCd = stringResource(R.string.not_notice_cd, notice.title, readState)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -414,7 +419,7 @@ private fun NoticeCard(
             // Merge into a single TalkBack node announcing title + read state.
             .semantics(mergeDescendants = true) {
                 role = Role.Button
-                contentDescription = "Notice: ${notice.title}, $readState"
+                contentDescription = noticeCd
             }
     ) {
         // 4dp left color strip — subtle ERP-style priority/category cue
@@ -646,6 +651,9 @@ private fun NoticeDetailPanel(
             // Attachment chip
             if (notice.attachmentUrl.isNotBlank()) {
                 Spacer(modifier = Modifier.height(10.dp))
+                // Hoisted: Modifier.semantics {} is a plain lambda, not a
+                // composable scope, so stringResource() cannot be called in it.
+                val openAttachmentCd = stringResource(R.string.not_open_attachment)
                 Row(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
@@ -653,7 +661,7 @@ private fun NoticeDetailPanel(
                         .background(c.accentSurface)
                         .semantics {
                             role = Role.Button
-                            contentDescription = "Open attachment"
+                            contentDescription = openAttachmentCd
                         }
                         .clickable {
                             // Only hand http(s) URLs to ACTION_VIEW — never
@@ -668,10 +676,10 @@ private fun NoticeDetailPanel(
                                         )
                                     )
                                 }.onFailure {
-                                    android.widget.Toast.makeText(ctx, "No app can open this attachment", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(ctx, ctx.getString(R.string.not_no_app), android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             } else {
-                                android.widget.Toast.makeText(ctx, "Attachment link is invalid", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(ctx, ctx.getString(R.string.not_bad_link), android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                         .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -685,7 +693,7 @@ private fun NoticeDetailPanel(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        "Open attachment",
+                        stringResource(R.string.not_open_attachment),
                         color = c.accent,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -701,6 +709,7 @@ private fun NoticeDetailPanel(
                 // Rich HTML render via WebView (HR-styled posters etc.).
                 // Theme-aware text color so the body is legible in dark mode.
                 val htmlTextColor = String.format(
+                    java.util.Locale.ROOT,   // machine output, never the UI locale
                     "#%06X", 0xFFFFFF and c.textPrimary.toArgb()
                 )
                 androidx.compose.ui.viewinterop.AndroidView(

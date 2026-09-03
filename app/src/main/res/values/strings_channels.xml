@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification channel names + descriptions. The OS caches these at
+     channel-creation time, so NotificationChannels.ensureChannels() must be
+     re-run after a language change for the tray to follow. -->
+<resources>
+    <string name="nch_general">General</string>
+    <string name="nch_general_desc">General notifications from ZenXii</string>
+    <string name="nch_notices">Notices &amp; Circulars</string>
+    <string name="nch_notices_desc">New notices and circulars</string>
+    <string name="nch_messages">Messages</string>
+    <string name="nch_messages_desc">Chat messages</string>
+    <string name="nch_attendance">Attendance</string>
+    <string name="nch_attendance_desc">Attendance reminders and updates</string>
+    <string name="nch_leave">Leave</string>
+    <string name="nch_leave_desc">Leave request updates</string>
+    <string name="nch_events">Events</string>
+    <string name="nch_events_desc">School events</string>
+    <string name="nch_timetable">Timetable</string>
+    <string name="nch_timetable_desc">Substitute assignments and timetable changes</string>
+    <string name="nch_gallery">Gallery</string>
+    <string name="nch_gallery_desc">New photos and albums</string>
+    <string name="nch_stories">Stories</string>
+    <string name="nch_stories_desc">New school stories</string>
+</resources>

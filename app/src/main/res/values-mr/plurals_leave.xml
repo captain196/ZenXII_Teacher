@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Day count. Takes a STRING quantity arg because half-days ("0.5") are
+     valid here, so the displayed value is not always an integer. -->
+<resources>
+    <plurals name="leave_days_count">
+        <item quantity="one">%1$s दिवस</item>
+        <item quantity="other">%1$s दिवस</item>
+    </plurals>
+</resources>

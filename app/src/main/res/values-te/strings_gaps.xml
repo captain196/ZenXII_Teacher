@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings hidden from the audit by the escape-sequence / conditional detector holes. -->
+<resources>
+    <string name="att_all_marked">అన్నీ గుర్తించబడ్డాయి ✓</string>
+    <string name="login_tagline">మీ తరగతులు, హాజరు, మార్కులు\nఅన్నీ ఒకే చోట నిర్వహించండి.</string>
+    <string name="common_hide">దాచు</string>
+    <string name="common_show">చూపించు</string>
+    <string name="ev_view_gallery">గ్యాలరీ చూడండి</string>
+    <string name="fees_select_class">ఒక తరగతిని ఎంచుకోండి</string>
+    <string name="common_collapse">కుదించు</string>
+    <string name="common_expand">విస్తరించు</string>
+    <string name="gal_cancel_upload">అప్‌లోడ్ రద్దు చేయండి</string>
+    <string name="file_type_image">చిత్రం</string>
+    <string name="file_type_document">పత్రం</string>
+    <string name="leave_no_balances">సెలవు బ్యాలెన్స్‌లు ఇంకా కాన్ఫిగర్ కాలేదు.\nసెలవు రకాలు సెట్ చేయడానికి అడ్మిన్‌ను సంప్రదించండి.</string>
+    <string name="lib_due_today">ఈరోజు గడువు</string>
+    <string name="reg_clock_in_time">క్లాక్ ఇన్ సమయం</string>
+    <string name="reg_clock_out_time">క్లాక్ అవుట్ సమయం</string>
+    <string name="reg_switch_clock">గడియారానికి మారండి</string>
+    <string name="reg_switch_keyboard">కీబోర్డ్ ఎంట్రీకి మారండి</string>
+    <string name="profile_class_teacher_prefix">తరగతి ఉపాధ్యాయుడు  ·  %1$s</string>
+    <string name="rf_all_flags">అన్ని ఫ్లాగ్‌లు</string>
+    <string name="rf_none_student">ఈ విద్యార్థికి ఫ్లాగ్‌లు లేవు</string>
+    <string name="rf_none_class">ఈ తరగతిలో ఫ్లాగ్‌లు లేవు</string>
+    <string name="results_no_rank">ర్యాంక్ అందుబాటులో లేదు</string>
+    <string name="results_collapse_subjects">సబ్జెక్టులు కుదించు</string>
+    <string name="results_expand_subjects">సబ్జెక్టులు విస్తరించు</string>
+    <string name="wt_desc_attendance">ఒకే ట్యాప్‌తో డిజిటల్ హాజరు తీసుకోండి.\nధోరణులను గమనించి సులభంగా నివేదికలు రూపొందించండి.</string>
+    <string name="wt_desc_marks">మార్కులు అప్‌లోడ్ చేసి, గ్రేడ్‌లు స్వయంచాలకంగా లెక్కించి,\nఫలితాలను వెంటనే తల్లిదండ్రులతో పంచుకోండి.</string>
+    <string name="wt_desc_connected">తల్లిదండ్రులతో సంభాషించండి, నోటీసులు పంచుకోండి,\nసెలవు అభ్యర్థనలను ఒకే చోట నిర్వహించండి.</string>
+    <string name="wt_get_started">ప్రారంభించండి</string>
+    <string name="wt_next">తదుపరి</string>
+    <string name="story_unmute">సౌండ్ ఆన్ చేయండి</string>
+    <string name="story_mute">సౌండ్ ఆఫ్ చేయండి</string>
+    <string name="story_none_active">క్రియాశీల స్టోరీలు లేవు</string>
+    <string name="story_none_yet">ఇంకా స్టోరీలు లేవు</string>
+    <string name="story_past_in_archive">మీ పాత స్టోరీలు పైన ఆర్కైవ్‌లో ఉన్నాయి.</string>
+    <string name="tt_lunch">భోజన విరామం</string>
+    <string name="tt_break">విరామం</string>
+    <string name="fees_yearly_short">వార్షిక</string>
+</resources>

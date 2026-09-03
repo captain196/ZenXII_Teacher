@@ -32,6 +32,10 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.schoolsync.teacher.R
+import com.schoolsync.teacher.util.localizedString
 
 /** Where a period sits relative to the current wall-clock time. */
 enum class PeriodStatus { DONE, CURRENT, UPCOMING }
@@ -124,7 +128,10 @@ class DashboardViewModel @Inject constructor(
     private val timetableFirestoreRepo: TimetableFirestoreRepository,
     private val eventsFirestoreRepo: com.schoolsync.teacher.data.repository.firestore.EventsFirestoreRepository,
     private val galleryFirestoreRepo: com.schoolsync.teacher.data.repository.firestore.GalleryFirestoreRepository,
-    private val firestoreService: com.schoolsync.teacher.data.firebase.FirestoreService
+    private val firestoreService: com.schoolsync.teacher.data.firebase.FirestoreService,
+    // Resolves user-facing copy in the app's chosen language; the
+    // application Context is locale-wrapped by LocaleManager.
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private companion object {
@@ -161,7 +168,7 @@ class DashboardViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                error = "No active academic session for your school yet. Pull to refresh."
+                                error = appContext.localizedString(R.string.vm_no_session)
                             )
                         }
                     }
@@ -227,9 +234,12 @@ class DashboardViewModel @Inject constructor(
                 // at the end. coroutineScope ensures all children either
                 // succeed or surface a single failure to the outer try.
                 val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-                val monthKey = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
+                // machine key — do not localize. Passed to getClassMonthlySummaries() as a
+                // Firestore query parameter; a locale that emits non-Latin digits
+                // would query a month that does not exist and return nothing.
+                val monthKey = SimpleDateFormat("yyyy-MM", Locale.ROOT).format(Date())
                 val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                val todayDate = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
+                val todayDate = com.schoolsync.teacher.util.DisplayFormat.date(Date())
 
                 // Hard ceiling on the fan-out.
                 //
@@ -372,10 +382,18 @@ class DashboardViewModel @Inject constructor(
 
                     val uniqueClasses = classLabels.size
                     val stats = listOf(
-                        QuickStat("Classes", uniqueClasses.toString(), "assigned"),
-                        QuickStat("Today", schedule.size.toString(), "periods"),
-                        QuickStat("HW Due", homeworkDueToday.toString(), "today"),
-                        QuickStat("Flags", activeFlagCount.toString(), "active")
+                        QuickStat(appContext.localizedString(R.string.vm_stat_classes),
+                                  uniqueClasses.toString(),
+                                  appContext.localizedString(R.string.stat_assigned)),
+                        QuickStat(appContext.localizedString(R.string.stat_today),
+                                  schedule.size.toString(),
+                                  appContext.localizedString(R.string.stat_periods)),
+                        QuickStat(appContext.localizedString(R.string.stat_hw_due),
+                                  homeworkDueToday.toString(),
+                                  appContext.localizedString(R.string.stat_today_lower)),
+                        QuickStat(appContext.localizedString(R.string.stat_flags),
+                                  activeFlagCount.toString(),
+                                  appContext.localizedString(R.string.stat_active))
                     )
 
                     _uiState.update {
@@ -401,14 +419,14 @@ class DashboardViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = "Couldn't load your dashboard — check your connection and pull to refresh."
+                            error = appContext.localizedString(R.string.vm_dash_load_error)
                         )
                     }
                 }
 
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, error = e.message ?: "Failed to load dashboard")
+                    it.copy(isLoading = false, error = e.message ?: appContext.localizedString(R.string.vm_dash_load_failed))
                 }
             }
         }
@@ -446,12 +464,12 @@ class DashboardViewModel @Inject constructor(
                     // I'm absent — who is covering my classes?
                     if (!assignments.isNullOrEmpty()) {
                         for (a in assignments) {
-                            val sName = a["substitute_teacher_name"]?.toString() ?: "Substitute"
+                            val sName = a["substitute_teacher_name"]?.toString() ?: appContext.localizedString(R.string.vm_substitute)
                             val pn = (a["periodNumber"] as? Number)?.toInt() ?: continue
                             parts.add("$sName covering P$pn")
                         }
                     } else {
-                        val sName = data["substitute_teacher_name"]?.toString() ?: "Substitute"
+                        val sName = data["substitute_teacher_name"]?.toString() ?: appContext.localizedString(R.string.vm_substitute)
                         @Suppress("UNCHECKED_CAST")
                         val periods = (data["periods"] as? List<*>)?.joinToString(", ") { "P$it" } ?: ""
                         parts.add("$sName covering $periods")
@@ -463,7 +481,7 @@ class DashboardViewModel @Inject constructor(
                         if (subTid == myId) {
                             val pn = (a["periodNumber"] as? Number)?.toInt() ?: continue
                             val subj = a["subject"]?.toString() ?: ""
-                            parts.add("Covering for $absentName — P$pn $subj")
+                            parts.add(appContext.localizedString(R.string.dash_covering_period_fmt, absentName, pn, subj))
                         }
                     }
                 } else {
@@ -471,7 +489,7 @@ class DashboardViewModel @Inject constructor(
                     if ((data["substitute_teacher_id"]?.toString() ?: "") == myId) {
                         @Suppress("UNCHECKED_CAST")
                         val periods = (data["periods"] as? List<*>)?.joinToString(", ") { "P$it" } ?: ""
-                        parts.add("Covering for $absentName — $periods")
+                        parts.add(appContext.localizedString(R.string.dash_covering_periods_fmt, absentName, periods))
                     }
                 }
             }

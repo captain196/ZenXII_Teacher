@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wave 4b: red flags - list, quick-flag sheet, canonical severity/type. -->
+<resources>
+    <string name="rf_new">नया फ्लैग</string>
+    <string name="rf_loading">फ्लैग लोड हो रहे हैं...</string>
+    <string name="rf_view_all">सभी देखें</string>
+    <string name="rf_add">फ्लैग जोड़ें</string>
+    <string name="rf_delete_q">यह फ्लैग हटाएँ?</string>
+    <string name="rf_resolved">सुलझाया गया</string>
+    <string name="rf_tpl_late_hw">विलंबित गृहकार्य</string>
+    <string name="rf_tpl_behaviour">व्यवहार</string>
+    <string name="rf_tpl_low_perf">निम्न प्रदर्शन</string>
+    <string name="rf_quick_reason">त्वरित कारण</string>
+    <string name="common_severity">गंभीरता</string>
+    <string name="common_message">संदेश</string>
+    <string name="rf_no_subject_note">इस कक्षा हेतु आपको कोई विषय नहीं सौंपा गया — यह फ्लैग बिना विषय के दर्ज होगा। अपना विषय आवंटन सेट करवाने हेतु व्यवस्थापक से कहें।</string>
+    <string name="rf_subject_required">इस स्क्रीन पर विषय आवश्यक है।</string>
+    <string name="common_undo">पूर्ववत करें</string>
+    <string name="rf_more_options">▸ अधिक विकल्प</string>
+    <string name="rf_hide_options">▾ विकल्प छिपाएँ</string>
+    <string name="flag_severity_low">निम्न</string>
+    <string name="flag_severity_medium">मध्यम</string>
+    <string name="flag_severity_high">उच्च</string>
+    <string name="flag_type_homework">गृहकार्य</string>
+    <string name="flag_type_behavior">व्यवहार</string>
+    <string name="flag_type_performance">प्रदर्शन</string>
+</resources>

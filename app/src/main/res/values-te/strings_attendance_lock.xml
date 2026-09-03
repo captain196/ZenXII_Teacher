@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Attendance locked-window banner. -->
+<resources>
+    <string name="att_locked_by_fmt">%1$s లాక్ చేశారు. సవరణ అభ్యర్థన దాఖలు చేయండి.</string>
+    <string name="att_locked_generic">లాక్ చేయబడింది. గుర్తులు మార్చడానికి సవరణ అభ్యర్థన దాఖలు చేయండి.</string>
+</resources>

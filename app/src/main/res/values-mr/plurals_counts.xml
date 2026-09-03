@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Counted strings. "%d periods" reads wrong in the singular in
+     Hindi, Tamil and Telugu, so these are <plurals>, resolved with
+     pluralStringResource(id, quantity, quantity). -->
+<resources>
+    <plurals name="dashboard_periods_count">
+        <item quantity="one">%1$d तासिका</item>
+        <item quantity="other">%1$d तासिका</item>
+    </plurals>
+    <plurals name="story_cd_unseen">
+        <item quantity="one">तुमची स्टोरी, %1$d अद्याप तुम्ही पाहिली नाही</item>
+        <item quantity="other">तुमची स्टोरी, %1$d अद्याप तुम्ही पाहिल्या नाहीत</item>
+    </plurals>
+    <plurals name="story_cd_posted">
+        <item quantity="one">तुमची स्टोरी, %1$d पोस्ट केली</item>
+        <item quantity="other">तुमची स्टोरी, %1$d पोस्ट केल्या</item>
+    </plurals>
+</resources>
