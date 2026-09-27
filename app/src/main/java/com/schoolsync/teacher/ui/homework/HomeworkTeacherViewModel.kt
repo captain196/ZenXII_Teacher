@@ -718,6 +718,18 @@ class HomeworkTeacherViewModel @Inject constructor(
                     title = form.title.trim(),
                     description = form.description.trim(),
                     subject = form.subject.trim(),
+                    // HW-D1: resolve the canonical subject CODE from the very
+                    // assignment row that produced this subject option.
+                    // updateSubjectsForClass() builds the picker from
+                    // allAssignments filtered by class+section, so the match
+                    // here is exact — the subject is never free text. Falls
+                    // back to "" rather than guessing, so authorization can
+                    // fail closed instead of on a fabricated code.
+                    subjectCode = allAssignments.firstOrNull {
+                        it.className == classSection.className &&
+                            it.section == classSection.section &&
+                            it.subject == form.subject.trim()
+                    }?.subjectCode ?: "",
                     className = classSection.className,
                     section = classSection.section,
                     dueDate = dueDate,

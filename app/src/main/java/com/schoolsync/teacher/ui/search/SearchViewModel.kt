@@ -153,12 +153,18 @@ class SearchViewModel @Inject constructor(
                         title = s.name.ifBlank { "(Unnamed student)" },
                         subtitle = listOfNotNull(
                             "$cls $sec".trim().ifBlank { null },
-                            s.rollNo.ifBlank { null }?.let { "Roll $it" }
+                            s.rollNo.ifBlank { null }?.let { "Roll $it" },
+                            // Phase 11.3 — SR No. in the global search result, so a
+                            // teacher handed a register number can confirm the match.
+                            s.srNoText.ifBlank { null }?.let { "SR $it" }
                         ).joinToString(" · "),
                         emoji = SearchCategory.STUDENT.emoji,
                         route = Route.Students.route,
                     ),
-                    haystack = "${s.name} ${s.rollNo} ${s.fatherName} $sid".lowercase()
+                    // Phase 11.3 — SR Number is searchable here. This is a genuine
+                    // direct student-search surface, and the rosters are already
+                    // in memory, so matching costs zero Firestore reads.
+                    haystack = "${s.name} ${s.rollNo} ${s.fatherName} $sid ${s.srNoText}".lowercase()
                 )
             }
 

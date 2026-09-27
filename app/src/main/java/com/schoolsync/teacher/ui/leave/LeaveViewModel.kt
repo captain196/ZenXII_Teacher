@@ -22,6 +22,20 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * Remaining leave, clamped at zero to match the server.
+ *
+ * Hr.php stores `balance = max(0, allocated + carried - used)`. `used` also
+ * accrues for UNPAID leave types — all their days are LWP but are still tracked
+ * in `used` — so `total - used` can legitimately go negative in the raw data.
+ * Rendering that negative would contradict both the stored balance and the
+ * admin panel, which show 0.
+ *
+ * Internal so it can be unit-tested directly, matching the treatment already
+ * given to PayslipsScreen.formatDays().
+ */
+internal fun remainingLeave(total: Double, used: Double): Double = maxOf(0.0, total - used)
+
 data class LeaveBalance(
     val type: String,
     val used: Double,
@@ -30,7 +44,7 @@ data class LeaveBalance(
     // carried-forward days from the BAL doc. `total` = allocated + carried.
     val allocated: Double = total,
     val carried: Double = 0.0,
-    val remaining: Double = total - used
+    val remaining: Double = remainingLeave(total, used)
 )
 
 data class LeaveRequest(
@@ -281,7 +295,7 @@ class LeaveViewModel @Inject constructor(
                                 total = total,
                                 allocated = allocated,
                                 carried = carried,
-                                remaining = total - used
+                                remaining = remainingLeave(total, used)
                             )
                         }.sortedBy { bal ->
                             val idx = priorityOrder.indexOfFirst { bal.type.contains(it, ignoreCase = true) }

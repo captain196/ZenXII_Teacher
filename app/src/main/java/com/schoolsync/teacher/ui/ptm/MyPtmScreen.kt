@@ -390,8 +390,12 @@ private fun StudentRow(
                     color = cs.onSurface,
                     fontWeight = FontWeight.SemiBold
                 )
+                // Phase 11.5 (G1) — SR No. shown alongside Roll so a teacher can
+                // match the school register. Blank on RSVPs created before the
+                // Parent app started sending it; the row simply omits it.
                 val sub = listOfNotNull(
                     rsvp.rollNo.takeIf { it.isNotBlank() }?.let { "Roll #$it" },
+                    rsvp.srNo.takeIf { it.isNotBlank() }?.let { "SR $it" },
                     rsvp.parentName.takeIf { it.isNotBlank() }?.let { "Parent: $it" }
                 ).joinToString(" · ")
                 if (sub.isNotBlank()) {

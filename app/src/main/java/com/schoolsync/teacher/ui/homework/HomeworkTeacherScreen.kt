@@ -1523,6 +1523,18 @@ private fun StudentSubmissionRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            // Phase 11.3 — school register number, display only. Homework is a
+            // roster-driven workflow (the teacher already has the class list), so
+            // no SRNO search box is added here; submissions stay keyed by
+            // studentId. Blank SRNO renders nothing.
+            if (student.srNo.isNotBlank()) {
+                Text(
+                    text = "SR ${student.srNo}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                    fontSize = 10.sp
+                )
+            }
             // Show what the student submitted
             if (entry != null && entry.text.isNotBlank()) {
                 Text(

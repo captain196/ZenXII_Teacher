@@ -29,6 +29,12 @@ data class ExamInfo(
 data class SubjectInfo(
     val subjectId: String,
     val subjectName: String,
+    // Phase 0.2B (G-09): canonical subjects.subjectCode, carried from
+    // ExamSubjectScheduleDoc.subjectCode. Empty when the schedule predates
+    // this field or the name no longer resolves against the subject master
+    // (see ExamScheduleDoc.kt) — the mark-save path must send it through
+    // unchanged rather than substituting subjectId/subjectName.
+    val subjectCode: String = "",
     val maxTheory: Int = 80,
     val maxPractical: Int = 20,
     val maxTotal: Int = 100
@@ -37,6 +43,17 @@ data class SubjectInfo(
 data class StudentMark(
     val studentId: String,
     val rollNo: Int,
+    // See StudentInfo.rollNoRaw (ui/students/StudentsViewModel.kt) for why this
+    // exists — the canonical Firestore Roll Number is not always numeric, and
+    // the previous fallback (idx + 1) fabricated a plausible-looking sequential
+    // roll number for a non-numeric value, which is worse than an obviously
+    // invalid sentinel: it looked like real data.
+    val rollNoRaw: String = "",
+    // Phase 11.3 — the school's register number, shown on the marks roster so a
+    // teacher can reconcile against the printed register. Sourced from the
+    // student document the roster query already downloaded: zero extra reads.
+    // Marks remain keyed by `studentId`; SRNO is never a storage key.
+    val srNo: String = "",
     val name: String,
     val theory: String = "",
     val practical: String = "",
@@ -241,6 +258,7 @@ class MarksViewModel @Inject constructor(
                                 SubjectInfo(
                                     subjectId = subjectSchedule.subjectName,
                                     subjectName = subjectSchedule.subjectName,
+                                    subjectCode = subjectSchedule.subjectCode,
                                     maxTheory = effTheory,
                                     maxPractical = maxPractical,
                                     maxTotal = maxTotal
@@ -307,7 +325,9 @@ class MarksViewModel @Inject constructor(
                         // (silent corruption). formatMark drops a trailing ".0".
                         StudentMark(
                             studentId = sid,
-                            rollNo = stu.rollNo.toIntOrNull() ?: (idx + 1),
+                            rollNo = stu.rollNo.toIntOrNull() ?: Int.MIN_VALUE,
+                            rollNoRaw = stu.rollNo,
+                            srNo = stu.srNoText,
                             name = stu.name,
                             theory = if (m != null && !m.absent) formatMark(m.theory) else "",
                             practical = if (m != null && !m.absent) formatMark(m.practical) else "",
@@ -477,6 +497,7 @@ class MarksViewModel @Inject constructor(
                         className = state.selectedClassName,
                         section = state.selectedSection,
                         subject = subject.subjectId,
+                        subjectCode = subject.subjectCode,
                         marksList = marksList
                     )
                 }

@@ -33,6 +33,8 @@ data class LessonPlanUiState(
     val editing: SlotWithPlan? = null,
     val editingTopics: List<CurriculumTopicDoc> = emptyList(),
     val isEditingTopicsLoading: Boolean = false,
+    /** Set when the topic list could not be READ — distinct from an empty one. */
+    val editingTopicsError: String? = null,
     val isSaving: Boolean = false,
 )
 
@@ -115,19 +117,35 @@ class LessonPlanViewModel @Inject constructor(
     // ── Edit sheet ──────────────────────────────────────────────────────
 
     fun openEdit(slot: SlotWithPlan) {
-        _ui.update { it.copy(editing = slot, editingTopics = emptyList(), isEditingTopicsLoading = true) }
+        _ui.update {
+            it.copy(editing = slot, editingTopics = emptyList(),
+                    isEditingTopicsLoading = true, editingTopicsError = null)
+        }
         viewModelScope.launch {
-            val topics = repo.getTopicsForSubject(
+            repo.getTopicsForSubject(
                 className = slot.entry.className,
                 section = slot.entry.section,
                 subject = slot.entry.subject
-            ).getOrDefault(emptyList())
-            _ui.update { it.copy(editingTopics = topics, isEditingTopicsLoading = false) }
+            ).fold(
+                onSuccess = { topics ->
+                    _ui.update {
+                        it.copy(editingTopics = topics, isEditingTopicsLoading = false,
+                                editingTopicsError = null)
+                    }
+                },
+                onFailure = { e ->
+                    _ui.update {
+                        it.copy(editingTopics = emptyList(), isEditingTopicsLoading = false,
+                                editingTopicsError = e.message ?: "unavailable")
+                    }
+                }
+            )
         }
     }
 
     fun closeEdit() {
-        _ui.update { it.copy(editing = null, editingTopics = emptyList()) }
+        _ui.update { it.copy(editing = null, editingTopics = emptyList(),
+                             editingTopicsError = null) }
     }
 
     fun saveEdit(

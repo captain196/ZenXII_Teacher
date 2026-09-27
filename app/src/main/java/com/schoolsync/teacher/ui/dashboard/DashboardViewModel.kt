@@ -370,8 +370,23 @@ class DashboardViewModel @Inject constructor(
                 ?: tokenManager.schoolId.firstOrNull() ?: ""
             if (myId.isBlank() || mySchool.isBlank()) return null
 
+            // TT-D2: scope by schoolId SERVER-side. This previously queried every
+            // school's substitutes for today and discarded the other tenants'
+            // rows on-device — the same data-leakage path already closed in
+            // TimetableFirestoreRepository. Client-side discarding is not
+            // isolation: the documents still reach the handset.
+            //
+            // It is also what forced firestore.rules to keep
+            // `match /substitutes { allow read: if isAuth(); }` — an unscoped
+            // read arm — because tightening it to isSameSchool() would have
+            // denied this query. With the filter here, that rule can be
+            // tightened once this build has rolled out.
+            //
+            // Index `substitutes: schoolId ASC, date ASC` is already DEPLOYED,
+            // so this needs no index change.
             val subSnapshot = firestoreService.queryDocuments("substitutes") { ref ->
-                ref.whereEqualTo("date", todayIso)
+                ref.whereEqualTo("schoolId", mySchool)
+                    .whereEqualTo("date", todayIso)
             }
             if (subSnapshot.isEmpty) return null
 

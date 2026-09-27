@@ -141,8 +141,18 @@ class TimetableFirestoreRepository @Inject constructor(
             val seenBreaks = mutableSetOf<String>() // "day|periodNumber"
 
             for ((className, section) in classSections) {
-                val result = getTimetable(className, section)
-                val dayTimetables = result.getOrNull() ?: continue
+                // `?: continue` used to swallow this. One class failing to load
+                // then produced a week that was quietly missing those periods,
+                // and every class failing produced "No timetable yet" — the
+                // blank screen this file's own diagnostics were added to chase.
+                // A teacher cannot tell a period they do not teach from one the
+                // app could not read, so the read has to say which it was.
+                val dayTimetables = getTimetable(className, section).getOrElse { e ->
+                    throw Exception(
+                        "The timetable for $className $section could not be read, so " +
+                        "your week is not being shown as empty. Try again in a moment.", e
+                    )
+                }
 
                 for (dayTimetable in dayTimetables) {
                     val dayMap = allPeriodTimes.getOrPut(dayTimetable.day) { mutableMapOf() }
@@ -152,16 +162,7 @@ class TimetableFirestoreRepository @Inject constructor(
                         }
                         // Include this teacher's classes AND class-wide breaks/lunch
                         // (break periods are shared across all teachers of a section).
-                        val mine = period.teacherId == teacherId || period.teacher == teacherId
-                        // Fallback for admin-side data gaps: a period with a
-                        // blank teacherId that matches one of my assigned
-                        // (class, section, subject) tuples is mine.
-                        val mineBySubject = !mine &&
-                            !period.isBreak &&
-                            period.teacherId.isBlank() &&
-                            mySubjectKeys.isNotEmpty() &&
-                            subjectKey(period.className, period.section, period.subject) in mySubjectKeys
-                        if (mine || mineBySubject) {
+                        if (claimsPeriod(period, teacherId, mySubjectKeys)) {
                             allPeriods.add(period)
                         } else if (period.isBreak) {
                             val k = "${period.day}|${period.periodNumber}"
@@ -285,7 +286,18 @@ class TimetableFirestoreRepository @Inject constructor(
                         }
                     }
                 }
-            } catch (e: Exception) { Log.e("TT_SUB_OVERLAY", "Substitute overlay failed: ${e.message}", e) }
+            } catch (e: Exception) {
+                // Cover is operational information: a teacher who is covering a
+                // period this morning, or whose period is being covered, learns
+                // it here. Losing that silently leaves them reading a timetable
+                // that is wrong about today, so the failure is carried out to
+                // the caller rather than logged and dropped.
+                Log.e("TT_SUB_OVERLAY", "Substitute overlay failed: ${e.message}", e)
+                throw Exception(
+                    "Today's cover arrangements could not be read, so this timetable " +
+                    "may not show who is covering. Try again in a moment.", e
+                )
+            }
 
             // Diagnostic companion to getTimetable's log:
             //   classSections=0  → no (unarchived) subject assignments for this
@@ -320,6 +332,42 @@ class TimetableFirestoreRepository @Inject constructor(
         "${className.trim().lowercase()}|${section.trim().lowercase()}|${subject.trim().lowercase()}"
 
     companion object {
+        /**
+         * WHOSE PERIOD IS THIS?
+         *
+         * The rule that decides what a teacher sees on their own timetable, and
+         * therefore also what they do NOT see. It lived inline in the middle of
+         * a nested loop, where it could not be executed by a test — on the one
+         * screen where being wrong in either direction is obvious to the user
+         * and invisible to us.
+         *
+         *   • the period names them, by id — the ordinary case;
+         *   • the period names them in the NAME field — legacy documents that
+         *     stored an id there; still means them;
+         *   • the period names nobody, and its class/section/subject is one
+         *     they are assigned to — a real admin-side data gap (a published
+         *     period with no teacher stamped on it). Claiming it needs an
+         *     assignment, so it cannot hand them somebody else's class.
+         *
+         * Breaks are deliberately NOT claimed here: they belong to the whole
+         * section and are added once by the caller, deduplicated across the
+         * classes a teacher holds.
+         */
+        fun claimsPeriod(
+            period: TimetableEntry,
+            teacherId: String,
+            mySubjectKeys: Set<String>,
+        ): Boolean {
+            if (teacherId.isBlank()) return false
+            if (period.teacherId == teacherId || period.teacher == teacherId) return true
+            if (period.isBreak) return false
+            if (period.teacherId.isNotBlank()) return false      // it names someone else
+            if (mySubjectKeys.isEmpty()) return false
+            val key = "${period.className.trim().lowercase()}|" +
+                "${period.section.trim().lowercase()}|${period.subject.trim().lowercase()}"
+            return key in mySubjectKeys
+        }
+
         /** Build the [subjectKey] set from a teacher's assignments (class, section, subject). */
         fun subjectKeysOf(assignments: List<Triple<String, String, String>>): Set<String> =
             assignments.map { (c, s, subj) ->

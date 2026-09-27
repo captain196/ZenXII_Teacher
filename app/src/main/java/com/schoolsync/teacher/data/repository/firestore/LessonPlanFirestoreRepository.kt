@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.schoolsync.teacher.data.firebase.FirestoreService
 import com.schoolsync.teacher.data.local.TokenManager
+import com.schoolsync.teacher.data.model.ClassAssignment
 import com.schoolsync.teacher.data.model.DayTimetable
 import com.schoolsync.teacher.data.model.TimetableEntry
 import com.schoolsync.teacher.data.model.firestore.CurriculumDoc
@@ -41,12 +42,24 @@ import javax.inject.Singleton
  *   3. status=`rescheduled` REQUIRES rescheduledTo in the form "YYYY-MM-DD_P{N}".
  *   4. notes ≤ 2000 chars.
  *
- * Reads-only validations not enforced here (admin enforces, security rules
- * defend at the storage layer):
- *   • Subject-assignment auth — Firestore rules should reject writes by a
- *     teacher for a slot they aren't assigned to.
- *   • Topic FK validity — admin's UI enforces that topicId came from this
- *     class/subject's curriculum doc.
+ * Two checks used to be left to somebody else, and neither of them was
+ * being made:
+ *   • Subject-assignment authorisation was described here as something
+ *     Firestore rules "should" reject. The rules for lessonPlans allow any
+ *     staff member of the school to write any plan document — there is no
+ *     teacherId or assignment condition in them at all — so the sentence
+ *     was an assumption, not a guarantee. It is checked here now, the same
+ *     way Lesson_plan_service checks it.
+ *   • Topic validity was described as something the admin UI enforces. The
+ *     admin UI is not in the path of a write made from this app: topicId
+ *     and topicTitle arrived from the caller and were stored unread, so a
+ *     plan could name a topic from another class, or one deleted from the
+ *     syllabus, under any title. The topic is now resolved against the
+ *     curriculum and its title is taken from the topic itself.
+ *
+ * Neither check replaces a security rule. A modified client can still write
+ * whatever the rules permit; these make an honest client behave like the
+ * admin panel, and the rules gap is recorded separately.
  */
 
 class LessonPlanConflictException(serverVersion: Long, clientVersion: Long) :
@@ -65,6 +78,48 @@ class LessonPlanFirestoreRepository @Inject constructor(
 
     companion object {
         private const val TAG = "LessonPlanRepo"
+
+        /**
+         * Whether these assignments let this teacher plan this slot.
+         *
+         * Mirrors Lesson_plan_service::_canEdit: the subject may be named by
+         * its name or its code, and class/section are compared in canonical
+         * form so "8" and "Class 8th", "A" and "Section A" are the same
+         * classroom. A class-wide assignment has already been expanded into
+         * concrete sections by TeacherRepository, so nothing here needs to
+         * treat a blank section as a wildcard.
+         */
+        fun isAssignedTo(
+            assignments: List<ClassAssignment>,
+            className: String,
+            section: String,
+            subject: String,
+        ): Boolean {
+            if (className.isBlank() || section.isBlank() || subject.isBlank()) return false
+            val wantClass   = Constants.classKey(className)
+            val wantSection = Constants.sectionKey(section)
+            val wantSubject = subject.trim()
+            return assignments.any { a ->
+                Constants.classKey(a.className).equals(wantClass, ignoreCase = true) &&
+                Constants.sectionKey(a.section).equals(wantSection, ignoreCase = true) &&
+                (a.subject.trim().equals(wantSubject, ignoreCase = true) ||
+                 (a.subjectCode.isNotBlank() &&
+                  a.subjectCode.trim().equals(wantSubject, ignoreCase = true)))
+            }
+        }
+
+        /**
+         * The title to store for [topicId], or null when this curriculum has
+         * no such topic. A title is never taken from the caller: it is what
+         * list views, exports and the parent app show long after the topic
+         * itself may have changed, so it has to come from the topic.
+         */
+        fun topicTitleOrNull(topics: List<CurriculumTopicDoc>, topicId: String): String? {
+            if (topicId.isBlank()) return null
+            val t = topics.firstOrNull { it.topicId == topicId || it.id == topicId }
+                ?: return null
+            return t.title
+        }
         private val VALID_STATUSES = listOf("planned", "completed", "skipped", "rescheduled")
         private val RESCHEDULE_REGEX = Regex("^\\d{4}-\\d{2}-\\d{2}_P\\d+$")
         private val ISO_DATE_REGEX = Regex("^\\d{4}-\\d{2}-\\d{2}$")
@@ -94,14 +149,26 @@ class LessonPlanFirestoreRepository @Inject constructor(
             val dayName = dayOfWeekFromIso(date)
 
             // 1. Slots this teacher teaches today (filter from full-week query)
-            val assignedClasses = teacherRepository.getAssignedClasses().getOrNull()
-                ?.map { it.className to it.section }?.distinct() ?: emptyList()
+            // A teacher with no assignments genuinely has no periods. A read
+            // that FAILED is a different thing, and it used to look identical:
+            // an empty day, with the plans they had already written nowhere in
+            // sight. Only the first of those is an empty list.
+            val assignedClasses = teacherRepository.getAssignedClasses().getOrElse { e ->
+                throw Exception(
+                    "Your classes could not be loaded, so today's periods are not " +
+                    "being shown. Try again in a moment.", e
+                )
+            }.map { it.className to it.section }.distinct()
             val daySlots: List<TimetableEntry> = if (assignedClasses.isEmpty()) {
                 emptyList()
             } else {
-                val weekResult = timetableRepo.getMyTimetable(assignedClasses)
-                weekResult.getOrNull()
-                    ?.firstOrNull { it.day.equals(dayName, ignoreCase = true) }
+                timetableRepo.getMyTimetable(assignedClasses).getOrElse { e ->
+                    throw Exception(
+                        "Your timetable could not be loaded, so today's periods are " +
+                        "not being shown. Try again in a moment.", e
+                    )
+                }
+                    .firstOrNull { it.day.equals(dayName, ignoreCase = true) }
                     ?.periods
                     ?.filter { it.teacherId == teacherId && !it.isBreak && it.subject.isNotBlank() }
                     ?.sortedBy { it.periodNumber }
@@ -159,8 +226,14 @@ class LessonPlanFirestoreRepository @Inject constructor(
             topics.sortBy { it.sortOrder }
             Result.success(topics)
         } catch (e: Exception) {
+            // NOT Result.success(emptyList()). A failed read used to reach the
+            // edit sheet as "No topics found in curriculum", which is a
+            // statement about the school's syllabus and is untrue — and it
+            // arrives at the moment a teacher is deciding what to record
+            // against a lesson. Planning is still possible without a topic;
+            // being told the syllabus is empty is what must not happen.
             Log.w(TAG, "getTopicsForSubject failed for $parentId: ${e.message}")
-            Result.success(emptyList())  // best-effort — empty topics shouldn't block planning
+            Result.failure(e)
         }
     }
 
@@ -220,6 +293,23 @@ class LessonPlanFirestoreRepository @Inject constructor(
                 throw LessonPlanValidationException("rescheduled_to is required when status=rescheduled")
             }
 
+            // Authorisation: this teacher must actually teach this subject to
+            // this class. A failed lookup is NOT permission — an outage must
+            // not become an open door, and it must not become a false
+            // accusation either, so the two are reported differently.
+            val assignments = teacherRepository.getAssignedClasses().getOrElse { e ->
+                throw LessonPlanValidationException(
+                    "Your class assignments could not be read, so this plan was not " +
+                    "saved. Try again in a moment."
+                )
+            }
+            if (!isAssignedTo(assignments, input.className, input.section, input.subject)) {
+                throw LessonPlanValidationException(
+                    "You are not assigned to teach ${input.subject} to " +
+                    "${input.className} ${input.section}, so this plan cannot be saved."
+                )
+            }
+
             val dayOfWeek    = dayOfWeekFromIso(input.date)              // SERVER-DERIVED, ignores client
             val classSection = "${input.className}/${input.section}"
             val docId        = planDocId(schoolId, session, teacherId, input.date, input.periodIndex)
@@ -244,6 +334,28 @@ class LessonPlanFirestoreRepository @Inject constructor(
                 )
             }
 
+            // The topic, if one was chosen, must belong to THIS class and
+            // subject's curriculum, and its title comes from the topic rather
+            // than from the caller.
+            var topicTitle = ""
+            if (input.topicId.isNotBlank()) {
+                val topics = getTopicsForSubject(
+                    className = input.className, section = input.section,
+                    subject = input.subject
+                ).getOrElse {
+                    throw LessonPlanValidationException(
+                        "The curriculum could not be read, so this plan was not checked " +
+                        "against it or saved. Try again in a moment."
+                    )
+                }
+                topicTitle = topicTitleOrNull(topics, input.topicId)
+                    ?: throw LessonPlanValidationException(
+                        "The topic this plan was written for is no longer in the " +
+                        "curriculum for ${input.className} ${input.section} / " +
+                        "${input.subject}. Choose another topic, or clear it, and save again."
+                    )
+            }
+
             // ── transactional upsert with version check ──
             val nowIso = isoNow()
             val docRef = firestore.collection(Constants.Firestore.LESSON_PLANS).document(docId)
@@ -253,6 +365,13 @@ class LessonPlanFirestoreRepository @Inject constructor(
                 val curVersion = if (existing.exists()) (existing.getLong("version") ?: 0L) else 0L
                 if (input.expectedVersion != null && input.expectedVersion != curVersion) {
                     throw LessonPlanConflictException(curVersion, input.expectedVersion)
+                }
+                // No expected version means the caller believed this period was
+                // empty. If it is not, the caller was working from something
+                // stale — a day that failed to load, or another device that got
+                // there first — and writing would replace a plan nobody saw.
+                if (input.expectedVersion == null && existing.exists()) {
+                    throw LessonPlanConflictException(curVersion, 0L)
                 }
 
                 val isNew = !existing.exists()
@@ -284,7 +403,7 @@ class LessonPlanFirestoreRepository @Inject constructor(
                     "periodNumber"    to (input.periodIndex + 1),
 
                     "topicId"         to input.topicId,
-                    "topicTitle"      to input.topicTitle,
+                    "topicTitle"      to topicTitle,
                     "curriculumDocId" to curId,
 
                     "notes"           to input.notes,
@@ -310,7 +429,7 @@ class LessonPlanFirestoreRepository @Inject constructor(
                     teacherId = teacherId, teacherName = teacherName,
                     date = input.date, dayOfWeek = dayOfWeek,
                     periodIndex = input.periodIndex, periodNumber = input.periodIndex + 1,
-                    topicId = input.topicId, topicTitle = input.topicTitle,
+                    topicId = input.topicId, topicTitle = topicTitle,
                     curriculumDocId = curId,
                     notes = input.notes, status = input.status,
                     rescheduledTo = input.rescheduledTo, completedAt = completedAt,
@@ -350,8 +469,17 @@ class LessonPlanFirestoreRepository @Inject constructor(
         className: String, section: String, day: String, periodIndex: Int,
     ): TimetableEntry? {
         if (day.isBlank()) return null
-        val sectionKey = "$className/$section"
-        val docId = "${schoolId}_${session}_${sectionKey}_$day"
+        // TT-F1. This used to build the id as
+        //     "${schoolId}_${session}_${className}/${section}_$day"
+        // — with a SLASH, and with the raw class/section the caller supplied.
+        // The slash makes it an invalid document reference rather than a
+        // missing one: Firestore reads it as a path, document() throws, and the
+        // catch below (correctly) reports a failed read. So the period-match
+        // guard could not succeed for ANY teacher, and every lesson-plan save
+        // ended in "The timetable for this day could not be read". The id is
+        // built by the shared helper now, which also normalises "8"/"A" into
+        // the canonical form the projection writes.
+        val docId = Constants.timetableDocId(schoolId, session, className, section, day)
         return try {
             val snap = firestore.collection(Constants.Firestore.TIMETABLES).document(docId).get().await()
             if (!snap.exists()) return null
@@ -374,8 +502,15 @@ class LessonPlanFirestoreRepository @Inject constructor(
                 isBreak = (match["type"] as? String)?.lowercase() in listOf("break", "lunch")
             )
         } catch (e: Exception) {
+            // null here means the day has no such period, and the caller says
+            // so to the teacher: "No timetable period found". A failed read is
+            // not that, and telling a teacher their timetable is unset while it
+            // sits there intact sends them to fix nothing.
             Log.w(TAG, "resolveTimetableCell failed for $docId: ${e.message}")
-            null
+            throw LessonPlanValidationException(
+                "The timetable for this day could not be read, so the period could " +
+                "not be checked. Try again in a moment."
+            )
         }
     }
 
@@ -389,8 +524,16 @@ class LessonPlanFirestoreRepository @Inject constructor(
             }
             docs.filter { it.schoolId == schoolId && it.session == session && it.date == date }
         } catch (e: Exception) {
+            // NOT emptyList(). The day view draws an empty list as periods
+            // nobody has planned, and the quick actions on those rows send no
+            // expected version — so a swallowed read here ends with a teacher
+            // tapping 'completed' on a plan they cannot see and overwriting
+            // their own notes with nothing.
             Log.w(TAG, "fetchPlansForTeacherDate failed: ${e.message}")
-            emptyList()
+            throw Exception(
+                "Today's plans could not be loaded, so the day is not being shown " +
+                "as empty. Try again in a moment.", e
+            )
         }
     }
 

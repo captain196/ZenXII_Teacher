@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.schoolsync.teacher.util.formatRollNo
 import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.Divider as DividerColor
 import com.schoolsync.teacher.ui.theme.ErrorRed
@@ -639,7 +640,7 @@ private fun MarksGrid(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = mark.rollNo.toString(),
+                                text = formatRollNo(mark.rollNoRaw),   // P11-D1
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TextSecondary,
                                 fontSize = 11.sp
@@ -665,7 +666,15 @@ private fun MarksGrid(
                                     fontSize = 11.sp
                                 )
                                 Text(
-                                    text = mark.studentId,
+                                    // Phase 11.3 — Student ID stays the primary
+                                    // reference; SR No. is appended so the teacher
+                                    // can match the school register. Display only:
+                                    // the save path still keys on studentId.
+                                    text = if (mark.srNo.isNotBlank()) {
+                                        "${mark.studentId} · SR ${mark.srNo}"
+                                    } else {
+                                        mark.studentId
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextTertiary,
                                     maxLines = 1,
@@ -686,7 +695,7 @@ private fun MarksGrid(
                                 enabled = !mark.isAbsent,
                                 width = markCellWidth,
                                 height = rowHeight,
-                                semanticLabel = "Theory marks for ${mark.name}, roll ${mark.rollNo}"
+                                semanticLabel = "Theory marks for ${mark.name}, roll ${formatRollNo(mark.rollNoRaw)}"
                             )
 
                             // Practical input
@@ -698,7 +707,7 @@ private fun MarksGrid(
                                 enabled = !mark.isAbsent,
                                 width = markCellWidth,
                                 height = rowHeight,
-                                semanticLabel = "Practical marks for ${mark.name}, roll ${mark.rollNo}"
+                                semanticLabel = "Practical marks for ${mark.name}, roll ${formatRollNo(mark.rollNoRaw)}"
                             )
 
                             // Total (read-only, auto-calculated). Turns red when the

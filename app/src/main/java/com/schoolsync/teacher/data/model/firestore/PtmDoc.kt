@@ -80,6 +80,16 @@ data class PtmRsvpDoc(
     val className: String = "",
     val section: String = "",
     val rollNo: String = "",
+    // Phase 11.5 (G1) — the school's register number, denormalised by the
+    // Parent app at RSVP time from its already-cached student profile. Reading
+    // it here costs NOTHING: it arrives on the RSVP document the teacher's
+    // list query already downloads. Deliberately NOT resolved per-row from
+    // srNoIndex — that would be one read per RSVP (an N+1) for a display field.
+    //
+    // RSVPs written before this change carry no `srNo` and deserialise to "",
+    // which the UI renders as absent. No backfill is performed: rewriting
+    // historical RSVP documents would be a production data write.
+    val srNo: String = "",
     val parentName: String = "",
     val parentPhone: String = "",
     val parentEmail: String = "",

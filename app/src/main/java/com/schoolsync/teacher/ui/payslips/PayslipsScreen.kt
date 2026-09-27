@@ -64,6 +64,22 @@ private fun fmtMoney(v: Double): String {
     return "₹" + nf.format(v)
 }
 
+/**
+ * Render a fractional day-count cleanly: "21.5", "0.5", "22" — never "22.0".
+ *
+ * Payroll day counts became Double (see SalarySlipDoc) because half-days are
+ * real: attendance 'M', half-day leave, and school-declared Calendar
+ * Half-Days all produce .5 values. Interpolating the raw Double would show
+ * "22.0" for an ordinary month, so format it the same way LeaveScreen already
+ * formats its Double day counts.
+ */
+// `internal` rather than `private` so it can be exercised by a JVM unit test.
+// This formatter is the last step between a fractional day count and what the
+// teacher actually reads, so it is worth verifying by execution rather than by
+// inspection. Visibility only — behaviour is unchanged.
+internal fun formatDays(days: Double): String =
+    if (days == days.toLong().toDouble()) days.toLong().toString() else days.toString()
+
 private val ACRONYMS = setOf("HRA", "DA", "TA", "TDS", "PF", "ESI")
 
 private fun prettify(key: String): String {
@@ -181,11 +197,16 @@ private fun PayslipCard(slip: SalarySlipDoc, expanded: Boolean, onToggle: () -> 
             Column(Modifier.padding(top = 12.dp)) {
                 Divider(color = DividerColor)
                 Spacer(Modifier.height(10.dp))
-                InfoRow("Working days", "${slip.workingDays}")
-                InfoRow("Present", "${slip.presentDays}")
-                InfoRow("Absent", "${slip.daysAbsent}")
-                if (slip.lwpDays > 0) InfoRow("LWP days", "${slip.lwpDays}")
-                if (slip.paidLeaveDays > 0) InfoRow("Paid leave", "${slip.paidLeaveDays}")
+                // formatDays() keeps whole numbers clean ("22") while showing
+                // genuine halves ("21.5", "0.5"). The `> 0` gates now compare
+                // against 0.0 — as Ints they floored a real 0.5-day LWP to 0
+                // and hid the row entirely, so a teacher saw reduced net pay
+                // with no line item explaining it.
+                InfoRow("Working days", formatDays(slip.workingDays))
+                InfoRow("Present", formatDays(slip.presentDays))
+                InfoRow("Absent", formatDays(slip.daysAbsent))
+                if (slip.lwpDays > 0.0) InfoRow("LWP days", formatDays(slip.lwpDays))
+                if (slip.paidLeaveDays > 0.0) InfoRow("Paid leave", formatDays(slip.paidLeaveDays))
                 Spacer(Modifier.height(10.dp))
                 SectionHeader("Earnings")
                 slip.earnings.forEach { (k, v) -> if (v != 0.0) InfoRow(prettify(k), fmtMoney(v)) }

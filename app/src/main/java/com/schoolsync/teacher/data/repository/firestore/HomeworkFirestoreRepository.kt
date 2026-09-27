@@ -124,6 +124,8 @@ class HomeworkFirestoreRepository @Inject constructor(
         title: String,
         description: String,
         subject: String,
+        // HW-D1: defaulted so every existing call site compiles unchanged.
+        subjectCode: String = "",
         className: String,
         section: String,
         dueDate: String,
@@ -190,6 +192,19 @@ class HomeworkFirestoreRepository @Inject constructor(
             "title" to title,
             "description" to description,
             "subject" to subject,
+            // HW-D1: canonical code for assignment-scope authorization. Blank
+            // on paths that do not supply it yet; the rule requiring it ships
+            // only AFTER this release has rolled out.
+            "subjectCode" to subjectCode,
+            // HW-D1: doc-id SEGMENTS for the subjectAssignments lookup, built
+            // exactly as Subject_assignment_service::docId() builds them
+            // (space and slash -> underscore). Same contract as the marks
+            // path: these are lookup HINTS carrying no trust of their own —
+            // the rule re-validates the FETCHED assignment.s own className/
+            // section/subjectCode/teacherId, so a forged segment can only
+            // cause a lookup MISS, never a false authorization.
+            "assignClassSeg" to cls.replace(" ", "_").replace("/", "_"),
+            "assignSectionSeg" to sec.replace(" ", "_").replace("/", "_"),
             "teacherId" to teacherId,
             "teacherName" to teacherName,
             "dueDate" to normalizedDueDate,

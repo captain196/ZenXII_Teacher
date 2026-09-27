@@ -179,6 +179,15 @@ class ExamFirestoreRepository @Inject constructor(
         className: String,
         section: String,
         subject: String,
+        // Phase 0.2B (G-09): canonical subjects.subjectCode, resolved
+        // server-side and carried via ExamSubjectScheduleDoc → SubjectInfo.
+        // Written into the marks doc for the Firestore rule's exact
+        // subjectAssignments lookup. Empty string on old schedules that
+        // predate this field or an unresolvable subject name — a write
+        // with an empty subjectCode is authorized purely on whether the
+        // rule requires it (fail-closed, enforced server-side by rules,
+        // not by this client).
+        subjectCode: String,
         marksList: List<MarksDoc>
     ): Result<Int> {
         val schoolCode = getSchoolCode()
@@ -190,6 +199,20 @@ class ExamFirestoreRepository @Inject constructor(
 
         val cls = Constants.classKey(className)
         val sec = Constants.sectionKey(section)
+
+        // Phase 0.2B (G-09): subjectAssignments document ids are built server-
+        // side (Subject_assignment_service::docId()) by literally replacing
+        // spaces/slashes with underscores in the class/section labels — a
+        // DIFFERENT scheme from this file's own idToken() hashing used for
+        // marks/examSchedule ids just above. These segments are sent purely
+        // as a lookup HINT for the Firestore rule to locate a candidate
+        // subjectAssignments document; they carry no trust on their own —
+        // the rule re-validates the FETCHED document's own className/
+        // section/subjectCode/teacherId fields against this write's trusted
+        // values before authorizing, so a wrong or forged segment can only
+        // ever cause a lookup miss, never a false authorization.
+        val assignClassSeg = cls.replace(" ", "_").replace("/", "_")
+        val assignSectionSeg = sec.replace(" ", "_").replace("/", "_")
 
         return try {
             // Build every student's marks doc, then commit them in ONE atomic
@@ -210,6 +233,9 @@ class ExamFirestoreRepository @Inject constructor(
                     "className" to cls,
                     "section" to sec,
                     "subject" to subject,
+                    "subjectCode" to subjectCode,
+                    "assignClassSeg" to assignClassSeg,
+                    "assignSectionSeg" to assignSectionSeg,
                     "studentId" to entry.studentId,
                     "studentName" to entry.studentName,
                     // componentMarks is the CANONICAL shape the admin report cards /

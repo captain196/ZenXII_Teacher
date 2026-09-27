@@ -25,6 +25,20 @@ data class StudentInfo(
     val studentId: String,
     val name: String,
     val rollNo: Int,
+    // PARENT_APP_FIRESTORE_ONLY_HARDENING_REPORT.md Phase 8 / Teacher App
+    // follow-up: the canonical Firestore value the Admin Panel allows for
+    // Roll Number has no digits-only constraint, so it cannot always be
+    // represented as Int. `rollNo` is kept Int (bounded fix — sort/UI
+    // elsewhere in this app depend on that type) but no longer silently
+    // maps a non-numeric value to 0, which is indistinguishable from a
+    // genuinely-zero roll number; unparseable values sort to Int.MIN_VALUE
+    // instead. `rollNoRaw` preserves the true Firestore string so a future
+    // display fix doesn't need to re-derive it.
+    val rollNoRaw: String = "",
+    // Phase 11: the school's register number, display-only. Sourced from the
+    // student document already downloaded by the roster query — zero extra
+    // Firestore reads. Blank when the school has no SRNO for the student.
+    val srNo: String = "",
     val className: String,
     val section: String,
     val fatherName: String = "",
@@ -183,7 +197,9 @@ class StudentsViewModel @Inject constructor(
                                         .ifBlank { doc.studentId }
                                         .ifBlank { doc.id },
                                     name = doc.name,
-                                    rollNo = doc.rollNo.toIntOrNull() ?: 0,
+                                    rollNo = doc.rollNo.toIntOrNull() ?: Int.MIN_VALUE,
+                                    rollNoRaw = doc.rollNo,
+                                    srNo = doc.srNoText,
                                     className = doc.className,
                                     section = doc.section,
                                     fatherName = doc.fatherName,
@@ -235,7 +251,9 @@ class StudentsViewModel @Inject constructor(
                     StudentInfo(
                         studentId = s.studentId,
                         name = s.displayName,
-                        rollNo = s.rollNo.toIntOrNull() ?: 0,
+                        rollNo = s.rollNo.toIntOrNull() ?: Int.MIN_VALUE,
+                        rollNoRaw = s.rollNo,
+                        srNo = s.srNo,
                         className = s.className,
                         section = s.section,
                         fatherName = s.fatherName,
@@ -322,7 +340,17 @@ class StudentsViewModel @Inject constructor(
         val lower = query.lowercase()
         return students.filter {
             it.name.lowercase().contains(lower) ||
-                    it.rollNo.toString().contains(lower) ||
+                    // P11-D1: search the canonical roll string. `rollNo.toString()`
+                    // matched "-2147483648" for every blank/alphanumeric roll and
+                    // could never match a genuine alphanumeric roll like "A12".
+                    it.rollNoRaw.lowercase().contains(lower) ||
+                    // Phase 11.3 — this is the Teacher app's ONE genuine direct
+                    // student-search surface, so SR Number is accepted here. The
+                    // match is EXACT, not substring: typing "1" must not return
+                    // every student whose register number merely contains a 1.
+                    // Purely local — the roster is already in memory, so this
+                    // adds zero Firestore reads and zero round trips.
+                    it.srNo.equals(lower, ignoreCase = true) ||
                     it.fatherName.lowercase().contains(lower) ||
                     it.studentId.lowercase().contains(lower)
         }

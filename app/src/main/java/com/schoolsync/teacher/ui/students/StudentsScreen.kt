@@ -76,6 +76,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.schoolsync.teacher.data.model.StudentInfo as ModelStudentInfo
+import com.schoolsync.teacher.util.formatRollNo
 import com.schoolsync.teacher.ui.redflags.QuickFlagSheet
 import com.schoolsync.teacher.ui.redflags.QuickFlagUndoBanner
 import com.schoolsync.teacher.ui.redflags.QuickFlagViewModel
@@ -265,7 +266,11 @@ private fun StudentInfo.toModelStudentInfo(): ModelStudentInfo = ModelStudentInf
     name         = name,
     fatherName   = fatherName,
     motherName   = motherName,
-    rollNo       = rollNo.toString(),
+    // P11-D1 (data integrity, not only display): this value is DENORMALISED
+    // onto the red-flag document the admin panel and dashboard analytics read.
+    // `rollNo.toString()` wrote "-2147483648" into Firestore for any blank or
+    // alphanumeric roll number. Carry the canonical raw string instead.
+    rollNo       = rollNoRaw.trim(),
     className    = className,
     section      = section,
     gender       = gender,
@@ -468,7 +473,13 @@ private fun StudentCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Roll: ${student.rollNo}",
+                    // P11-D1: render the raw Firestore string, never the Int
+                    // sort key (Int.MIN_VALUE for blank/alphanumeric rolls).
+                    // Phase 11.3: SR No. appended — the school register number
+                    // the office and parents actually quote. Already on the
+                    // downloaded document, so this costs zero extra reads.
+                    text = "Roll: ${formatRollNo(student.rollNoRaw)}" +
+                        if (student.srNo.isNotBlank()) "  ·  SR: ${student.srNo}" else "",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary,
                     fontSize = 10.sp
@@ -598,7 +609,7 @@ private fun StudentDetailPanel(
         )
 
         Text(
-            text = "${student.className} - ${student.section} | Roll: ${student.rollNo}",
+            text = "${student.className} - ${student.section} | Roll: ${formatRollNo(student.rollNoRaw)}",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -611,6 +622,13 @@ private fun StudentDetailPanel(
 
         // Detail rows
         ProfileDetailRow("Student ID", student.studentId)
+        // Phase 11: the school register number. Teachers field parent queries
+        // against the printed register, so SRNO is the identifier that matches.
+        // Admission Number is deliberately NOT shown — it is an admission-office
+        // / certificate artefact with no teacher-facing workflow. APAAR and
+        // previousStudentId are never exposed in this app.
+        // Renders nothing when blank (ProfileDetailRow returns early).
+        ProfileDetailRow("SR No.", student.srNo)
         ProfileDetailRow("Father's Name", student.fatherName)
         ProfileDetailRow("Mother's Name", student.motherName)
         ProfileDetailRow("Date of Birth", student.dob)

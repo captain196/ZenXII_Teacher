@@ -25,6 +25,14 @@ data class ExamScheduleDoc(
  */
 data class ExamSubjectScheduleDoc(
     val subjectName: String = "",
+    // Phase 0.2B (G-09 propagation): canonical subjects.subjectCode, resolved
+    // server-side in Exam.php from the subject master at schedule-save time —
+    // never trusted from any client. Empty string on schedules saved before
+    // this field existed, or if the subject name no longer resolves against
+    // the current subject master (e.g. renamed/removed) — callers must treat
+    // empty the same as absent, never fall back to subjectName for
+    // authorization purposes.
+    val subjectCode: String = "",
     val date: String = "",
     val startTime: String = "",
     val endTime: String = "",
