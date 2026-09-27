@@ -106,5 +106,20 @@
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="barcode_ui" />
 
+        <!-- C1 offline attendance queue: remove WorkManager's default startup
+             initializer so the app supplies its own Hilt-aware Configuration
+             (SchoolSyncApp implements Configuration.Provider). Without this the
+             @HiltWorker AttendanceFlushWorker cannot be constructed. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
     </application>
 </manifest>

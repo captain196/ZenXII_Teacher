@@ -37,6 +37,15 @@ android {
         versionCode = 2
         versionName = "1.0.1"
 
+        // C1 — on-device instrumented tests (real SQLite / WorkManager).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // C1 device-UAT ONLY: when set (debug build, via -PUAT_EMULATOR=<host>),
+        // the app routes Firebase Auth+Firestore to the local emulators at that
+        // host so a synthetic tenant can be exercised on a real phone. EMPTY for
+        // every normal/release build → no emulator wiring ever ships.
+        buildConfigField("String", "EMULATOR_HOST", "\"\"")
+
         vectorDrawables { useSupportLibrary = true }
 
         // PHP backend URL — used for any REST API endpoints.
@@ -94,6 +103,11 @@ android {
             val localBase = (project.findProperty("F13_LOCAL_BASE_URL") as String?)
                 ?: "http://localhost:8080/ZenX/school/"
             buildConfigField("String", "BASE_URL", "\"$localBase\"")
+            // C1 device-UAT: -PUAT_EMULATOR=127.0.0.1 (with `adb reverse` on
+            // 8055/8192/9199) wires this debug build to the local Firebase
+            // emulators. Unset → empty → normal debug behaviour (real Firebase).
+            val emuHost = (project.findProperty("UAT_EMULATOR") as String?) ?: ""
+            buildConfigField("String", "EMULATOR_HOST", "\"$emuHost\"")
         }
     }
     compileOptions {
@@ -112,6 +126,13 @@ android {
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    }
+    testOptions {
+        // C1 — Robolectric-based Room DAO tests run on the JVM.
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
     }
 }
 
@@ -212,9 +233,31 @@ dependencies {
     // platform requirement.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 
+    // ── C1 offline attendance queue (durable local queue + flush worker) ──
+    // Room = durable queue store; WorkManager = constrained background flush;
+    // hilt-work = @HiltWorker so the worker can inject the app's ApiService.
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.hilt:hilt-work:1.1.0")
+    ksp("androidx.hilt:hilt-compiler:1.1.0")
+
     // Unit tests (JVM). Pure-logic homework harness — no Firebase/Android runtime.
     testImplementation("junit:junit:4.13.2")
     // Matches the app's kotlinx-coroutines-core version (1.7.3, via -android).
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    // C1 Room DAO tests run on the JVM via Robolectric (in-memory SQLite).
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("androidx.test:core:1.5.0")
+    testImplementation("androidx.room:room-testing:2.6.1")
+    testImplementation("androidx.work:work-testing:2.9.1")
+    // C1 on-device (instrumented) tests — real SQLite + WorkManager on the phone.
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:core-ktx:1.5.0")
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("androidx.work:work-testing:2.9.1")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }
 

@@ -133,12 +133,17 @@ object Constants {
     fun classKey(className: String): String {
         val trimmed = className.trim()
         if (trimmed.isEmpty()) return ""
-        if (trimmed.startsWith("Class ", ignoreCase = true)) return trimmed
         // Add ordinal suffix for pure numeric keys (the Config/Classes catalog
         // stores key="8" but label="Class 8th" — and the Teacher app needs the
         // label form to match Firestore docs written by the admin panel).
-        val withOrdinal = appendOrdinalSuffixIfNeeded(trimmed)
-        return "Class $withOrdinal"
+        //
+        // The prefix is stripped first rather than returned early: the canonical
+        // normaliser turns "Class 8" into "Class 8th" too, and returning it
+        // unchanged produced a sectionKey that matched no timetable document.
+        val bare = if (trimmed.startsWith("Class ", ignoreCase = true))
+            trimmed.substring(6).trim() else trimmed
+        if (bare.isEmpty()) return ""
+        return "Class " + appendOrdinalSuffixIfNeeded(bare)
     }
 
     /**
@@ -151,6 +156,38 @@ object Constants {
         if (trimmed.isEmpty()) return ""
         if (trimmed.startsWith("Section ", ignoreCase = true)) return trimmed
         return "Section $trimmed"
+    }
+
+    /**
+     * The document id of one class-section's timetable for one day, exactly as
+     * the admin panel writes it.
+     *
+     * `timetables` is the compatibility projection of the published canonical
+     * timetable. Every document in it is addressed as
+     *
+     *     {schoolId}_{session}_{Class Nth}_{Section X}_{Day}
+     *
+     * — SEPARATED BY UNDERSCORES. The projection builds it by taking the
+     * canonical sectionKey "Class Nth/Section X" and replacing the slash,
+     * because a '/' inside a document id is a PATH SEPARATOR: Firestore reads
+     * `timetables/A/B` as a collection, and `document()` rejects it outright
+     * as an invalid document reference. It does not return "not found" — it
+     * throws, and a caller that treats a throw as a read failure then tells
+     * the user their timetable could not be read.
+     *
+     * Building this id by hand is therefore a trap with two teeth: the
+     * separator, and the class/section form. Both are handled here, through
+     * the same canonical helpers the query path already uses, so a caller
+     * passing "8"/"A" addresses the same document as one passing
+     * "Class 8th"/"Section A".
+     */
+    fun timetableDocId(
+        schoolId: String, session: String,
+        className: String, section: String, day: String,
+    ): String {
+        val cls = classKey(className)
+        val sec = sectionKey(section)
+        return "${schoolId}_${session}_${cls}_${sec}_${day.trim()}"
     }
 
     /**
