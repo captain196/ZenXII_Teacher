@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.schoolsync.teacher.R
@@ -22,6 +23,7 @@ import com.schoolsync.teacher.ui.theme.BgEnd
 import com.schoolsync.teacher.ui.theme.BgStart
 import com.schoolsync.teacher.ui.theme.TextPrimary
 import com.schoolsync.teacher.ui.theme.TextSecondary
+import com.schoolsync.teacher.data.lifecycle.SchoolAccess
 import kotlinx.coroutines.delay
 
 // Splash accent — aligned to the "Soft Blue & Cloud" palette accent (#3E5F8A)
@@ -38,7 +40,19 @@ fun SplashScreen(
     isLoggedIn: Boolean,
     hasSeenOnboarding: Boolean,
     mustChangePassword: Boolean,
+    schoolAccess: SchoolAccess = SchoolAccess.Unknown,
 ) {
+    // ── SCHOOL LIFECYCLE GATE ────────────────────────────────────────
+    // When the school itself is not usable — archived, not yet open, or the
+    // service is on hold — say so plainly instead of routing the user into an
+    // app whose every screen will fail with PERMISSION_DENIED and render as an
+    // empty list. Unknown fails OPEN (canUseApp = true), so an unreadable
+    // mirror never strands a legitimate user.
+    if (isLoggedIn && !schoolAccess.canUseApp) {
+        SchoolUnavailableScreen(schoolAccess)
+        return
+    }
+
     var phase by remember { mutableIntStateOf(0) }
 
     // ── Logo animations ──
@@ -179,6 +193,52 @@ fun SplashScreen(
                 fontWeight = FontWeight.Medium,
                 color = ZenXiiAccent,
                 modifier = Modifier.alpha(taglineAlpha)
+            )
+        }
+    }
+}
+
+/**
+ * Shown instead of the app when the school itself is unavailable.
+ *
+ * Deliberately explains the SCHOOL's situation in the user's terms and never
+ * surfaces a Firestore error, a status code, or the words "permission
+ * denied" — a teacher whose school has closed is not experiencing a
+ * permissions problem, and telling them so would be both confusing and
+ * untrue. The wording comes from SchoolAccess, so a commercial hold and a
+ * closure can never read the same.
+ */
+@Composable
+private fun SchoolUnavailableScreen(access: SchoolAccess) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(brush = Brush.linearGradient(colors = listOf(BgStart, BgEnd, BgStart))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // Theme text colours, NOT hardcoded white: BgStart/BgEnd are LIGHT
+            // in this palette, so white text rendered all but invisible on a
+            // real device. Caught on hardware, not in a unit test.
+            Text(
+                text = access.title,
+                color = TextPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = access.message,
+                color = TextSecondary,
+                fontSize = 15.sp,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center,
             )
         }
     }

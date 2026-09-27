@@ -3,6 +3,8 @@ package com.schoolsync.teacher.ui.splash
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.schoolsync.teacher.data.lifecycle.SchoolAccess
+import com.schoolsync.teacher.data.lifecycle.SchoolLifecycleRepository
 import com.schoolsync.teacher.data.local.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,11 +20,20 @@ data class SplashState(
     val isLoggedIn: Boolean = false,
     val hasSeenOnboarding: Boolean = false,
     val mustChangePassword: Boolean = false,
+    /**
+     * The school's lifecycle state, resolved at cold start from the existing
+     * `tenantPublic` mirror. Lets the UI say WHY the app is unusable — closed,
+     * archived, not yet open, or a commercial hold — instead of letting the
+     * user walk into screens that will fail with PERMISSION_DENIED and render
+     * as empty lists. Defaults to Unknown, which is fail-open.
+     */
+    val schoolAccess: SchoolAccess = SchoolAccess.Unknown,
 )
 
 @HiltViewModel
 class SplashViewModel @Inject constructor(
     private val tokenManager: TokenManager,
+    private val schoolLifecycleRepository: SchoolLifecycleRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -88,14 +99,34 @@ class SplashViewModel @Inject constructor(
                     return@launch
                 } catch (_: Exception) { /* offline / transient: keep cached value, do not fall open */ }
             }
+            // Resolve the school's lifecycle state once the session is known.
+            // Only meaningful when logged in (the schoolId comes from the
+            // stored session), and deliberately AFTER the token refresh above
+            // so the read carries current claims. Failure is absorbed inside
+            // the repository and surfaces as Unknown, which is fail-open — an
+            // unreadable convenience mirror must never block a working app.
+            val access = if (loggedIn) {
+                schoolLifecycleRepository.currentSchoolAccess()
+            } else {
+                SchoolAccess.Unknown
+            }
+
             _state.value = SplashState(
                 isLoading = false,
                 isLoggedIn = loggedIn,
                 hasSeenOnboarding = seenOnboarding,
                 mustChangePassword = mustChange,
+                schoolAccess = access,
             )
         }
     }
+
+    /**
+     * Live lifecycle state, for screens that must react while the app is
+     * OPEN — a school can be closed or suspended mid-session, and the user
+     * should be told rather than watching their screens quietly start failing.
+     */
+    val schoolAccess = schoolLifecycleRepository.observeSchoolAccess()
 
     fun markOnboardingSeen() {
         prefs.edit().putBoolean("onboarding_seen", true).apply()
