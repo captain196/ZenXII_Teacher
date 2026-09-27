@@ -105,6 +105,39 @@ class AttendanceRegularizationRepository @Inject constructor(
         }
     }
 
+    /**
+     * Withdraw a PENDING request.
+     *
+     * Pending only, and that boundary is not arbitrary: it is the documented
+     * industry rule (greytHR offers Withdraw on the Pending tab, and states that
+     * once a manager approves "it cannot be canceled"), and it is exactly what
+     * the Firestore rule permits — an owner may move their own request from
+     * pending to cancelled and nothing else. Anything wider is refused server
+     * side, so this check is a courtesy to the user, not the security boundary.
+     *
+     * A withdrawn day can be filed again later: the doc id is deterministic per
+     * (school, staff, date), and the same rule arm allows a fresh pending write
+     * over a request the owner has not had approved.
+     */
+    suspend fun withdraw(docId: String): Result<Unit> {
+        if (docId.isBlank()) return Result.failure(IllegalArgumentException("Missing request id."))
+
+        val data = hashMapOf<String, Any?>(
+            "status" to "cancelled",
+            "cancelledAt" to firestoreService.serverTimestamp(),
+        )
+
+        return try {
+            firestoreService.setDocumentsBatch(
+                listOf(Triple(Constants.Firestore.ATTENDANCE_REGULARIZATIONS, docId, data as Any)),
+                merge = true,
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private suspend fun getSchoolCode(): String? =
         tokenManager.schoolId.firstOrNull()?.takeIf { it.isNotBlank() }
 

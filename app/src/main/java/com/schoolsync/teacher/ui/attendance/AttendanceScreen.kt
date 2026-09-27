@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.schoolsync.teacher.data.repository.MyCorrection
+import com.schoolsync.teacher.util.formatRollNo
 import com.schoolsync.teacher.ui.theme.AttendanceAbsent
 import com.schoolsync.teacher.ui.theme.AttendanceHoliday
 import com.schoolsync.teacher.ui.theme.AttendanceLeave
@@ -136,6 +137,7 @@ fun AttendanceScreen(
                 is AttendanceEvent.Locked -> snackbarHostState.showSnackbar("Attendance is locked. File a correction request.")
                 is AttendanceEvent.ReasonRequired -> snackbarHostState.showSnackbar("A reason (10+ chars) is required after 10:30 AM.")
                 is AttendanceEvent.CorrectionSubmitted -> snackbarHostState.showSnackbar(event.message)
+                is AttendanceEvent.QueuedOffline -> snackbarHostState.showSnackbar(event.message)
             }
         }
     }
@@ -788,7 +790,8 @@ private fun TodayScrollBody(
         items(state.students, key = { it.studentId }) { student ->
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 StudentRow(
-                    rollNo = student.rollNo,
+                    rollNoRaw = student.rollNoRaw,
+                    srNo = student.srNo,
                     name = student.name,
                     status = student.dayStatuses[today],
                     enabled = state.isClassTeacher,
@@ -804,7 +807,12 @@ private fun TodayScrollBody(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StudentRow(
-    rollNo: Int,
+    // P11-D1: the canonical Firestore string, not the Int sort key. The old
+    // `rollNo > 0` guard correctly suppressed Int.MIN_VALUE but also erased
+    // legitimate alphanumeric roll numbers (Phase 9.2 allows "A12"), showing
+    // them as "—".
+    rollNoRaw: String,
+    srNo: String = "",
     name: String,
     status: AttendanceStatus?,
     enabled: Boolean,
@@ -816,7 +824,7 @@ private fun StudentRow(
 ) {
     val statusColor = status?.let { getStatusColor(it) } ?: TextTertiary
     val initial = name.trim().firstOrNull()?.uppercase() ?: "?"
-    val rollText = if (rollNo > 0) rollNo.toString().padStart(2, '0') else "—"
+    val rollText = formatRollNo(rollNoRaw, padNumericTo = 2)
 
     Row(
         modifier = Modifier
@@ -851,7 +859,14 @@ private fun StudentRow(
                 overflow = TextOverflow.Ellipsis
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Roll $rollText", color = TextTertiary, fontSize = 12.sp)
+                // Phase 11.3 — Roll (class-scoped) plus SR No. (school register),
+                // so the teacher can match either number the office quotes.
+                // Display only; the row is still keyed by studentId.
+                Text(
+                    text = if (srNo.isNotBlank()) "Roll $rollText · SR $srNo" else "Roll $rollText",
+                    color = TextTertiary,
+                    fontSize = 12.sp
+                )
                 // Correction-request pending marker: the teacher filed a
                 // correction for this student and it's awaiting admin review.
                 // Without it the row looked unchanged after submit and a teacher
@@ -1524,7 +1539,7 @@ private fun AttendanceGrid(
                                     .border(0.5.dp, DividerColor.copy(alpha = 0.3f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(student.rollNo.toString(), style = MaterialTheme.typography.labelMedium, color = TextSecondary, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                                Text(formatRollNo(student.rollNoRaw), style = MaterialTheme.typography.labelMedium, color = TextSecondary, fontWeight = FontWeight.Medium, fontSize = 11.sp)
                             }
                             Box(
                                 modifier = Modifier

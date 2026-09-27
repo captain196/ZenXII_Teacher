@@ -179,7 +179,11 @@ fun RegularizeScreen(
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (tab == 1) {
-                MyRequestsPanel(ui = ui, onRetry = { vm.loadMyRequests() })
+                MyRequestsPanel(
+                    ui = ui,
+                    onRetry = { vm.loadMyRequests() },
+                    onWithdraw = { id -> vm.withdraw(id) },
+                )
             } else BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val twoPane = maxWidth >= 560.dp
                 if (twoPane) {
@@ -426,6 +430,7 @@ private fun SegTab(label: String, active: Boolean, modifier: Modifier, onClick: 
 private fun MyRequestsPanel(
     ui: RegularizationUiState,
     onRetry: () -> Unit,
+    onWithdraw: (String) -> Unit,
 ) {
     val c = LocalAppColors.current
     Column(modifier = Modifier.fillMaxSize()) {
@@ -491,7 +496,16 @@ private fun MyRequestsPanel(
                 ui.requestsError?.let {
                     Text("Couldn't refresh: $it", fontSize = 11.5.sp, color = c.error)
                 }
-                ui.myRequests.forEach { RequestCard(it) }
+                ui.myRequests.forEach { doc ->
+                    RequestCard(
+                        doc = doc,
+                        withdrawing = ui.withdrawingId == doc.id,
+                        // One withdrawal at a time: while any row is in flight the
+                        // others go quiet rather than queueing taps.
+                        canWithdraw = ui.withdrawingId == null,
+                        onWithdraw = { onWithdraw(doc.id) },
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
             }
         }
@@ -504,7 +518,16 @@ private fun CenteredBox(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun RequestCard(doc: RegularizationDoc) {
+private fun RequestCard(
+    doc: RegularizationDoc,
+    withdrawing: Boolean = false,
+    canWithdraw: Boolean = true,
+    onWithdraw: () -> Unit = {},
+) {
+    // Two taps to withdraw. A single tap on a list row is too easy to hit by
+    // accident, and a withdrawn request cannot be un-withdrawn — it has to be
+    // filed again.
+    var confirming by remember(doc.id) { mutableStateOf(false) }
     val c = LocalAppColors.current
     Column(
         modifier = Modifier
@@ -543,6 +566,42 @@ private fun RequestCard(doc: RegularizationDoc) {
             ) {
                 Text("Admin:", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = c.textTertiary)
                 Text(doc.remarks, fontSize = 11.5.sp, color = c.textSecondary)
+            }
+        }
+
+        // Withdraw — pending only. A decided request is final on this side;
+        // correcting one means filing the day again, which the same rule allows.
+        if (doc.status.equals("pending", ignoreCase = true)) {
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                when {
+                    withdrawing -> {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = c.textTertiary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Withdrawing...", fontSize = 12.sp, color = c.textTertiary)
+                    }
+                    confirming -> {
+                        Text("Withdraw this request?", fontSize = 12.sp, color = c.textSecondary)
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { confirming = false }) {
+                            Text("No", fontSize = 12.5.sp, color = c.textSecondary)
+                        }
+                        TextButton(onClick = { confirming = false; onWithdraw() }) {
+                            Text("Yes, withdraw", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = c.error)
+                        }
+                    }
+                    else -> {
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { confirming = true }, enabled = canWithdraw) {
+                            Text(
+                                "Withdraw",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (canWithdraw) c.textSecondary else c.textTertiary,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

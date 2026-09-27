@@ -1,5 +1,6 @@
 package com.schoolsync.teacher.ui.attendance
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.data.local.TokenManager
@@ -24,7 +25,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import com.schoolsync.teacher.data.local.offline.OfflineAttendanceQueue
+import com.schoolsync.teacher.data.local.offline.OfflineFeatureFlag
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -126,6 +132,13 @@ enum class Stage(val label: String) {
 data class StudentAttendanceRow(
     val studentId: String,
     val rollNo: Int,
+    // See StudentInfo.rollNoRaw (ui/students/StudentsViewModel.kt) — the
+    // canonical Firestore Roll Number is not always numeric.
+    val rollNoRaw: String = "",
+    // Phase 11.3 — school register number, display only. Attendance is a
+    // roster-driven workflow, so there is deliberately NO SRNO search box here:
+    // the teacher already sees the whole class. Keyed by studentId as before.
+    val srNo: String = "",
     val name: String,
     /** Map<DayOfMonth (1-31), AttendanceStatus> */
     val dayStatuses: MutableMap<Int, AttendanceStatus> = mutableMapOf()
@@ -199,6 +212,9 @@ sealed class AttendanceEvent {
     /** Server returned 400 because S2 needed a reason. */
     object ReasonRequired : AttendanceEvent()
     data class CorrectionSubmitted(val message: String) : AttendanceEvent()
+    /** C1 — the save couldn't reach the server, but the marks were saved on the
+     *  device and will sync automatically. NOT a server confirmation. */
+    data class QueuedOffline(val message: String) : AttendanceEvent()
 }
 
 @HiltViewModel
@@ -207,7 +223,8 @@ class AttendanceViewModel @Inject constructor(
     private val studentRepository: StudentRepository,
     private val attendanceFirestoreRepo: AttendanceFirestoreRepository,    // reads only
     private val attendanceApiRepo: AttendanceApiRepository,                 // ALL writes
-    private val tokenManager: TokenManager                                 // observes active-session changes
+    private val tokenManager: TokenManager,                                // observes active-session changes
+    private val offlineQueue: OfflineAttendanceQueue                       // C1 — durable offline queue (dormant unless flag on)
 ) : ViewModel() {
 
     companion object {
@@ -502,7 +519,9 @@ class AttendanceViewModel @Inject constructor(
 
                     StudentAttendanceRow(
                         studentId = student.studentId,
-                        rollNo = student.rollNo.toIntOrNull() ?: 0,
+                        rollNo = student.rollNo.toIntOrNull() ?: Int.MIN_VALUE,
+                        rollNoRaw = student.rollNo,
+                        srNo = student.srNo,
                         name = student.displayName,
                         dayStatuses = dayMap
                     )
@@ -850,11 +869,67 @@ class AttendanceViewModel @Inject constructor(
                         is AttendanceApiError.NotFound -> {
                             _events.emit(AttendanceEvent.SaveError(e.message ?: "Not found."))
                         }
-                        else -> _events.emit(AttendanceEvent.SaveError(e.message ?: "Save failed"))
+                        else -> {
+                            // C1 — offline queue (dormant unless the feature flag is on).
+                            // Only a genuine transport failure is queued; a
+                            // server-authored rejection above is never queued.
+                            val queuedId = if (e is AttendanceApiError.Network) {
+                                enqueueOfflineSave(classSection, absent, leave, late, state.editReason, todayDay)
+                            } else null
+                            if (queuedId != null) {
+                                _uiState.update { it.copy(hasUnsavedChanges = false, editReason = "") }
+                                _events.emit(AttendanceEvent.QueuedOffline(
+                                    "Couldn't reach the server — attendance saved on this device and will sync automatically."))
+                            } else {
+                                _events.emit(AttendanceEvent.SaveError(e.message ?: "Save failed"))
+                            }
+                        }
                     }
                 }
             )
         }
+    }
+
+    /**
+     * C1 — persist the just-attempted section save to the durable offline queue.
+     * Returns the queued row id, or null when the feature is off (caller then
+     * shows the normal error). Never claims server confirmation.
+     */
+    private suspend fun enqueueOfflineSave(
+        classSection: ClassSection,
+        absent: List<String>,
+        leave: List<String>,
+        late: List<LateMark>,
+        reason: String,
+        todayDay: Int
+    ): String? {
+        if (!OfflineFeatureFlag.isEnabled()) return null
+        val cal = Calendar.getInstance()
+        val dateIso = String.format(
+            "%04d-%02d-%02d",
+            cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, todayDay
+        )
+        val schoolId = runCatching { tokenManager.schoolId.first() }.getOrNull().orEmpty()
+        val session  = runCatching { tokenManager.session.first() }.getOrNull().orEmpty()
+        val lateJson = JSONArray(late.map {
+            JSONObject()
+                .put("studentId", it.studentId)
+                .put("lateMinutes", it.lateMinutes)
+                .also { o -> if (it.arrivalTime != null) o.put("time", it.arrivalTime) }
+        }).toString()
+        return runCatching {
+            offlineQueue.enqueueSectionSave(
+                schoolId   = schoolId,
+                session    = session,
+                className  = classSection.className,
+                section    = classSection.section,
+                dateIso    = dateIso,
+                absentJson = JSONArray(absent).toString(),
+                leaveJson  = JSONArray(leave).toString(),
+                lateJson   = lateJson,
+                reason     = reason
+            )
+        }.getOrNull()
     }
 
     // ── Stage / lock state ────────────────────────────────────────
@@ -1027,8 +1102,19 @@ class AttendanceViewModel @Inject constructor(
                     }
                 },
                 onFailure = { e ->
+                    // TA-D1: only AttendanceApiError messages are written for a
+                    // teacher to read (the repository maps each HTTP condition to
+                    // a sentence). Anything else that reaches here is an untyped
+                    // transport failure whose .message is implementation detail —
+                    // the observed text was "Failed to connect to
+                    // localhost/127.0.0.1:8080" — so it is logged, not displayed.
+                    val shown = (e as? AttendanceApiError)?.message
+                        ?: run {
+                            Log.w(TAG, "loadMyCorrections: untyped failure", e)
+                            AttendanceApiRepository.UNREACHABLE_MESSAGE
+                        }
                     _uiState.update {
-                        it.copy(isLoadingRequests = false, requestsError = e.message ?: "Failed to load requests")
+                        it.copy(isLoadingRequests = false, requestsError = shown)
                     }
                 }
             )

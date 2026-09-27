@@ -1,6 +1,7 @@
 package com.schoolsync.teacher.ui.myattendance
 
 import android.os.Build
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.schoolsync.teacher.BuildConfig
@@ -81,9 +82,11 @@ class StaffAttendanceViewModel @Inject constructor(
                     // (GPS disabled) or a 5xx until the user tapped Clock-In and
                     // hit an error. `error` (the red action banner) stays reserved
                     // for explicit punch attempts.
-                    val se = e as? StaffAttendanceError
-                        ?: StaffAttendanceError.Network(e.message ?: "Couldn't load attendance.")
-                    _ui.update { it.copy(loading = false, loadError = se) }
+                    // TA-D1: route through asStaffError() rather than reading
+                    // e.message directly — an untyped failure here surfaced the
+                    // raw socket text ("Failed to connect to localhost/...")
+                    // straight onto the screen.
+                    _ui.update { it.copy(loading = false, loadError = e.asStaffError()) }
                 }
         }
     }
@@ -321,8 +324,27 @@ class StaffAttendanceViewModel @Inject constructor(
     /** Clear transient result/error after the UI has shown it. */
     fun consumeResult() { _ui.update { it.copy(lastResult = null, error = null, gpsError = null) } }
 
+    /**
+     * TA-D1 — convert ANY failure into an error whose message is safe to show.
+     *
+     * [StaffAttendanceError] subtypes are already user-facing: the repository's
+     * own `asStaffError(op)` maps each HTTP condition to a written sentence
+     * ("You are outside the school geofence", "This month is locked", ...), and
+     * those are passed through untouched.
+     *
+     * An UNTYPED throwable reaching here is a transport/connectivity failure
+     * whose `.message` is implementation detail — the real observed text was
+     * `Failed to connect to localhost/127.0.0.1:8080`, an OkHttp/socket string
+     * naming a host and port. Rendering that to a teacher told them nothing
+     * they could act on and exposed internals, so the raw detail now goes to
+     * the log (where debugging needs it) and the screen gets a sentence that
+     * says what happened and what to do.
+     */
     private fun Throwable.asStaffError(): StaffAttendanceError =
-        this as? StaffAttendanceError ?: StaffAttendanceError.Network(message ?: "Unexpected error")
+        this as? StaffAttendanceError ?: run {
+            Log.w(TAG, "untyped attendance failure — showing generic connectivity message", this)
+            StaffAttendanceError.Network(UNREACHABLE_MESSAGE)
+        }
 
     private fun deviceInfo(): Map<String, String> = mapOf(
         "model" to Build.MODEL,
@@ -335,6 +357,18 @@ class StaffAttendanceViewModel @Inject constructor(
 
     private fun isoTimestamp(epochMs: Long): String =
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(Date(epochMs))
+
+    private companion object {
+        const val TAG = "StaffAttendanceVM"
+
+        /**
+         * Shown when the app cannot reach ZenX at all. Says WHAT happened,
+         * WHY it might have, and WHAT to do — and names nothing a teacher
+         * cannot act on. Deliberately not "Something went wrong."
+         */
+        const val UNREACHABLE_MESSAGE =
+            "Couldn't reach ZenXii. Check your internet connection and try again."
+    }
 }
 
 /** UI state for the My Attendance screen (Phase 13 renders this). */

@@ -23,7 +23,27 @@ import javax.inject.Singleton
 class AttendanceApiRepository @Inject constructor(
     private val api: ApiService
 ) {
-    companion object { private const val TAG = "AttendanceApiRepo" }
+    companion object {
+        private const val TAG = "AttendanceApiRepo"
+
+        /**
+         * TA-D1 — what a teacher sees when the app cannot reach the backend.
+         *
+         * Every `recoverCatching` below already logs the real throwable, so no
+         * debugging detail is lost. What must NOT happen is that the
+         * throwable's own `.message` becomes the on-screen text: for an OkHttp
+         * transport failure that string is
+         * `Failed to connect to localhost/127.0.0.1:8080` — it names a host and
+         * a port, tells a teacher nothing they can act on, and was rendered
+         * verbatim on "My Correction Requests".
+         *
+         * Server-authored, user-facing messages are unaffected: they arrive as
+         * the other AttendanceApiError subtypes via `toError()` and are thrown
+         * before this fallback is reached.
+         */
+        internal const val UNREACHABLE_MESSAGE =
+            "Couldn't reach ZenXii. Check your internet connection and try again."
+    }
 
     // ── Public surface ───────────────────────────────────────────
 
@@ -67,7 +87,7 @@ class AttendanceApiRepository @Inject constructor(
     }.recoverCatching { e ->
         if (e is AttendanceApiError) throw e
         Log.e(TAG, "save failed", e)
-        throw AttendanceApiError.Network(e.message ?: "Network error")
+        throw AttendanceApiError.Network(UNREACHABLE_MESSAGE)
     }
 
     suspend fun fetchLock(
@@ -90,7 +110,7 @@ class AttendanceApiRepository @Inject constructor(
     }.recoverCatching { e ->
         if (e is AttendanceApiError) throw e
         Log.e(TAG, "fetchLock failed", e)
-        throw AttendanceApiError.Network(e.message ?: "Network error")
+        throw AttendanceApiError.Network(UNREACHABLE_MESSAGE)
     }
 
     suspend fun submitCorrection(
@@ -113,7 +133,7 @@ class AttendanceApiRepository @Inject constructor(
     }.recoverCatching { e ->
         if (e is AttendanceApiError) throw e
         Log.e(TAG, "submitCorrection failed", e)
-        throw AttendanceApiError.Network(e.message ?: "Network error")
+        throw AttendanceApiError.Network(UNREACHABLE_MESSAGE)
     }
 
     /** Pull the teacher's own pending requests (server applies requestedBy=self filter). */
@@ -135,7 +155,7 @@ class AttendanceApiRepository @Inject constructor(
     }.recoverCatching { e ->
         if (e is AttendanceApiError) throw e
         Log.e(TAG, "listMyPending failed", e)
-        throw AttendanceApiError.Network(e.message ?: "Network error")
+        throw AttendanceApiError.Network(UNREACHABLE_MESSAGE)
     }
 
     /**
@@ -170,7 +190,7 @@ class AttendanceApiRepository @Inject constructor(
     }.recoverCatching { e ->
         if (e is AttendanceApiError) throw e
         Log.e(TAG, "listMyCorrections failed", e)
-        throw AttendanceApiError.Network(e.message ?: "Network error")
+        throw AttendanceApiError.Network(UNREACHABLE_MESSAGE)
     }
 
     // ── Helpers ──────────────────────────────────────────────────
