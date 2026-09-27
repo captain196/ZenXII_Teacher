@@ -106,6 +106,7 @@ class StudentRepository @Inject constructor(
                     fatherName = doc.fatherName,
                     motherName = doc.motherName,
                     rollNo = doc.rollNo,
+                    srNo = doc.srNoText,
                     className = doc.className,
                     section = doc.section,
                     gender = doc.gender,

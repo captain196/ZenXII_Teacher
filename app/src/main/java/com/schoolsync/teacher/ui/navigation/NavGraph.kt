@@ -284,6 +284,7 @@ fun AppNavGraph(
                     isLoggedIn = state.isLoggedIn,
                     hasSeenOnboarding = state.hasSeenOnboarding,
                     mustChangePassword = state.mustChangePassword,
+                    schoolAccess = state.schoolAccess,
                 )
             }
         }

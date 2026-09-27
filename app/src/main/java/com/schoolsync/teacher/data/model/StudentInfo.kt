@@ -12,6 +12,8 @@ data class StudentInfo(
     val fatherName: String = "",
     val motherName: String = "",
     val rollNo: String = "",
+    /** Phase 11 — school register number (display only, never a join key). */
+    val srNo: String = "",
     val className: String = "",
     val section: String = "",
     val gender: String = "",

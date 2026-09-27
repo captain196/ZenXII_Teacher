@@ -53,7 +53,11 @@ interface ApiService {
         @Field("absent") absentJson: String = "[]",
         @Field("leave") leaveJson: String = "[]",
         @Field("late") lateJson: String = "[]",
-        @Field("reason") reason: String = ""
+        @Field("reason") reason: String = "",
+        // C1 offline date-pin: the day the teacher actually marked. Empty (the
+        // online default) = server resolves today, unchanged behaviour. When
+        // sent, the server writes that date and refuses a mis-dated flush.
+        @Field("mark_date") markDate: String = ""
     ): Response<Map<String, Any>>
 
     // ── Phase 2 — lock state ─────────────────────────────────────

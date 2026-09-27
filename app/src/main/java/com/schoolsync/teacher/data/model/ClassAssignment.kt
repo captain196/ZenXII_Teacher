@@ -12,6 +12,10 @@ data class ClassAssignment(
     val className: String = "",
     val section: String = "",
     val subject: String = "",
+    /** HW-D1: the canonical code from subjectAssignments.subjectCode.
+     *  `subject` above is the human NAME and cannot resolve an assignment
+     *  doc id; authorization needs the code. */
+    val subjectCode: String = "",
     val classTeacher: Boolean = false
 ) {
     /** No-arg constructor retained for callers that build an empty instance. */

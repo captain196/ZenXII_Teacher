@@ -58,6 +58,22 @@ data class StudentDoc(
     val rollNo: String = "",
     val admissionDate: String = "",
 
+    // ── School register identity (Phase 11) ──────────────────────────
+    // SRNO is the school's own register number: school-scoped, allocated by
+    // the admin panel (`Sr_no_service`), preserved across promotion, class /
+    // section change and re-admission. It is NOT the Student ID and is NOT a
+    // join key anywhere — display only.
+    //
+    // Declared `Any?` deliberately. Every current writer emits a String, but
+    // the admin panel has several SRNO write paths and a single numeric write
+    // would fail deserialisation of the WHOLE document (see class docblock) —
+    // taking the entire roster down to display one field. Read via [srNoText].
+    //
+    // Only the camelCase key is bound. Do NOT add @PropertyName aliases for
+    // the legacy spaced variants ("SR Number") — Firestore matches property
+    // names case-INSENSITIVELY and a collision crashes the document.
+    val srNo: Any? = null,
+
     // ── Family ──────────────────────────────────────────────────────
     val fatherName: String = "",
     val motherName: String = "",
@@ -92,4 +108,17 @@ data class StudentDoc(
     // never fails on shape drift; not currently consumed by the Teacher app.
     val createdAt: Any? = null,
     val updatedAt: Any? = null
-)
+) {
+    /**
+     * SRNO as display text. Accepts the String every writer currently emits,
+     * tolerates a numeric write, and returns `""` when absent so the UI row
+     * simply doesn't render.
+     */
+    val srNoText: String
+        get() = when (val v = srNo) {
+            null -> ""
+            is String -> v.trim()
+            is Number -> if (v.toDouble() % 1.0 == 0.0) v.toLong().toString() else v.toString()
+            else -> v.toString().trim()
+        }
+}

@@ -89,7 +89,14 @@ class FirestoreService @Inject constructor(
             val registration = firestore.collection(collection).document(docId)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        cancel("Firestore listener error", error)
+                        // close() propagates the error to downstream .catch {}.
+                        // cancel() raises a CancellationException, which .catch
+                        // deliberately never intercepts (that would break
+                        // structured concurrency) — so a listener error would
+                        // silently kill this flow with NO fallback emission,
+                        // defeating every caller's fail-open .catch { emit(Unknown) }.
+                        // Matches observeDocumentAs below; TA-D2 root cause.
+                        close(error)
                         return@addSnapshotListener
                     }
                     trySend(if (snapshot != null && snapshot.exists()) snapshot else null)

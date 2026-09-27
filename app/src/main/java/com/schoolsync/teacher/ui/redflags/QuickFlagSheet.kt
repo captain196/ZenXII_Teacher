@@ -256,8 +256,12 @@ fun QuickFlagSheet(
             )
             Spacer(Modifier.height(2.dp))
             Text(
+                // Phase 11.3 — SR No. alongside Roll so the teacher can confirm
+                // they are flagging the right student against the school register.
+                // The flag record itself remains keyed by studentId.
                 text = "${state.classKey} · ${state.sectionKey}" +
-                    (if (student.rollNo.isNotBlank()) " · Roll ${student.rollNo}" else ""),
+                    (if (student.rollNo.isNotBlank()) " · Roll ${student.rollNo}" else "") +
+                    (if (student.srNo.isNotBlank()) " · SR ${student.srNo}" else ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -73,6 +73,7 @@ class TeacherRepository @Inject constructor(
                                     className = ck,
                                     section = Constants.sectionKey(doc.section),
                                     subject = doc.subjectName.ifBlank { doc.subjectCode },
+                                    subjectCode = doc.subjectCode,
                                     classTeacher = doc.isClassTeacher
                                 )
                             )
@@ -103,6 +104,7 @@ class TeacherRepository @Inject constructor(
                                         className = ck,
                                         section = "",
                                         subject = doc.subjectName.ifBlank { doc.subjectCode },
+                                    subjectCode = doc.subjectCode,
                                         classTeacher = doc.isClassTeacher
                                     )
                                 )
@@ -116,6 +118,7 @@ class TeacherRepository @Inject constructor(
                                             className = ck,
                                             section = Constants.sectionKey(sec),
                                             subject = doc.subjectName.ifBlank { doc.subjectCode },
+                                    subjectCode = doc.subjectCode,
                                             classTeacher = doc.isClassTeacher
                                         )
                                     )
@@ -172,6 +175,7 @@ class TeacherRepository @Inject constructor(
                                 className = ck,
                                 section = Constants.sectionKey(obj.section),
                                 subject = obj.subjectName.ifBlank { obj.subjectCode },
+                                subjectCode = obj.subjectCode,
                                 classTeacher = obj.isClassTeacher
                             )
                         )
@@ -197,6 +201,7 @@ class TeacherRepository @Inject constructor(
                                     className = ck,
                                     section = "",
                                     subject = obj.subjectName.ifBlank { obj.subjectCode },
+                                subjectCode = obj.subjectCode,
                                     classTeacher = obj.isClassTeacher
                                 )
                             )
@@ -210,6 +215,7 @@ class TeacherRepository @Inject constructor(
                                         className = ck,
                                         section = Constants.sectionKey(sec),
                                         subject = obj.subjectName.ifBlank { obj.subjectCode },
+                                subjectCode = obj.subjectCode,
                                         classTeacher = obj.isClassTeacher
                                     )
                                 )

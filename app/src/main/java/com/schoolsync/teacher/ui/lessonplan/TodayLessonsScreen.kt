@@ -193,6 +193,7 @@ fun TodayLessonsScreen(
                 slot = editing,
                 topics = state.editingTopics,
                 topicsLoading = state.isEditingTopicsLoading,
+                topicsError = state.editingTopicsError,
                 isSaving = state.isSaving,
                 onSave = { topicId, topicTitle, notes, status, rsTo ->
                     viewModel.saveEdit(topicId, topicTitle, notes, status, rsTo)
@@ -323,6 +324,7 @@ private fun EditSheetContent(
     slot: SlotWithPlan,
     topics: List<com.schoolsync.teacher.data.model.firestore.CurriculumTopicDoc>,
     topicsLoading: Boolean,
+    topicsError: String? = null,
     isSaving: Boolean,
     onSave: (topicId: String, topicTitle: String, notes: String, status: String, rsTo: String) -> Unit,
     onCancel: () -> Unit,
@@ -365,7 +367,8 @@ private fun EditSheetContent(
             // ── Topic dropdown ──
             ExposedDropdownMenuBox(expanded = topicOpen, onExpandedChange = { topicOpen = !topicOpen }) {
                 OutlinedTextField(
-                    value = if (topicTitle.isNotBlank()) topicTitle else if (topicsLoading) "Loading topics…" else "— No topic —",
+                    value = if (topicTitle.isNotBlank()) topicTitle
+                            else topicFieldPlaceholder(topicsLoading, topicsError),
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Topic") },
@@ -393,7 +396,10 @@ private fun EditSheetContent(
                     }
                     if (topics.isEmpty() && !topicsLoading) {
                         DropdownMenuItem(
-                            text = { Text("No topics found in curriculum", color = TextTertiary, fontSize = 11.sp) },
+                            text = {
+                                Text(topicMenuMessage(topicsError), color = TextTertiary,
+                                     fontSize = 11.sp)
+                            },
                             onClick = {}, enabled = false
                         )
                     }
@@ -487,3 +493,21 @@ private fun EditSheetContent(
         }
     }
 }
+
+/**
+ * What the topic field reads while there is no topic chosen.
+ *
+ * Three states, not two: still loading, could not be read, and genuinely
+ * nothing chosen. The middle one used to be indistinguishable from the last,
+ * so an outage told the teacher their school had no syllabus.
+ */
+fun topicFieldPlaceholder(loading: Boolean, error: String?): String = when {
+    loading        -> "Loading topics…"
+    error != null  -> "Topics unavailable"
+    else           -> "— No topic —"
+}
+
+/** The line inside an empty topic menu — same distinction, longer form. */
+fun topicMenuMessage(error: String?): String =
+    if (error != null) "Topics could not be loaded just now — try again in a moment"
+    else "No topics found in curriculum"
